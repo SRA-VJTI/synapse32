@@ -9,8 +9,10 @@ Makerchip IDE **very own free online IDE for developing in Verilog or TL-Verilog
 
 
 ## Resources
-[Makerchip IDE](https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=&cad=rja&uact=8&ved=2ahUKEwi0sYnmo-iAAxUBQ94KHX_JACgQjBB6BAghEAE&url=https%3A%2F%2Fwww.makerchip.com%2Fsandbox%2F&usg=AOvVaw1b7tUkGd3odzbQNChT7IKl&opi=89978449).
-[Github Repository for reference](https://github.com/stevehoover/LF-Building-a-RISC-V-CPU-Core).
+[Makerchip IDE](https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=&cad=rja&uact=8&ved=2ahUKEwi0sYnmo-iAAxUBQ94KHX_JACgQjBB6BAghEAE&url=https%3A%2F%2Fwww.makerchip.com%2Fsandbox%2F&usg=AOvVaw1b7tUkGd3odzbQNChT7IKl&opi=89978449)
+
+[Github Repository for reference](https://github.com/stevehoover/LF-Building-a-RISC-V-CPU-Core)
+
 
 
 
