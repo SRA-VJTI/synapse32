@@ -1,1 +1,6 @@
-test
+Macros- IMem
+It is like a function
+This macro accepts a byte address as input, and produces the 32-bit read data as output.
+`READONLY_MEM($addr, $$read_data[31:0])
+Verilog macro instantiation is preceded by a back-tick (not to be confused with a single quote).
+In expressions like this that do not syntactically differentiate assigned signals from consumed signals, it is necessary to identify assigned signals using a "$$" prefix.	
