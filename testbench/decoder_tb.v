@@ -23,25 +23,25 @@
 module decoder_tb;
 reg clk;
 reg [31:0]instr;
-wire [4:0] rs2;
-wire [4:0] rs1;
+wire [31:0] rs2;
+wire [31:0] rs1;
 wire [31:0] imm;
-wire [4:0] rd;
+wire [31:0] rd;
 wire [2:0] func3;
 wire rd_valid;
 wire rs1_valid;
 wire rs2_valid;
 wire imm_valid;
-wire [6:2] opcode;
-wire [7:0] func7;
+wire [6:0] opcode;
+wire [6:0] func7;
 wire func3_valid;
 wire func7_valid;
-wire [9:0] out_signal;
+wire [38:0] out_signal;
 
 
 decoder decoder1(.instr(instr),.rs2(rs2),.rs1(rs1),.imm(imm),.rd(rd),.func3(func3),
-                 .rd_valid(rd_valid), .rs1_valid(rs1_valid),.imm_valid(imm_valid),
-                 .opcode(opcode),.func7(func7), .func3_valid(func3_valid),.func7_valid(func7_valid),.out_signal(out_signal));
+                 .rd_valid(rd_valid), .rs1_valid(rs1_valid),.imm_valid(imm_valid), .rs2_valid(rs2_valid),
+                 .opcode(opcode),.func7(func7), .func3_valid(func3_valid),.func7_valid(func7_valid),.out_signal(out_signal),.clk(clk));
                  
 initial clk=0;
 
