@@ -22,8 +22,7 @@
 
 module dmem(
 input clk,
-input [31:0] read,
-input [31:0] write,
+input [31:0] addr,
 input rd_en,
 input wr_en,
 input [31:0] in_data,
@@ -40,11 +39,11 @@ for(integer i = 0;i<32;i=i+1)
 
  end
 
-assign out_data= ((rd_en==1) && (wr_en==0))? data_memory[read[4:0]] : 0;
+assign out_data= ((rd_en==1) && (wr_en==0))? data_memory[addr[4:0]] : 0;
 
 always @(posedge clk) begin
  if ((wr_en==1) && (rd_en==0))
-    data_memory[write[4:0]] <= in_data;
+    data_memory[addr[4:0]] <= in_data;
     end
     
 
