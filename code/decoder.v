@@ -36,7 +36,7 @@ input clk,
    output func3_valid,
    output func7_valid,
    output [6:0] opcode,
-  output [38:0] out_signal
+  output [46:0] out_signal
    
     );
 
@@ -72,6 +72,7 @@ wire  is_r_instr, is_u_instr, is_s_instr, is_b_instr, is_j_instr, is_i_instr;
                 
    assign imm_valid = is_i_instr || is_s_instr || is_b_instr || is_u_instr || is_j_instr;
    
+   // I instructions
   assign out_signal[0]=(is_r_instr&&(func3==3'h0)&&(func7==7'h00))? 1'b1 : 1'b0; //add
   assign out_signal[1]=(is_r_instr&&(func3==3'h0)&&(func7==7'h20))? 1'b1 : 1'b0; //sub
   assign out_signal[2]=(is_r_instr&&(func3==3'h4)&&(func7==7'h00))? 1'b1 : 1'b0; //xor
@@ -120,7 +121,15 @@ wire  is_r_instr, is_u_instr, is_s_instr, is_b_instr, is_j_instr, is_i_instr;
   assign out_signal[38]=(is_i_instr&&(opcode==7'b1110011)&&(func3==3'h0)&&(imm==3'h1))? 1'b1 :1'b0; //ebreak
   
   
-   
+  //M instructions
+  assign out_signal[39]=(is_r_instr&&(opcode==7'b0110011)&&(func3==3'h0)&&(func7==7'h01))? 1'b1 :1'b0; //mul
+  assign out_signal[40]=(is_r_instr&&(opcode==7'b0110011)&&(func3==3'h1)&&(func7==7'h01))? 1'b1 :1'b0; //mulh
+  assign out_signal[41]=(is_r_instr&&(opcode==7'b0110011)&&(func3==3'h2)&&(func7==7'h01))? 1'b1 :1'b0; //mulhsu
+  assign out_signal[42]=(is_r_instr&&(opcode==7'b0110011)&&(func3==3'h3)&&(func7==7'h01))? 1'b1 :1'b0; //mulu
+  assign out_signal[43]=(is_r_instr&&(opcode==7'b0110011)&&(func3==3'h4)&&(func7==7'h01))? 1'b1 :1'b0; //div
+  assign out_signal[44]=(is_r_instr&&(opcode==7'b0110011)&&(func3==3'h5)&&(func7==7'h01))? 1'b1 :1'b0; //divu
+  assign out_signal[45]=(is_r_instr&&(opcode==7'b0110011)&&(func3==3'h6)&&(func7==7'h01))? 1'b1 :1'b0; //rem
+  assign out_signal[46]=(is_r_instr&&(opcode==7'b0110011)&&(func3==3'h7)&&(func7==7'h01))? 1'b1 :1'b0; //remu   
    
    
 

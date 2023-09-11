@@ -36,7 +36,7 @@ wire [6:0] opcode;
 wire [6:0] func7;
 wire func3_valid;
 wire func7_valid;
-wire [38:0] out_signal;
+wire [46:0] out_signal;
 
 
 decoder decoder1(.instr(instr),.rs2(rs2),.rs1(rs1),.imm(imm),.rd(rd),.func3(func3),
