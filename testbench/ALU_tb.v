@@ -24,16 +24,10 @@ module ALU_td;
     reg [31:0] rs2;
     reg [11:0] imm;
     reg [31:0] PC;
-    reg [31:0] dmem_rd_data;
     reg [38:0] instructions; //subjected to change
-    reg ALUenabled;
-    wire [14:0] addr;
-    wire rd_en;
-    wire wr_en;
-    wire [31:0] dmem_wr_data;
     wire [31:0] ALUoutput;
     
-    ALU ALU1( .clk(clk), .rs1(rs1), .rs2(rs2), .imm(imm), .PC(PC), .dmem_rd_data(dmem_rd_data), .instructions(instructions), .ALUenabled(ALUenabled), .addr(addr), .rd_en(rd_en), .wr_en(wr_en), .dmem_wr_data(dmem_wr_data), .ALUoutput(ALUoutput));
+    ALU ALU1( .clk(clk), .rs1(rs1), .rs2(rs2), .imm(imm), .PC(PC), .instructions(instructions), .ALUoutput(ALUoutput));
     
     initial clk = 0;
     initial rs1 = 5'd5;
@@ -41,8 +35,6 @@ module ALU_td;
     initial imm = 12'd12;
     initial PC = 32'b10;
     initial instructions = 39'b0;
-    initial dmem_rd_data = 32'b0;
-    initial ALUenabled = 1;
     always #10 clk = ~clk;
     initial begin
         #50 
@@ -91,10 +83,5 @@ module ALU_td;
         instructions <= 39'h400000000 ;
         #50 
         instructions <= 39'h800000000 ;
-        
-    
     end
-    
-
-
 endmodule
