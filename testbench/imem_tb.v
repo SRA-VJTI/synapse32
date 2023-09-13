@@ -23,11 +23,12 @@
 module imem_tb;
 
 reg clk;
-
+reg wr_en;
+reg [31:0]data_in;
 wire [31:0] data_out;
 reg [4:0] addr;
 
-imem imem1(.clk(clk), .data_out(data_out), .addr(addr));
+imem imem1(.clk(clk), .data_out(data_out), .addr(addr),.wr_en(wr_en),.data_in(data_in));
 
 initial clk=0;
 
@@ -44,6 +45,11 @@ addr=5'd3;
 addr=5'd4;
 #100;
 addr=5'd5;
+#100;
+addr=5'd9;
+wr_en=1;
+data_in=32'h02007033;
+#100;
 
 end
 

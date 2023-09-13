@@ -22,7 +22,8 @@
 
 module imem(
 input clk,
-
+input wr_en,
+input [31:0]data_in,
 input  [4:0]addr,
 output [31:0] data_out
   );
@@ -45,5 +46,13 @@ initial begin
 end
  
 assign data_out = ins_mem[addr[4:0]];
+
+always@(*) begin
+ if(wr_en) begin
+    ins_mem[addr[4:0]]<=data_in;
+    end
+end
+
+
 
 endmodule
