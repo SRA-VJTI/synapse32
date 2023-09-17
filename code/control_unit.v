@@ -33,18 +33,20 @@ input rd_valid,
 input rs1_valid,
 input rs2_valid,
 input imm_valid,
+input [46:0]out_signal,
 input [6:0] opcode,
 input [31:0] decoder_signal,
 input [31:0] pc_input,
-input ALU_output,
-output [31:0] pc_output,
+input ALUoutput,
+output [46:0] instructions,
+output [31:0] pc_output,                         //pc_output
 output rs1_output,
 output rs2_output,
 output wr_en,
 output rd_en,
-output sig_to_ALU,
-output pc_jump
-
+output reg j_signal,
+output jump
+output final_output
     
 
     );
@@ -63,12 +65,19 @@ always@(*) begin
     case(state)
         B: begin
             case(opcode)
-                7'b0110011, 7'b0010011, 7'b0110111, 7'b0010111
+                7'b0110011, 7'b0010011, 7'b0110111, 7'b0010111 : begin
+                    instructions <= out_signal;
+                               
+                end
  
             endcase
         end
         A: begin 
-  
+            case(opcode)
+                7'b0110011, 7'b0010011, 7'b0110111, 7'b0010111 : begin
+                    final_output <= ALUoutput;
+                               
+                end
         end
     endcase
     
