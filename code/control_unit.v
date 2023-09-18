@@ -45,7 +45,7 @@ output rs2_output,
 output wr_en,
 output rd_en,
 output reg j_signal,
-output jump
+output [31:0] jump
 output final_output
     
 
@@ -65,11 +65,18 @@ always@(*) begin
     case(state)
         B: begin
             case(opcode)
-                7'b0110011, 7'b0010011, 7'b0110111, 7'b0010111 : begin
-                    instructions <= out_signal;
-                               
+                7'b0110011, 7'b0010011, 7'b0110111, 7'b0010111 : begin             //calling ALU
+                    instructions <= out_signal;                     
                 end
- 
+                7'b0000011 : begin                                                 // I set
+                    case(out_signal)
+                        46'h80000 : 
+                        46'h100000 :
+                        46'h200000 :
+                        46'h400000 :
+                        46
+                    endcase
+                end
             endcase
         end
         A: begin 
