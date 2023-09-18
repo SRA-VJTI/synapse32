@@ -26,8 +26,9 @@ module ALU_td;
     reg [31:0] PC;
     reg [46:0] instructions; //subjected to change
     wire [31:0] ALUoutput;
+    wire signed [32:0] ALUoutput_s; 
     
-    ALU ALU1( .clk(clk), .rs1(rs1), .rs2(rs2), .imm(imm), .PC(PC), .instructions(instructions), .ALUoutput(ALUoutput));
+    ALU ALU1( .clk(clk), .rs1(rs1), .rs2(rs2), .imm(imm), .PC(PC), .instructions(instructions), .ALUoutput(ALUoutput), .ALUoutput_s(ALUoutput_s));
     
     initial clk = 0;
     initial rs1 = 5'd5;
