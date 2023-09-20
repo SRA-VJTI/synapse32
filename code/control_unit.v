@@ -33,8 +33,8 @@ input rd_valid,
 input rs1_valid,
 input rs2_valid,
 input imm_valid,
-input mem_output,
-input [46:0]out_signal,
+input [31:0] mem_read,
+input [46:0] out_signal,
 input [6:0] opcode,
 input [31:0] decoder_signal,
 input [31:0] pc_input,
@@ -43,13 +43,13 @@ output [46:0] instructions,
 output [31:0] pc_output,                         //pc_output
 output rs1_output,
 output rs2_output,
+output reg [31:0] mem_write,
 output wr_en,
 output rd_en,
 output addr,
 output reg j_signal,
 output [31:0] jump,
-output reg final_output,
-output signed reg final_output_s 
+output reg [31:0] final_output
     
 
     );
@@ -80,24 +80,25 @@ always@(*) begin
         A: begin 
             case(opcode)
                 7'b0110011, 7'b0010011, 7'b0110111, 7'b0010111 : begin
-                    case(instructions)
-                        46'h20000: final_output_s <= ALUoutput_s;
-                        46'h10000000000 : final_output_s <= ALUoutput_s;
-                        46'h20000000000 : final_output_s <= ALUoutput_s;
-                        46'h100000000000 : final_output_s <= ALUoutput_s;
-                        46'h400000000000 : final_output_s <= ALUoutput_s;
-                        default : final_output <= ALUoutput;
-                    endcase
-                end
+                    final_output <= ALUoutput;
+                end 
                 7'b0000011 : begin
-                    case(out_signal)
-                        46'b80000 : final_output_s <= mem_output[7:0]; 
-                        46'b100000 : final_output_s <= mem_output[15:0];
-                        46'b200000 : final_output_s <= mem_output[31:0];
-                        46'b400000 : final_output <= mem_output[7:0];
-                        46'b800000 : final_output <= mem_output[15:0];
+                    case(out_signal) 
+                        46'h80000 : final_output <= mem_read[7:0]; 
+                        46'h100000 : final_output <= mem_read[15:0];
+                        46'h200000 : final_output <= mem_read[31:0];
+                        46'h400000 : final_output <= mem_read[7:0];
+                        46'h800000 : final_output <= mem_read[15:0];
                     endcase 
                 end
+                7'b0100011 : begin
+                    case(out_signal)
+                        46'h1000000 : mem_write <= rs2_input[7:0];
+                        46'h2000000 : mem_write <= rs2_input[15:0];
+                        46'h4000000 : mem_write <= rs2_input[31:0];
+                    endcase    
+                end
+            endcase
         end
     endcase
     
