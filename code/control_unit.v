@@ -74,6 +74,10 @@ always@(*) begin
                     addr <= rs1_input + imm;
                     rd_en <= 2'b1;
                 end
+                7'b0100011 : begin
+                    addr <= rs1_input + imm;
+                    wr_en <= 2'b1;
+                end
                 7'b1100011 :begin 
                     j_signal <= 2'b1;
                     case(out_signal)
