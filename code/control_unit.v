@@ -39,16 +39,15 @@ input [6:0] opcode,
 input [31:0] decoder_signal,
 input [31:0] pc_input,
 input ALUoutput,
-output [46:0] instructions,
-output [31:0] pc_output,                         //pc_output
-output rs1_output,
-output rs2_output,
+output reg [46:0] instructions,                        
+output reg rs1_output,
+output reg rs2_output,
 output reg [31:0] mem_write,
-output wr_en,
-output rd_en,
-output addr,
+output reg wr_en,
+output reg rd_en,
+output reg [31:0] addr,
 output reg j_signal,
-output [31:0] jump,
+output reg [31:0] jump,
 output reg [31:0] final_output
     
 
@@ -72,9 +71,41 @@ always@(*) begin
                     instructions <= out_signal;                     
                 end
                 7'b0000011 : begin                                                 // I set
-                    addr <= rs1 + imm;
+                    addr <= rs1_input + imm;
                     rd_en <= 2'b1;
                 end
+                7'b1100011 :begin 
+                    j_signal <= 2'b1;
+                    case(out_signal)
+                        46'h8000000 :begin
+                            if(rs1_input == rs2_input) jump <= pc_input + imm;                              //beq
+                        end
+                        46'h10000000 :begin
+                            if(rs1_input != rs2_input) jump <= pc_input + imm;                              //bne
+                        end
+                        46'h20000000 :begin
+                            if(rs1_input < rs2_input) jump <= pc_input + imm;                               //blt
+                        end
+                        46'h40000000 :begin
+                            if(rs1_input >= rs2_input) jump <= pc_input + imm;                              //bge
+                        end
+                        46'h80000000 :begin
+                            if(rs1_input < rs2_input) jump <= pc_input + imm;                              //bltu 
+                        end
+                        46'h100000000 :begin
+                            if(rs1_input >= rs2_input) jump <= pc_input + imm;                             //bgeu
+                        end
+                    endcase
+                end
+                7'b1101111 : begin
+                    jump <= pc_input + imm;
+                    final_output <= pc_input + 4; 
+                end
+                7'b1100111 : begin
+                    jump <= rs1_input + imm;
+                    final_output <= pc_input + 4;
+                end
+                
             endcase
         end
         A: begin 
