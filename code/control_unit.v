@@ -21,65 +21,59 @@
 
 
 module control_unit(
-input clk,
-input rst,
-input [31:0] rs2_input,
-input [31:0] rs1_input,
-input [31:0] rd_input,
-input [31:0] imm,
-input [2:0] func3,
-input [6:0] func7,
-input rd_valid,
-input rs1_valid,
-input rs2_valid,
-input imm_valid,
-input [31:0] mem_read,
-input [46:0] out_signal,
-input [6:0] opcode,
-input [31:0] decoder_signal,
-input [31:0] pc_input,
-input ALUoutput,
-output reg [46:0] instructions,                        
-output reg rs1_output,
-output reg rs2_output,
-output reg [31:0] mem_write,
-output reg wr_en,
-output reg rd_en,
-output reg [31:0] addr,
-output reg j_signal,
-output reg [31:0] jump,
-output reg [31:0] final_output
+input clk,                                                                                                  //input clock
+input rst,                                                                                                  //reset pin
+input [31:0] rs2_input,                                                                                     //rs1 value from Rfile
+input [31:0] rs1_input,                                                                                     //rs2 value from Rfile
+input [31:0] imm,                                                                                           //immediate value from Rfile
+input [31:0] mem_read,                                                                                      //read data from memory
+input [46:0] out_signal,                                                                                    //instruction buss from decoder
+input [6:0] opcode,                                                                                         //opcode for instructions from Rfile
+input [31:0] pc_input,                                                                                      //input from PC(its output address) 
+input ALUoutput,                                                                                            //output from ALU
+output reg [46:0] instructions,                                                                             //instruction bus for ALU
+output reg [31:0] mem_write,                                                                                //write data in memory
+output reg wr_en,                                                                                           //write signal(enable or disable)
+output reg rd_en,                                                                                           //read signal(enable or disable)
+output reg [31:0] addr,                                                                                     //address for memory
+output reg j_signal,                                                                                        //jump signal(enable or disable)
+output reg [31:0] jump,                                                                                     //jump output for pc
+output reg [31:0] final_output                                                                              //goes into Rfile as rd
     
 
     );
 parameter A=0, B=1 ;
-reg state, next_state; 
-reg temp_pc, temp_pc_jump;   
+reg state = 2'b1;     
     
-always @(posedge clk,posedge rst) begin
+always @(posedge clk,posedge rst) begin                                                                     //initializing the FSM
     if (rst) state<=B;
     else
-        state<=next_state;
+        state <= ~state;
     end    
 
 
 always@(*) begin
     case(state)
-        B: begin
+        B: begin                                                                                            //1st state
             case(opcode)
-                7'b0110011, 7'b0010011, 7'b0110111, 7'b0010111 : begin             //calling ALU
-                    instructions <= out_signal;                     
+                7'b0110011, 7'b0010011, 7'b0110111, 7'b0010111 : begin                                      //calling ALU
+                    instructions <= out_signal;                                                             //sending instruction bus to ALU
                 end
-                7'b0000011 : begin                                                 // I set
-                    addr <= rs1_input + imm;
-                    rd_en <= 2'b1;
+                7'b0000011 : begin                                                                          // mem read set
+                    addr <= rs1_input + imm;                                                                //sending required address
+                    rd_en <= 2'b1;                                                                          //enable read signal
                 end
                 7'b0100011 : begin
-                    addr <= rs1_input + imm;
-                    wr_en <= 2'b1;
+                    addr <= rs1_input + imm;                                                                //send assigned address
+                    wr_en <= 2'b1;                                                                          //enable write signal
+                    case(out_signal)
+                        46'h1000000 : mem_write <= rs2_input[7:0];                                          //sb
+                        46'h2000000 : mem_write <= rs2_input[15:0];                                         //sh
+                        46'h4000000 : mem_write <= rs2_input[31:0];                                         //sw
+                    endcase
                 end
-                7'b1100011 :begin 
-                    j_signal <= 2'b1;
+                7'b1100011 :begin                                                                           //branch instruction set
+                    j_signal <= 2'b1;                                                                       //activate jump signal
                     case(out_signal)
                         46'h8000000 :begin
                             if(rs1_input == rs2_input) jump <= pc_input + imm;                              //beq
@@ -94,49 +88,45 @@ always@(*) begin
                             if(rs1_input >= rs2_input) jump <= pc_input + imm;                              //bge
                         end
                         46'h80000000 :begin
-                            if(rs1_input < rs2_input) jump <= pc_input + imm;                              //bltu 
+                            if(rs1_input < rs2_input) jump <= pc_input + imm;                               //bltu 
                         end
                         46'h100000000 :begin
-                            if(rs1_input >= rs2_input) jump <= pc_input + imm;                             //bgeu
+                            if(rs1_input >= rs2_input) jump <= pc_input + imm;                              //bgeu
                         end
                     endcase
                 end
-                7'b1101111 : begin
+                7'b1101111 : begin                                                                          //jal
                     jump <= pc_input + imm;
                     final_output <= pc_input + 4; 
                 end
-                7'b1100111 : begin
+                7'b1100111 : begin                                                                          //jalr
                     jump <= rs1_input + imm;
                     final_output <= pc_input + 4;
                 end
-                
+                7'b0110111 : begin
+                    final_output <= imm << 12;                                                              //lui
+                end
+                7'b0010111 : begin
+                    final_output <= pc_input + (imm << 12);                                                 //auipc 
+                end
             endcase
         end
-        A: begin 
+        A: begin                                                                                            //second state
             case(opcode)
-                7'b0110011, 7'b0010011, 7'b0110111, 7'b0010111 : begin
+                7'b0110011, 7'b0010011, 7'b0110111, 7'b0010111 : begin                                      //recieving ALU output
                     final_output <= ALUoutput;
                 end 
-                7'b0000011 : begin
+                7'b0000011 : begin                                                                            
                     case(out_signal) 
-                        46'h80000 : final_output <= mem_read[7:0]; 
-                        46'h100000 : final_output <= mem_read[15:0];
-                        46'h200000 : final_output <= mem_read[31:0];
-                        46'h400000 : final_output <= mem_read[7:0];
-                        46'h800000 : final_output <= mem_read[15:0];
+                        46'h80000 : final_output <= mem_read[7:0];                                          //lb
+                        46'h100000 : final_output <= mem_read[15:0];                                        //lh
+                        46'h200000 : final_output <= mem_read[31:0];                                        //lw
+                        46'h400000 : final_output <= mem_read[7:0];                                         //lbu
+                        46'h800000 : final_output <= mem_read[15:0];                                        //lhu
                     endcase 
-                end
-                7'b0100011 : begin
-                    case(out_signal)
-                        46'h1000000 : mem_write <= rs2_input[7:0];
-                        46'h2000000 : mem_write <= rs2_input[15:0];
-                        46'h4000000 : mem_write <= rs2_input[31:0];
-                    endcase    
                 end
             endcase
         end
     endcase
-    
 end
-
 endmodule
