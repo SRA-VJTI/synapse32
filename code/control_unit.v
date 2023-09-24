@@ -43,7 +43,7 @@ output reg [31:0] final_output                                                  
 
     );
 parameter A=0, B=1 ;
-reg state = 2'b1;     
+reg state = 2'b0;     
     
 always @(posedge clk,posedge rst) begin                                                                     //initializing the FSM
     if (rst) state<=B;
@@ -73,26 +73,31 @@ always@(*) begin
                     endcase
                 end
                 7'b1100011 :begin                                                                           //branch instruction set
-                    j_signal <= 2'b1;                                                                       //activate jump signal
+                                                                                       
                     case(out_signal)
                         46'h8000000 :begin
-                            if(rs1_input == rs2_input) jump <= pc_input + imm;                              //beq
-                        end
+                            if(rs1_input == rs2_input) begin jump <= pc_input + imm;                              //beq
+                          j_signal <= 2'b1;   end end																				//activate jump signal
+								  
                         46'h10000000 :begin
-                            if(rs1_input != rs2_input) jump <= pc_input + imm;                              //bne
-                        end
+                            if(rs1_input != rs2_input) begin jump <= pc_input + imm;                              //bne
+								 j_signal <= 2'b1;   end	end																		//activate jump signal					
+								 
                         46'h20000000 :begin
-                            if(rs1_input < rs2_input) jump <= pc_input + imm;                               //blt
-                        end
+                            if(rs1_input < rs2_input) begin jump <= pc_input + imm;                               //blt
+								 j_signal <= 2'b1;   end	end																		//activate jump signal
+								 
                         46'h40000000 :begin
-                            if(rs1_input >= rs2_input) jump <= pc_input + imm;                              //bge
-                        end
+                            if(rs1_input >= rs2_input) begin jump <= pc_input + imm;                              //bge
+								 j_signal <= 2'b1;   end	end																		//activate jump signal
+								 
                         46'h80000000 :begin
-                            if(rs1_input < rs2_input) jump <= pc_input + imm;                               //bltu 
-                        end
+                            if(rs1_input < rs2_input) begin jump <= pc_input + imm;                               //bltu 
+								 j_signal <= 2'b1;   end	end																			//activate jump signal
                         46'h100000000 :begin
-                            if(rs1_input >= rs2_input) jump <= pc_input + imm;                              //bgeu
-                        end
+                            if(rs1_input >= rs2_input) begin jump <= pc_input + imm;                              //bgeu
+                         j_signal <= 2'b1;   end end																				//activate jump signal 
+								 
                     endcase
                 end
                 7'b1101111 : begin                                                                          //jal
