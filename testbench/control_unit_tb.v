@@ -29,28 +29,58 @@ control_unit control_unit1 (.clk(clk),.rst(rst),.rs2_input(rs2_input),.rs1_input
 initial clk = 0;
 always #10 clk = ~clk;
 initial begin 
+ 
 
-rst = 0;
-rs2_input=32'b0;
-rs1_input=32'b1;
-imm=32'b1;
-mem_read=32'b0;
-out_signal=46'h8000000;
-opcode=7'b1100011;
-pc_input=32'b1;
-ALUoutput=32'b1;
+opcode=7'b0110011;
+
 #100;
- rst = 1;
-rs2_input=32'b1;
-rs1_input=32'b0;
-imm=32'b0;
-mem_read=32'b1;
-out_signal=46'h1000000 ;
-opcode=7'b0100011;
-pc_input=32'b1;
-rst=0;
-ALUoutput=32'b0;
+
+
+opcode=7'b0010011;
+
+
 #100;
+
+opcode=7'b0110111;
+
+
+#100;
+
+opcode=7'b0010111;
+
+#100;
+
+opcode= 7'b0000011;
+
+#100;
+
+opcode=  7'b0100011 ;
+#100;
+
+opcode=  7'b1100011 ;
+
+#100;
+
+opcode=  7'b1101111 ;
+
+
+#100;
+
+opcode=7'b1100111;
+
+#100;
+
+opcode=  7'b0110111 ;
+
+#100;
+
+opcode=  7'b0010111;
+
+#100;
+
+opcode=  7'b0010111;
+ 
+
 
 
 end

@@ -46,13 +46,24 @@ parameter A=0, B=1 ;
 reg state = 2'b0;     
     
 always @(posedge clk,posedge rst) begin                                                                     //initializing the FSM
-    if (rst) state<=B;
+ 
+	 if (rst) state<=B;
     else
         state <= ~state;
     end    
 
 
 always@(*) begin
+   wr_en=0;
+rd_en=0;
+j_signal=0;
+instructions = 0;
+mem_write = 0;
+addr=0;
+jump = 0;
+final_output = 0;
+
+
     case(state)
         B: begin                                                                                            //1st state
             case(opcode)
