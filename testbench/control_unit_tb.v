@@ -30,12 +30,15 @@ initial clk = 0;
 always #10 clk = ~clk;
 initial begin 
  
-
+rst=0;
 opcode=7'b0110011;
 ALUoutput = 32'd10;
 out_signal=47'h2000;
-
-
+mem_read= 32'h3ffff;
+rs1_input=32'd13;
+rs2_input=32'd13;
+imm=32'd1;
+pc_input=32'd10;
 
 #100;
 
@@ -63,6 +66,7 @@ out_signal=47'h16000;
 opcode= 7'b0000011;
 mem_read= 32'h3ffff;
 out_signal=47'h100000;
+rs1_input=32'd13;
 
 #100;
 
