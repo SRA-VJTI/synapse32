@@ -78,34 +78,34 @@ final_output = 0;
                     addr <= rs1_input + imm;                                                                //send assigned address
                     wr_en <= 2'b1;                                                                          //enable write signal
                     case(out_signal)
-                        46'h1000000 : mem_write <= rs2_input[7:0];                                          //sb
-                        46'h2000000 : mem_write <= rs2_input[15:0];                                         //sh
-                        46'h4000000 : mem_write <= rs2_input[31:0];                                         //sw
+                        47'h1000000 : mem_write <= rs2_input[7:0];                                          //sb
+                        47'h2000000 : mem_write <= rs2_input[15:0];                                         //sh
+                        47'h4000000 : mem_write <= rs2_input[31:0];                                         //sw
                     endcase
                 end
                 7'b1100011 :begin                                                                           //branch instruction set
                                                                                        
                     case(out_signal)
-                        46'h8000000 :begin
+                        47'h8000000 :begin
                             if(rs1_input == rs2_input) begin jump <= pc_input + imm;                              //beq
                           j_signal <= 2'b1;   end end																				//activate jump signal
 								  
-                        46'h10000000 :begin
+                        47'h10000000 :begin
                             if(rs1_input != rs2_input) begin jump <= pc_input + imm;                              //bne
 								 j_signal <= 2'b1;   end	end																		//activate jump signal					
 								 
-                        46'h20000000 :begin
+                        47'h20000000 :begin
                             if(rs1_input < rs2_input) begin jump <= pc_input + imm;                               //blt
 								 j_signal <= 2'b1;   end	end																		//activate jump signal
 								 
-                        46'h40000000 :begin
+                        47'h40000000 :begin
                             if(rs1_input >= rs2_input) begin jump <= pc_input + imm;                              //bge
 								 j_signal <= 2'b1;   end	end																		//activate jump signal
 								 
-                        46'h80000000 :begin
+                        47'h80000000 :begin
                             if(rs1_input < rs2_input) begin jump <= pc_input + imm;                               //bltu 
 								 j_signal <= 2'b1;   end	end																			//activate jump signal
-                        46'h100000000 :begin
+                        47'h100000000 :begin
                             if(rs1_input >= rs2_input) begin jump <= pc_input + imm;                              //bgeu
                          j_signal <= 2'b1;   end end																				//activate jump signal 
 								 
@@ -134,11 +134,11 @@ final_output = 0;
                 end 
                 7'b0000011 : begin                                                                            
                     case(out_signal) 
-                        46'h80000 : final_output <= mem_read[7:0];                                          //lb
-                        46'h100000 : final_output <= mem_read[15:0];                                        //lh
-                        46'h200000 : final_output <= mem_read[31:0];                                        //lw
-                        46'h400000 : final_output <= mem_read[7:0];                                         //lbu
-                        46'h800000 : final_output <= mem_read[15:0];                                        //lhu
+                        47'h80000 : final_output <= mem_read[7:0];                                          //lb
+                        47'h100000 : final_output <= mem_read[15:0];                                        //lh
+                        47'h200000 : final_output <= mem_read[31:0];                                        //lw
+                        47'h400000 : final_output <= mem_read[7:0];                                         //lbu
+                        47'h800000 : final_output <= mem_read[15:0];                                        //lhu
                     endcase 
                 end
             endcase

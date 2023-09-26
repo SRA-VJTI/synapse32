@@ -32,53 +32,81 @@ initial begin
  
 
 opcode=7'b0110011;
+ALUoutput = 32'd10;
+out_signal=47'h2000;
+
+
 
 #100;
 
 
 opcode=7'b0010011;
-
+ALUoutput = 32'd11;
+out_signal=47'h4000;
 
 #100;
 
 opcode=7'b0110111;
+ALUoutput = 32'd12;
+out_signal=47'h8000;
+imm=32'd1;
 
 
 #100;
 
 opcode=7'b0010111;
+ALUoutput = 32'd13;
+out_signal=47'h16000;
 
 #100;
 
 opcode= 7'b0000011;
+mem_read= 32'h3ffff;
+out_signal=47'h100000;
 
 #100;
 
 opcode=  7'b0100011 ;
+rs2_input=32'h3ffff;
+imm=32'd1;
+out_signal=47'h2000000;
+
 #100;
 
 opcode=  7'b1100011 ;
+out_signal= 47'h8000000;
+rs1_input=32'd13;
+rs2_input=32'd13;
+pc_input=32'd10;
+imm=32'h1;
+
 
 #100;
 
 opcode=  7'b1101111 ;
-
+pc_input=32'd10;
+imm=32'h1;
 
 #100;
 
 opcode=7'b1100111;
+rs1_input=32'd10;
+imm=32'd1;
+
 
 #100;
 
 opcode=  7'b0110111 ;
+imm=32'd1;
+
 
 #100;
 
 opcode=  7'b0010111;
+imm=32'd1;
+pc_input=32'd10;
 
-#100;
 
-opcode=  7'b0010111;
  
 
 
