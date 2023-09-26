@@ -34,7 +34,7 @@ input ALUoutput,                                                                
 output reg [46:0] instructions,                                                                             //instruction bus for ALU
 output reg [31:0] mem_write,                                                                                //write data in memory
 output reg wr_en,                                                                                           //write signal(enable or disable)
-output reg rd_en,                                                                                           //read signal(enable or disable)
+output reg rd_en =0,                                                                                           //read signal(enable or disable)
 output reg [31:0] addr,                                                                                     //address for memory
 output reg j_signal,                                                                                        //jump signal(enable or disable)
 output reg [31:0] jump,                                                                                     //jump output for pc
@@ -54,6 +54,7 @@ always @(posedge clk,posedge rst) begin                                         
 
 
 always@(*) begin
+
 wr_en=0;
 j_signal=0;
 instructions = 0;
@@ -61,6 +62,7 @@ mem_write = 0;
 addr=0;
 jump = 0;
 final_output = 0;
+
 
 
     case(state)
