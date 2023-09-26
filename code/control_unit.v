@@ -54,8 +54,7 @@ always @(posedge clk,posedge rst) begin                                         
 
 
 always@(*) begin
-   wr_en=0;
-rd_en=0;
+wr_en=0;
 j_signal=0;
 instructions = 0;
 mem_write = 0;
@@ -87,43 +86,69 @@ final_output = 0;
                                                                                        
                     case(out_signal)
                         47'h8000000 :begin
-                            if(rs1_input == rs2_input) begin jump <= pc_input + imm;                              //beq
-                          j_signal <= 2'b1;   end end																				//activate jump signal
+                            if(rs1_input == rs2_input) begin 
+                                jump <= pc_input + imm;                                                     //beq
+                                j_signal <= 2'b1;   
+                            end 
+                        end																				    //activate jump signal
 								  
                         47'h10000000 :begin
-                            if(rs1_input != rs2_input) begin jump <= pc_input + imm;                              //bne
-								 j_signal <= 2'b1;   end	end																		//activate jump signal					
+                            if(rs1_input != rs2_input) begin 
+                                jump <= pc_input + imm;                                                     //bne
+						        j_signal <= 2'b1;   
+						    end	
+						end																		            //activate jump signal					
 								 
                         47'h20000000 :begin
-                            if(rs1_input < rs2_input) begin jump <= pc_input + imm;                               //blt
-								 j_signal <= 2'b1;   end	end																		//activate jump signal
+                            if(rs1_input < rs2_input) begin 
+                                 jump <= pc_input + imm;                                                    //blt
+								 j_signal <= 2'b1;   
+						    end	
+					    end																		            //activate jump signal
 								 
                         47'h40000000 :begin
-                            if(rs1_input >= rs2_input) begin jump <= pc_input + imm;                              //bge
-								 j_signal <= 2'b1;   end	end																		//activate jump signal
+                            if(rs1_input >= rs2_input) begin 
+                                jump <= pc_input + imm;                                                     //bge
+								j_signal <= 2'b1;   
+							end	
+						end																		            //activate jump signal
 								 
                         47'h80000000 :begin
-                            if(rs1_input < rs2_input) begin jump <= pc_input + imm;                               //bltu 
-								 j_signal <= 2'b1;   end	end																			//activate jump signal
+                            if(rs1_input < rs2_input) begin 
+                                jump <= pc_input + imm;                                                     //bltu 
+								j_signal <= 2'b1;   
+							end	
+						end																			        //activate jump signal
                         47'h100000000 :begin
-                            if(rs1_input >= rs2_input) begin jump <= pc_input + imm;                              //bgeu
-                         j_signal <= 2'b1;   end end																				//activate jump signal 
+                            if(rs1_input >= rs2_input) begin 
+                                jump <= pc_input + imm;                                                     //bgeu
+                                j_signal <= 2'b1;   
+                            end 
+                        end																				    //activate jump signal 
 								 
                     endcase
                 end
-                7'b1101111 : begin                                                                          //jal
-                    jump <= pc_input + imm;
-                    final_output <= pc_input + 4; 
+                7'b1101111 : begin
+                    if(out_signal == 47'h200000000) begin                                                  //jal
+                        jump <= pc_input + imm;
+                        final_output <= pc_input + 4;
+                    end 
                 end
                 7'b1100111 : begin                                                                          //jalr
-                    jump <= rs1_input + imm;
-                    final_output <= pc_input + 4;
+                    if(out_signal == 47'h400000000) begin   
+                        jump <= rs1_input + imm;
+                        final_output <= pc_input + 4;
+                    end
                 end
                 7'b0110111 : begin
-                    final_output <= imm << 12;                                                              //lui
+                    if(out_signal == 47'h800000000) begin   
+                        final_output <= imm << 12;                                                          //lui
+                    end
                 end
                 7'b0010111 : begin
-                    final_output <= pc_input + (imm << 12);                                                 //auipc 
+                    if(out_signal == 47'h1000000000) begin   
+                        final_output <= pc_input + (imm << 12);                                             //auipc 
+                    end                
                 end
             endcase
         end
@@ -139,7 +164,8 @@ final_output = 0;
                         47'h200000 : final_output <= mem_read[31:0];                                        //lw
                         47'h400000 : final_output <= mem_read[7:0];                                         //lbu
                         47'h800000 : final_output <= mem_read[15:0];                                        //lhu
-                    endcase 
+                    endcase
+                    rd_en = 2'b0; 
                 end
             endcase
         end
