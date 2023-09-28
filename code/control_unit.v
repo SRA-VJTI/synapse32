@@ -25,12 +25,12 @@ input clk,                                                                      
 input rst,                                                                                                  //reset pin
 input [31:0] rs2_input,                                                                                     //rs1 value from Rfile
 input [31:0] rs1_input,                                                                                     //rs2 value from Rfile
-input [31:0] imm,                                                                                           //immediate value from Rfile
+input [11:0] imm,                                                                                           //immediate value from Rfile
 input [31:0] mem_read,                                                                                      //read data from memory
 input [46:0] out_signal,                                                                                    //instruction buss from decoder
 input [6:0] opcode,                                                                                         //opcode for instructions from Rfile
 input [31:0] pc_input,                                                                                      //input from PC(its output address) 
-input ALUoutput,                                                                                            //output from ALU
+input [31:0] ALUoutput,                                                                                            //output from ALU
 output reg [46:0] instructions,                                                                             //instruction bus for ALU
 output reg [31:0] mem_write,                                                                                //write data in memory
 output reg wr_en,                                                                                           //write signal(enable or disable)
@@ -59,7 +59,7 @@ wr_en=0;
 j_signal=0;
 instructions = 0;
 mem_write = 0;
-addr=0;
+addr<=0;
 jump = 0;
 final_output = 0;
 
