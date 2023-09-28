@@ -38,7 +38,8 @@ output reg rd_en =0,                                                            
 output reg [31:0] addr,                                                                                     //address for memory
 output reg j_signal,                                                                                        //jump signal(enable or disable)
 output reg [31:0] jump,                                                                                     //jump output for pc
-output reg [31:0] final_output                                                                              //goes into Rfile as rd
+output reg [31:0] final_output,                                                                              //goes into Rfile as rd
+output reg ALUenabled
     
 
     );
@@ -62,6 +63,7 @@ mem_write = 0;
 addr<=0;
 jump = 0;
 final_output = 0;
+ALUenabled = 0;
 
 
 
@@ -69,7 +71,8 @@ final_output = 0;
         B: begin                                                                                            //1st state
             case(opcode)
                 7'b0110011, 7'b0010011, 7'b0110111, 7'b0010111 : begin                                      //calling ALU
-                    instructions <= out_signal;                                                             //sending instruction bus to ALU
+                    instructions <= out_signal;
+                    ALUenabled<=1;                                         //sending instruction bus to ALU
                 end
                 7'b0000011 : begin                                                                          // mem read set
                     addr <= rs1_input + imm;                                                                //sending required address
@@ -158,6 +161,7 @@ final_output = 0;
             case(opcode)
                 7'b0110011, 7'b0010011, 7'b0110111, 7'b0010111 : begin                                      //recieving ALU output
                     final_output <= ALUoutput;
+						  ALUenabled<=0;
                 end 
                 7'b0000011 : begin                                                                            
                     case(out_signal) 
