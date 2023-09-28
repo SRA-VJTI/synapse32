@@ -25,8 +25,8 @@ input clk,
 input [31:0] rs1,
 input [31:0] rs2,
 input [11:0] imm,
-input [31:0] PC,
 input ALUenabled,
+
 input [46:0] instructions, //subjected to change
 output reg [31:0] ALUoutput
 
@@ -48,7 +48,7 @@ always@(*) begin
             47'h20 : ALUoutput <= rs1 << rs2;                                     //sll
             47'h40 : ALUoutput <= rs1 >> rs2;                                     //srl
             47'h80 : ALUoutput <= rs1 > rs2;                                      //sra 
-            47'h100 : ALUoutput <= (rs1 > rs2)?1:0;                               //slt
+            47'h100 : ALUoutput <= (rs1 > rs2)?1:0;                             //slt
             47'h200 : ALUoutput <= (rs1 > rs2)?1:0;                               //sltu
             47'h400 : ALUoutput <= (rs1 + imm);                                   //addi
             47'h800 : ALUoutput <= (rs1 ^ imm);                                   //xori
@@ -69,5 +69,6 @@ always@(*) begin
             47'h800000000000 : ALUoutput <= rs1 % rs2;                            //remu
                default : ALUoutput<= 0;
         endcase end
+
 end       
 endmodule

@@ -23,82 +23,73 @@ module ALU_td;
     reg [31:0] rs1;
     reg [31:0] rs2;
     reg [11:0] imm;
-    reg [31:0] PC;
     reg [46:0] instructions; //subjected to change
-    wire [31:0] ALUoutput;
-    
-    ALU ALU1( .clk(clk), .rs1(rs1), .rs2(rs2), .imm(imm), .PC(PC), .instructions(instructions), .ALUoutput(ALUoutput));
+    wire [31:0] ALUoutput; 
+
+    ALU ALU1( .clk(clk), .rs1(rs1), .rs2(rs2), .imm(imm), .instructions(instructions), .ALUoutput(ALUoutput));
     
     initial clk = 0;
     initial rs1 = 5'd5;
     initial rs2 = 5'd4;
     initial imm = 12'd12;
-    initial PC = 32'b10;
-    initial instructions = 46'b0;
+    initial instructions = 47'b0;
     always #10 clk = ~clk;
     initial begin
         #50 
-        instructions <= 46'h1;
+        instructions <= 47'h1;
         #50 
-        instructions <= 46'h2;
+        instructions <= 47'h2;
         #50 
-        instructions <= 46'h4;
+        instructions <= 47'h4;
         #50 
-        instructions <= 46'h8;
+        instructions <= 47'h8;
         #50 
-        instructions <= 46'h10;
+        instructions <= 47'h10;
         #50 
-        instructions <= 46'h20;
+        instructions <= 47'h20;
         #50 
-        instructions <= 46'h40;
+        instructions <= 47'h40;
         #50 
-        instructions <= 46'h80;
+        instructions <= 47'h80;
         #50 
-        instructions <= 46'h100;
+        instructions <= 47'h100;
         #50 
-        instructions <= 46'h200;
+        instructions <= 47'h200;
         #50 
-        instructions <= 46'h400;
+        instructions <= 47'h400;
         #50 
-        instructions <= 46'h800;
+        instructions <= 47'h800;
         #50 
-        instructions <= 46'h1000;
+        instructions <= 47'h1000;
         #50 
-        instructions <= 46'h2000;
+        instructions <= 47'h2000;
         #50 
-        instructions <= 46'h4000;
+        instructions <= 47'h4000;
         #50 
-        instructions <= 46'h8000;
+        instructions <= 47'h8000;
         #50 
-        instructions <= 46'h10000;
+        instructions <= 47'h10000;
         #50 
-        instructions <= 46'h20000;
+        instructions <= 47'h20000;
         #50 
-        instructions <= 46'h40000;
+        instructions <= 47'h40000;
         #50 
-        instructions <= 46'h100000000 ;
+        instructions <= 47'h10000000000 ;
         #50 
-        instructions <= 46'h200000000 ;
+        instructions <= 47'h20000000000 ;
         #50 
-        instructions <= 46'h400000000 ;
+        instructions <= 47'h40000000000 ;
         #50 
-        instructions <= 46'h800000000 ;
+        instructions <= 47'h80000000000 ;
         #50 
-        instructions <= 46'h10000000000 ;
+        instructions <= 47'h100000000000 ;
         #50 
-        instructions <= 46'h20000000000 ;
+        instructions <= 47'h200000000000 ;
         #50 
-        instructions <= 46'h40000000000 ;
+        instructions <= 47'h400000000000 ;
         #50 
-        instructions <= 46'h80000000000 ;
-        #50 
-        instructions <= 46'h100000000000 ;
-        #50 
-        instructions <= 46'h200000000000 ;
-        #50 
-        instructions <= 46'h400000000000 ;
-        #50 
-        instructions <= 46'h800000000000 ;
+        instructions <= 47'h800000000000 ;
+
         
     end
 endmodule
