@@ -25,7 +25,7 @@ module ALU_td;
     reg [11:0] imm;
     reg [46:0] instructions; //subjected to change
     wire [31:0] ALUoutput; 
-    
+
     ALU ALU1( .clk(clk), .rs1(rs1), .rs2(rs2), .imm(imm), .instructions(instructions), .ALUoutput(ALUoutput));
     
     initial clk = 0;
@@ -89,6 +89,7 @@ module ALU_td;
         instructions <= 47'h400000000000 ;
         #50 
         instructions <= 47'h800000000000 ;
+
         
     end
 endmodule
