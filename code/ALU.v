@@ -24,7 +24,7 @@ module ALU(
 input clk,
 input [31:0] rs1,
 input [31:0] rs2,
-input [11:0] imm,
+input [31:0] imm,
 input ALUenabled,
 
 input [46:0] instructions, //subjected to change

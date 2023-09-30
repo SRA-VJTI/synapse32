@@ -25,7 +25,7 @@ input clk,                                                                      
 input rst,                                                                                                  //reset pin
 input [31:0] rs2_input,                                                                                     //rs1 value from Rfile
 input [31:0] rs1_input,                                                                                     //rs2 value from Rfile
-input [11:0] imm,                                                                                           //immediate value from Rfile
+input [31:0] imm,                                                                                           //immediate value from Rfile
 input [31:0] mem_read,                                                                                      //read data from memory
 input [46:0] out_signal,                                                                                    //instruction buss from decoder
 input [6:0] opcode,                                                                                         //opcode for instructions from Rfile
