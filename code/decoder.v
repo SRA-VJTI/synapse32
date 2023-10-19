@@ -22,7 +22,7 @@
 
 module decoder(
 input clk,
-   input  [31:0] instr,
+   input [31:0] instr,
    output  [31:0] rs2,
    output  [31:0] rs1,
    output [31:0] imm,
