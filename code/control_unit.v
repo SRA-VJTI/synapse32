@@ -137,12 +137,14 @@ ALUenabled = 0;
                     if(out_signal == 47'h200000000) begin                                                  //jal
                         jump <= pc_input + imm;
                         final_output <= pc_input + 4;
+			j_signal <= 2'b1;  
                     end 
                 end
                 7'b1100111 : begin                                                                          //jalr
                     if(out_signal == 47'h400000000) begin   
                         jump <= rs1_input + imm;
                         final_output <= pc_input + 4;
+			j_signal <= 2'b1;  
                     end
                 end
                 7'b0110111 : begin
