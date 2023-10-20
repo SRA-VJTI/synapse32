@@ -46,17 +46,6 @@ output reg ALUenabled
 parameter A=0, B=1 ;
 reg state = 2'b0;     
     
-initial begin 
-
-wr_en=0;
-j_signal<=0;
-instructions = 0;
-mem_write = 0;
-addr<=0;
-jump = 0;
-final_output = 0;
-ALUenabled = 0;
-end	 
 always @(posedge clk,posedge rst) begin                                                                     //initializing the FSM
  
 	 if (rst) state<=B;
@@ -67,6 +56,14 @@ always @(posedge clk,posedge rst) begin                                         
 
 always@(*) begin
 
+wr_en=0;
+j_signal=0;
+instructions = 0;
+mem_write = 0;
+addr<=0;
+jump = 0;
+final_output = 0;
+ALUenabled = 0;
 
 
 
@@ -137,21 +134,15 @@ always@(*) begin
                     endcase
                 end
                 7'b1101111 : begin
-                    if(out_signal == 47'h200000000) begin   						  //jal
-							 
-						  jump <= pc_input + imm;
-						  j_signal <= 2'b1;  
+                    if(out_signal == 47'h200000000) begin                                                  //jal
+                        jump <= pc_input + imm;
                         final_output <= pc_input + 4;
-			j_signal <= 2'b1;  
                     end 
                 end
                 7'b1100111 : begin                                                                          //jalr
-                    if(out_signal == 47'h400000000) begin
-								
+                    if(out_signal == 47'h400000000) begin   
                         jump <= rs1_input + imm;
-								 j_signal <= 2'b1;  
                         final_output <= pc_input + 4;
-			j_signal <= 2'b1;  
                     end
                 end
                 7'b0110111 : begin
