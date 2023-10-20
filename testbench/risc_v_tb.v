@@ -41,7 +41,7 @@ initial rst = 0;
 always #10 clk = ~clk;
 initial imem_wr_en = 0;
 initial imem_data_in=0;
-initial rf_wr_en=0;
+initial rf_wr_en=1;
 
 						
 						

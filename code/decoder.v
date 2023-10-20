@@ -23,8 +23,8 @@
 module decoder(
 input clk,
    input [31:0] instr,
-   output  [31:0] rs2,
-   output  [31:0] rs1,
+   output  [4:0] rs2,
+   output  [5:0] rs1,
    output [31:0] imm,
    output  [31:0] rd,
    output  [2:0] func3,
@@ -47,7 +47,7 @@ wire  is_r_instr, is_u_instr, is_s_instr, is_b_instr, is_j_instr, is_i_instr;
     assign opcode=instr[6:0];
     assign is_i_instr=(instr[6:0]== 7'b0000011)||(instr[6:0]== 7'b0010011)||(instr[6:0]== 7'b1100111);
     assign is_u_instr=(instr[6:0]==7'b0010111);
-    assign is_b_instr=(instr[6:0]==7'b1101111);
+    assign is_b_instr=(instr[6:0]==7'b1100011);
     assign is_j_instr=(instr[6:0]==7'b1101111);
     assign is_s_instr=(instr[6:0]==7'b0100011);
     assign is_r_instr=(instr[6:0]==7'b0110011)||(instr[6:0]==7'b0100111)||(instr[6:0]==7'b1010011);
@@ -68,7 +68,7 @@ wire  is_r_instr, is_u_instr, is_s_instr, is_b_instr, is_j_instr, is_i_instr;
                 is_s_instr ? {  {21{instr[31]}},  instr[30:25],  instr[11:7]  } :
                 is_b_instr ? {  {20{instr[31]}},  instr[7], instr[30:25], instr[11:8]  } :
                 is_u_instr ? {  instr[31:12]  } :
-                is_j_instr ? {  {12{instr[31]}},  instr[19:12], instr[20], instr[30:25], instr[24:21]  } : 32'b0;
+                is_j_instr ? {  {13{instr[31]}},  instr[19:12], instr[20], instr[30:25], instr[24:21], 1'b0  } : 32'b0;
                 
    assign imm_valid = is_i_instr || is_s_instr || is_b_instr || is_u_instr || is_j_instr;
    
