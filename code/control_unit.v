@@ -69,7 +69,7 @@ always @(posedge clk,posedge rst) begin                                         
 
 always@(*) begin
 
-
+//if ((opcode!=7'b1100011||opcode!=7'b1101111)&&j_signal==1) j_signal<=0;
 
 
     case(state)
@@ -173,12 +173,14 @@ always@(*) begin
                     end                
                 end
             endcase
-        end
+		 //if(ALUenabled==1) ALUenabled<=0;
+		end
         A: begin                                                                                            //second state
-            case(opcode)
+            if(ALUenabled==1) ALUenabled<=0;	
+				case(opcode)
                 7'b0110011, 7'b0010011, 7'b0110111, 7'b0010111 : begin                                      //recieving ALU output
                     final_output <= ALUoutput;
-						  ALUenabled<=0;
+						  //ALUenabled<=0;
                 end 
                 7'b0000011 : begin                                                                            
                     case(out_signal) 

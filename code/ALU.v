@@ -68,7 +68,10 @@ always@(*) begin
             47'h400000000000 : ALUoutput <= rs1 % rs2;                            //rem
             47'h800000000000 : ALUoutput <= rs1 % rs2;                            //remu
                default : ALUoutput<= 0;
-        endcase end
+        endcase
+			
+		
+		end
 
 end       
 endmodule
