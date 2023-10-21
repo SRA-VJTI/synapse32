@@ -62,6 +62,8 @@ always @(posedge clk,posedge rst) begin                                         
 	 if (rst) state<=B;
     else
         state <= ~state;
+		  
+
     end    
 
 
@@ -71,15 +73,18 @@ always@(*) begin
 
 
     case(state)
-        B: begin                                                                                            //1st state
+        B: begin  
+                                                                                        //1st state
             case(opcode)
                 7'b0110011, 7'b0010011, 7'b0110111, 7'b0010111 : begin                                      //calling ALU
                     instructions <= out_signal;
                     ALUenabled<=1;                                         //sending instruction bus to ALU
+						  if(j_signal==1)j_signal<=0;
                 end
                 7'b0000011 : begin                                                                          // mem read set
                     addr <= rs1_input + imm;                                                                //sending required address
-                    rd_en <= 2'b1;                                                                          //enable read signal
+                    rd_en <= 2'b1; 
+						  if(j_signal==1)j_signal<=0;                                                                         //enable read signal
                 end
                 7'b0100011 : begin
                     addr <= rs1_input + imm;                                                                //send assigned address
@@ -89,6 +94,7 @@ always@(*) begin
                         47'h2000000 : mem_write <= rs2_input[15:0];                                         //sh
                         47'h4000000 : mem_write <= rs2_input[31:0];                                         //sw
                     endcase
+						  if(j_signal==1)j_signal<=0;
                 end
                 7'b1100011 :begin                                                                           //branch instruction set
                                                                                        
@@ -155,11 +161,13 @@ always@(*) begin
                     end
                 end
                 7'b0110111 : begin
+					 if(j_signal==1)j_signal<=0;
                     if(out_signal == 47'h800000000) begin   
                         final_output <= imm << 12;                                                          //lui
                     end
                 end
                 7'b0010111 : begin
+					 if(j_signal==1)j_signal<=0;
                     if(out_signal == 47'h1000000000) begin   
                         final_output <= pc_input + (imm << 12);                                             //auipc 
                     end                
