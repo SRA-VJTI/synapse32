@@ -30,8 +30,8 @@ input clk,
  input [4:0]rd,
  input wr_en,
  input [31:0]result,
- output [31:0]src1_value,
- output [31:0]src2_value
+ output reg [31:0]src1_value,
+ output reg [31:0]src2_value
 
  );
     
@@ -73,9 +73,13 @@ input clk,
  
  end
 
- assign src1_value = rs1_valid? register_file[rs1[4:0]]:0;
- assign src2_value = rs2_valid ? register_file[rs2[4:0]]:0;
-
+always@(*) begin
+ 
+ if (rs1_valid) src1_value <= register_file[rs1[4:0]];
+ if (rs2_valid) src2_value <= register_file[rs2[4:0]];
+ //assign src1_value = rs1_valid ? register_file[rs1[4:0]] ;
+ //assign src2_value = rs2_valid ? register_file[rs2[4:0]] ;
+end
 
 always @(posedge clk) begin 
 register_file[0]<=0;

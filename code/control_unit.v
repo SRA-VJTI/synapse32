@@ -148,7 +148,6 @@ always@(*) begin
 						  jump <= pc_input + imm;
 						  j_signal <= 2'b1;  
                         final_output <= pc_input + 4;
-			j_signal <= 2'b1;  
                     end 
                 end
                 7'b1100111 : begin                                                                          //jalr
@@ -156,8 +155,7 @@ always@(*) begin
 								
                         jump <= rs1_input + imm;
 								 j_signal <= 2'b1;  
-                        final_output <= pc_input + 4;
-			j_signal <= 2'b1;  
+                        final_output <= pc_input + 4; 
                     end
                 end
                 7'b0110111 : begin
@@ -176,7 +174,7 @@ always@(*) begin
 		 //if(ALUenabled==1) ALUenabled<=0;
 		end
         A: begin                                                                                            //second state
-            if(ALUenabled==1) ALUenabled<=0;	
+            //if(ALUenabled==1) ALUenabled<=0;	
 				case(opcode)
                 7'b0110011, 7'b0010011, 7'b0110111, 7'b0010111 : begin                                      //recieving ALU output
                     final_output <= ALUoutput;

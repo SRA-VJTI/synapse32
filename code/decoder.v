@@ -24,7 +24,7 @@ module decoder(
 input clk,
    input [31:0] instr,
    output  [4:0] rs2,
-   output  [5:0] rs1,
+   output  [4:0] rs1,
    output [31:0] imm,
    output  [31:0] rd,
    output  [2:0] func3,
@@ -51,11 +51,11 @@ wire  is_r_instr, is_u_instr, is_s_instr, is_b_instr, is_j_instr, is_i_instr;
     assign is_j_instr=(instr[6:0]==7'b1101111);
     assign is_s_instr=(instr[6:0]==7'b0100011);
     assign is_r_instr=(instr[6:0]==7'b0110011)||(instr[6:0]==7'b0100111)||(instr[6:0]==7'b1010011);
-    assign rs2=instr[24:20];
-    assign rs1=instr[19:15];
-    assign rd=instr[11:7];
-    assign func3=instr[14:12];
-    assign func7=instr[31:25];
+    assign rs2= (is_r_instr || is_s_instr || is_b_instr) ? instr[24:20] :  0;
+    assign rs1= (is_r_instr || is_s_instr || is_b_instr || is_i_instr) ? instr[19:15]: 0;
+    assign rd= (is_r_instr || is_u_instr || is_j_instr || is_i_instr) ? instr[11:7] : 0;
+    assign func3= (is_r_instr || is_s_instr || is_b_instr || is_i_instr) ? instr[14:12] : 0;
+    assign func7= is_r_instr ? instr[31:25] : 0;
 
    assign func7_valid= is_r_instr;
    assign rs1_valid=is_r_instr || is_i_instr || is_s_instr || is_b_instr;
