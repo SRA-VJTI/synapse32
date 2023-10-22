@@ -39,15 +39,16 @@ output reg [31:0] addr,                                                         
 output reg j_signal,                                                                                        //jump signal(enable or disable)
 output reg [31:0] jump,                                                                                     //jump output for pc
 output reg [31:0] final_output,                                                                              //goes into Rfile as rd
-output reg ALUenabled
+output reg ALUenabled,
+output reg wr_en_rf
     
 
     );
 parameter A=0, B=1 ;
-reg state = 2'b0;     
+reg state = 2'b1;     
     
 initial begin 
-
+wr_en_rf <= 0;
 wr_en=0;
 j_signal<=0;
 instructions = 0;
@@ -178,9 +179,11 @@ always@(*) begin
 				case(opcode)
                 7'b0110011, 7'b0010011, 7'b0110111, 7'b0010111 : begin                                      //recieving ALU output
                     final_output <= ALUoutput;
+						  wr_en_rf <= 2'b1;
 						  //ALUenabled<=0;
                 end 
-                7'b0000011 : begin                                                                            
+                7'b0000011 : begin
+						  wr_en_rf <= 2'b1;
                     case(out_signal) 
                         47'h80000 : final_output <= mem_read[7:0];                                          //lb
                         47'h100000 : final_output <= mem_read[15:0];                                        //lh
