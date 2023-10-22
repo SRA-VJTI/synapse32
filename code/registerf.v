@@ -36,6 +36,7 @@ input clk,
  );
     
  reg [31:0] register_file [31:0];
+ 
  initial begin
  register_file[0]=0;
  register_file[1]=0;
