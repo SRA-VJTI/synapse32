@@ -15,13 +15,12 @@
 
 // PROGRAM		"Quartus Prime"
 // VERSION		"Version 20.1.0 Build 711 06/05/2020 SJ Lite Edition"
-// CREATED		"Thu Oct 19 22:42:02 2023"
+// CREATED		"Sun Oct 22 11:08:27 2023"
 
 module risc_v(
 	clk,
 	rst,
 	imem_wr_en,
-	rf_wr_en,
 	imem_data_in,
 	rd_valid,
 	imm_valid,
@@ -36,7 +35,6 @@ module risc_v(
 input wire	clk;
 input wire	rst;
 input wire	imem_wr_en;
-input wire	rf_wr_en;
 input wire	[31:0] imem_data_in;
 output wire	rd_valid;
 output wire	imm_valid;
@@ -47,17 +45,17 @@ output wire	[2:0] funct3;
 output wire	[6:0] funct7;
 
 wire	SYNTHESIZED_WIRE_0;
-wire	[31:0] SYNTHESIZED_WIRE_27;
-wire	[46:0] SYNTHESIZED_WIRE_2;
 wire	[31:0] SYNTHESIZED_WIRE_28;
+wire	[46:0] SYNTHESIZED_WIRE_2;
 wire	[31:0] SYNTHESIZED_WIRE_29;
+wire	[31:0] SYNTHESIZED_WIRE_30;
 wire	SYNTHESIZED_WIRE_5;
 wire	[31:0] SYNTHESIZED_WIRE_6;
 wire	[31:0] SYNTHESIZED_WIRE_7;
 wire	[31:0] SYNTHESIZED_WIRE_9;
 wire	[6:0] SYNTHESIZED_WIRE_10;
 wire	[46:0] SYNTHESIZED_WIRE_11;
-wire	[31:0] SYNTHESIZED_WIRE_30;
+wire	[31:0] SYNTHESIZED_WIRE_31;
 wire	[31:0] SYNTHESIZED_WIRE_15;
 wire	SYNTHESIZED_WIRE_16;
 wire	SYNTHESIZED_WIRE_17;
@@ -65,12 +63,13 @@ wire	[31:0] SYNTHESIZED_WIRE_18;
 wire	[31:0] SYNTHESIZED_WIRE_19;
 wire	SYNTHESIZED_WIRE_21;
 wire	SYNTHESIZED_WIRE_22;
-wire	[31:0] SYNTHESIZED_WIRE_23;
+wire	SYNTHESIZED_WIRE_23;
 wire	[31:0] SYNTHESIZED_WIRE_24;
 wire	[31:0] SYNTHESIZED_WIRE_25;
 wire	[31:0] SYNTHESIZED_WIRE_26;
+wire	[31:0] SYNTHESIZED_WIRE_27;
 
-assign	final_output = SYNTHESIZED_WIRE_24;
+assign	final_output = SYNTHESIZED_WIRE_25;
 
 
 
@@ -78,10 +77,10 @@ assign	final_output = SYNTHESIZED_WIRE_24;
 ALU	b2v_inst(
 	.clk(clk),
 	.ALUenabled(SYNTHESIZED_WIRE_0),
-	.imm(SYNTHESIZED_WIRE_27),
+	.imm(SYNTHESIZED_WIRE_28),
 	.instructions(SYNTHESIZED_WIRE_2),
-	.rs1(SYNTHESIZED_WIRE_28),
-	.rs2(SYNTHESIZED_WIRE_29),
+	.rs1(SYNTHESIZED_WIRE_29),
+	.rs2(SYNTHESIZED_WIRE_30),
 	.ALUoutput(SYNTHESIZED_WIRE_7));
 
 
@@ -90,26 +89,27 @@ PC	b2v_inst1(
 	.reset(rst),
 	.j_signal(SYNTHESIZED_WIRE_5),
 	.jump(SYNTHESIZED_WIRE_6),
-	.out(SYNTHESIZED_WIRE_30));
+	.out(SYNTHESIZED_WIRE_31));
 
 
 control_unit	b2v_inst2(
 	.clk(clk),
 	.rst(rst),
 	.ALUoutput(SYNTHESIZED_WIRE_7),
-	.imm(SYNTHESIZED_WIRE_27),
+	.imm(SYNTHESIZED_WIRE_28),
 	.mem_read(SYNTHESIZED_WIRE_9),
 	.opcode(SYNTHESIZED_WIRE_10),
 	.out_signal(SYNTHESIZED_WIRE_11),
-	.pc_input(SYNTHESIZED_WIRE_30),
-	.rs1_input(SYNTHESIZED_WIRE_28),
-	.rs2_input(SYNTHESIZED_WIRE_29),
+	.pc_input(SYNTHESIZED_WIRE_31),
+	.rs1_input(SYNTHESIZED_WIRE_29),
+	.rs2_input(SYNTHESIZED_WIRE_30),
 	.wr_en(SYNTHESIZED_WIRE_17),
 	.rd_en(SYNTHESIZED_WIRE_16),
 	.j_signal(SYNTHESIZED_WIRE_5),
 	.ALUenabled(SYNTHESIZED_WIRE_0),
+	.wr_en_rf(SYNTHESIZED_WIRE_23),
 	.addr(SYNTHESIZED_WIRE_18),
-	.final_output(SYNTHESIZED_WIRE_24),
+	.final_output(SYNTHESIZED_WIRE_25),
 	.instructions(SYNTHESIZED_WIRE_2),
 	.jump(SYNTHESIZED_WIRE_6),
 	.mem_write(SYNTHESIZED_WIRE_19));
@@ -128,12 +128,12 @@ decoder	b2v_inst3(
 	.func7_valid(func7_valid),
 	.func3(funct3),
 	.func7(funct7),
-	.imm(SYNTHESIZED_WIRE_27),
+	.imm(SYNTHESIZED_WIRE_28),
 	.opcode(SYNTHESIZED_WIRE_10),
 	.out_signal(SYNTHESIZED_WIRE_11),
-	.rd(SYNTHESIZED_WIRE_23),
-	.rs1(SYNTHESIZED_WIRE_25),
-	.rs2(SYNTHESIZED_WIRE_26));
+	.rd(SYNTHESIZED_WIRE_24),
+	.rs1(SYNTHESIZED_WIRE_26),
+	.rs2(SYNTHESIZED_WIRE_27));
 
 
 dmem	b2v_inst4(
@@ -148,7 +148,7 @@ dmem	b2v_inst4(
 imem	b2v_inst5(
 	.clk(clk),
 	.wr_en(imem_wr_en),
-	.addr(SYNTHESIZED_WIRE_30),
+	.addr(SYNTHESIZED_WIRE_31),
 	.data_in(imem_data_in),
 	.data_out(SYNTHESIZED_WIRE_15));
 
@@ -157,13 +157,13 @@ registerf	b2v_inst6(
 	.clk(clk),
 	.rs1_valid(SYNTHESIZED_WIRE_21),
 	.rs2_valid(SYNTHESIZED_WIRE_22),
-	.wr_en(rf_wr_en),
-	.rd(SYNTHESIZED_WIRE_23),
-	.result(SYNTHESIZED_WIRE_24),
-	.rs1(SYNTHESIZED_WIRE_25),
-	.rs2(SYNTHESIZED_WIRE_26),
-	.src1_value(SYNTHESIZED_WIRE_28),
-	.src2_value(SYNTHESIZED_WIRE_29));
+	.wr_en(SYNTHESIZED_WIRE_23),
+	.rd(SYNTHESIZED_WIRE_24),
+	.result(SYNTHESIZED_WIRE_25),
+	.rs1(SYNTHESIZED_WIRE_26),
+	.rs2(SYNTHESIZED_WIRE_27),
+	.src1_value(SYNTHESIZED_WIRE_29),
+	.src2_value(SYNTHESIZED_WIRE_30));
 
 
 endmodule
