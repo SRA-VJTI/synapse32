@@ -13,10 +13,11 @@ output [6:0]s8
 );
 
 function [6:0] seg7 (
-input [3:0] bcd
-
+input [3:0] bcd,
+input [6:0] opcode
 );
 	begin
+	
 		if (opcode!= 7'b1101111 || opcode!= 7'b1100111 || opcode!= 7'b0110111 || opcode != 7'b0010111) //jal, jalr, lui, auipc
 			begin 
 				case(bcd)
@@ -38,17 +39,18 @@ input [3:0] bcd
 					4'b1111 : seg7 = 7'h47;	//f
 				endcase 
 			end 
-		end
+	
+	end
 endfunction  
 
 
- assign s1 = seg7(bcd[3:0]);
- assign s2 = seg7(bcd[7:4]);
- assign s3 = seg7(bcd[11:8]);
- assign s4 = seg7(bcd[15:12]);
- assign s5 = seg7(bcd[19:16]);
- assign s6 = seg7(bcd[23:20]);
- assign s7 = seg7(bcd[27:24]);
- assign s8 = seg7(bcd[31:28]);
+ assign s1 = seg7(bcd[3:0],opcode[6:0]);
+ assign s2 = seg7(bcd[7:4],opcode[6:0]);
+ assign s3 = seg7(bcd[11:8],opcode[6:0]);
+ assign s4 = seg7(bcd[15:12],opcode[6:0]);
+ assign s5 = seg7(bcd[19:16],opcode[6:0]);
+ assign s6 = seg7(bcd[23:20],opcode[6:0]);
+ assign s7 = seg7(bcd[27:24],opcode[6:0]);
+ assign s8 = seg7(bcd[31:28],opcode[6:0]);
 
 endmodule 

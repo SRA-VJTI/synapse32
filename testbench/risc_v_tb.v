@@ -31,9 +31,17 @@ wire imm_valid;
 wire func3_valid;
 wire func7_valid;
 wire [31:0] final_output;
+wire [6:0] s1;
+wire [6:0] s2;
+wire [6:0] s3;
+wire [6:0] s4;
+wire [6:0] s5;
+wire [6:0] s6;
+wire [6:0] s7;
+wire [6:0] s8;
 
 risc_v risc_v_1(.clk(clk),.rst(rst),.imem_wr_en(imem_wr_en),.funct3(funct3),.funct7(funct7),.rd_valid(rd_valid),.imm_valid(imm_valid),.func3_valid(func3_valid),
-					.func7_valid(func7_valid), .final_output(final_output));
+					.func7_valid(func7_valid), .final_output(final_output),.s1(s1),.s2(s2),.s3(s3),.s4(s4),.s5(s5),.s6(s6),.s7(s7),.s8(s8));
 					
 initial clk = 0;
 initial rst = 0;
