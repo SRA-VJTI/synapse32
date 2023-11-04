@@ -23,7 +23,7 @@ end
 
 
 
-	always@(*) begin
+	always@(posedge clk) begin
 		
 
 		if(wr_en) begin
