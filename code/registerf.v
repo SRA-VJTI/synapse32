@@ -1,4 +1,4 @@
-`timescale 1ns / 1ps
+
 
 module registerf(
 	input clk,
