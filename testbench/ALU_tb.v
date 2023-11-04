@@ -18,7 +18,7 @@
 // Additional Comments:
 // 
 //////////////////////////////////////////////////////////////////////////////////
-module ALU_td;
+module ALU_tb;
     reg clk;
     reg [31:0] rs1;
     reg [31:0] rs2;
