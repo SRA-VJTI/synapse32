@@ -1,4 +1,4 @@
-`timescale 1ns / 1ps
+
 
 module ALU(
 input clk,
@@ -13,7 +13,7 @@ output reg [31:0] ALUoutput
 
 	initial begin
 		ALUoutput = 0;
-	end
+	end	
 	 
 	always@(*) begin
 		if (ALUenabled) begin
