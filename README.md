@@ -28,8 +28,27 @@ $ make flash
 This will create binary file for flashing on FPGA, make sure that your FPGA is connected to your device before running above command
 
 ---
-### Theory
-This a 2-stage processor. In the first stage, the instructions are fetched,decoded. read from register file,send ALU values,  read/write in dmem and send jump to pc. And in 2nd stage, Control Unit writes to register file, let PC write to itself and show output on seven segment display
+## Workflow
+This a 2-stage processor. In the first stage, 
+- The instructions are fetched and decoded.
+- Values are read from register file.
+- Determination of instruction type. 
+- Sending necessary parameters to ALU if needed.
+- Writing in DMem and sending read signals. 
+- Send jump to PC. 
+
+And in 2nd stage,
+- Get ALU output
+- Read Data from DMem.
+- Control Unit writes to register file 
+- PC executes jump instruction 
+- Show output on seven segment display.
+
+Following is the block diagram and workflow in simple terms of our CPU:-
+![image.png](https://hackmd.io/_uploads/rJScfOEXT.png)
+
+
+![image.png](https://hackmd.io/_uploads/rk-YYoMXp.png)
 
 ---
 
@@ -39,6 +58,11 @@ This a 2-stage processor. In the first stage, the instructions are fetched,decod
 - Quartus Prime IDE
 - Modelsim Altera
 - Lattice Framework 
+---
+### Future Work
+- [ ] Fix issues with Seven Segment Display
+- [ ] Verify CPU output with every cases, possible, edge and false cases.
+- [ ] Implement a UART module to enable write compatibility in Instruction memory. 
 ---
 ## Contributors
 
@@ -58,4 +82,3 @@ This a 2-stage processor. In the first stage, the instructions are fetched,decod
 - https://www.chipverify.com/verilog/verilog-tutorial
 - https://www.edx.org/course/building-a-risc-v-cpu-core
 ---
-
