@@ -1,5 +1,6 @@
 # RISC-V-Eklavya'23
 ---
+
 #### The RISC-V CPU will be implemented with IMAF instruction extensions, and also verified using custom verification methods.
 
 ---
@@ -31,7 +32,9 @@ This will create binary file for flashing on FPGA, make sure that your FPGA is c
 This a 2-stage processor. In the first stage, the instructions are fetched,decoded. read from register file,send ALU values,  read/write in dmem and send jump to pc. And in 2nd stage, Control Unit writes to register file, let PC write to itself and show output on seven segment display
 
 ---
+
 ### Tech Stack
+
 - Verilog
 - Quartus Prime IDE
 - Modelsim Altera
@@ -47,6 +50,7 @@ This a 2-stage processor. In the first stage, the instructions are fetched,decod
 
 - [Zain Siddavatam](https://github.com/SuperChamp234)
 - [Chanchal Bahrani](https://github.com/Chanchal1010)
+
 ---
 ### Acknowledgements and Resources
 
@@ -54,3 +58,4 @@ This a 2-stage processor. In the first stage, the instructions are fetched,decod
 - https://www.chipverify.com/verilog/verilog-tutorial
 - https://www.edx.org/course/building-a-risc-v-cpu-core
 ---
+
