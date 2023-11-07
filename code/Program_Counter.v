@@ -12,7 +12,7 @@ module PC(
    
    always @ (posedge clk) begin
 		if(reset)
-			next_pc = 31'b0;
+			next_pc = 32'b0;
 		else if(j_signal) begin
 			next_pc = jump;
 		end
