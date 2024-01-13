@@ -1,17 +1,16 @@
 
-
-module registerf(
+module registerfile(
 	input clk,
 	input [4:0]rs1,
 	input [4:0]rs2,
 	input rs1_valid,
 	input rs2_valid,
-	input [4:0]rd,
+	input [31:0]rd,
 	input wr_en,
-	input [31:0]result,
+	input [31:0]rd_value,
  
-	output reg [31:0]src1_value,
-	output reg [31:0]src2_value
+	output reg [31:0]rs1_value,
+	output reg [31:0]rs2_value
 );    
 	reg [31:0] register_file [31:0];
  
@@ -20,7 +19,7 @@ initial begin
 	register_file[1]=0;
 	register_file[2]=0;
 	register_file[3]=0;
-   register_file[4]=0;
+    register_file[4]=0;
 	register_file[5]=0;
 	register_file[6]=0;
 	register_file[7]=0;
@@ -51,14 +50,17 @@ initial begin
 end
 
 always@(*) begin
-	if (rs1_valid) src1_value <= register_file[rs1[4:0]];
-	if (rs2_valid) src2_value <= register_file[rs2[4:0]];
+	if (rs1_valid) 
+	rs1_value <= register_file[rs1[4:0]];
+	else rs1_value <= 0;
+	if (rs2_valid) rs2_value <= register_file[rs2[4:0]];
+	else rs2_value <= 0;
 end
 
 always @(posedge clk) begin 
 	register_file[0]<=0;
 	if (wr_en&&rd[4:0]!=0) begin
-		register_file[rd[4:0]]<=result;
+		register_file[rd[4:0]]<=rd_value;
    end
 end 
 endmodule

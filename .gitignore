@@ -1,0 +1,10 @@
+#build files
+*.hex
+*.lss
+*.o
+%.elf
+%.bin
+
+#verilog build files
+*.vcd
+*.vvp

@@ -1,5 +1,3 @@
-
-
 module PC(
    input clk,
    input reset,
@@ -8,18 +6,18 @@ module PC(
 	
 	output[31:0] out
 );
-   reg [31:0] next_pc = 32'b0;
+   reg [31:0] next_pc = 32'd0;
    
    always @ (posedge clk) begin
 		if(reset)
-			next_pc = 32'b0;
+			next_pc <= 32'b0;
 		else if(j_signal) begin
-			next_pc = jump;
+			next_pc <= jump;
 		end
 		else begin
-			next_pc = next_pc + 32'b1;
+			next_pc <= next_pc + 32'h4;
 		end
    end
 	
 	assign out = next_pc;
-endmodule
+endmodule 

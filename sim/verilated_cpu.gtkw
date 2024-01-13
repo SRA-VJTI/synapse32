@@ -1,0 +1,76 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Mon Jan  8 19:56:55 2024
+[*]
+[dumpfile] "cpu.vcd"
+[dumpfile_mtime] "Mon Jan  8 19:40:23 2024"
+[dumpfile_size] 51333
+[savefile] "verilated_cpu.gtkw"
+[timestart] 203
+[size] 1288 600
+[pos] 81 3
+*-2.420434 205 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[markername] AA
+[markername] BB
+[markername] CC
+[markername] DD
+[markername] EE
+[markername] FF
+[markername] GG
+[markername] HH
+[markername] II
+[markername] JJ
+[markername] KK
+[markername] LL
+[markername] MM
+[markername] NN
+[markername] OO
+[markername] PP
+[markername] QQ
+[markername] RR
+[markername] SS
+[markername] TT
+[markername] UU
+[markername] VV
+[markername] WW
+[markername] XX
+[markername] YY
+[markername] ZZ
+[treeopen] t2b_riscv_cpu.
+[treeopen] t2b_riscv_cpu.t2b_riscv_cpu.
+[treeopen] t2b_riscv_cpu.t2b_riscv_cpu.rvsingle.
+[sst_width] 253
+[signals_width] 288
+[sst_expanded] 1
+[sst_vpaned_height] 159
+@28
+t2b_riscv_cpu.t2b_riscv_cpu.rvsingle.clk
+@22
+t2b_riscv_cpu.t2b_riscv_cpu.rvsingle.PC[31:0]
+t2b_riscv_cpu.t2b_riscv_cpu.Instr[31:0]
+t2b_riscv_cpu.t2b_riscv_cpu.rvsingle.b2v_inst4.rs1[4:0]
+t2b_riscv_cpu.t2b_riscv_cpu.rvsingle.b2v_inst4.rs2[4:0]
+t2b_riscv_cpu.t2b_riscv_cpu.rvsingle.b2v_inst4.rs1_value[31:0]
+t2b_riscv_cpu.t2b_riscv_cpu.rvsingle.b2v_inst4.rs2_value[31:0]
+@420
+t2b_riscv_cpu.t2b_riscv_cpu.rvsingle.b2v_inst2.imm[31:0]
+@22
+t2b_riscv_cpu.t2b_riscv_cpu.rvsingle.b2v_inst2.final_output[31:0]
+t2b_riscv_cpu.t2b_riscv_cpu.rvsingle.b2v_inst4.rd[31:0]
+t2b_riscv_cpu.t2b_riscv_cpu.rvsingle.b2v_inst4.rd_value[31:0]
+t2b_riscv_cpu.t2b_riscv_cpu.dmem.wr_addr[31:0]
+@421
+t2b_riscv_cpu.t2b_riscv_cpu.dmem.wr_data[31:0]
+@22
+t2b_riscv_cpu.t2b_riscv_cpu.rvsingle.b2v_inst4.register_file[2][31:0]
+t2b_riscv_cpu.t2b_riscv_cpu.rvsingle.b2v_inst4.register_file[3][31:0]
+t2b_riscv_cpu.t2b_riscv_cpu.rvsingle.b2v_inst4.register_file[5][31:0]
+t2b_riscv_cpu.t2b_riscv_cpu.rvsingle.b2v_inst4.register_file[6][31:0]
+@28
+t2b_riscv_cpu.t2b_riscv_cpu.rvsingle.b2v_inst.j_signal
+@22
+t2b_riscv_cpu.t2b_riscv_cpu.rvsingle.b2v_inst.jump[31:0]
+@28
+t2b_riscv_cpu.t2b_riscv_cpu.dmem.wr_en
+[pattern_trace] 1
+[pattern_trace] 0
