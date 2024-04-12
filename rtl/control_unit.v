@@ -19,8 +19,8 @@ module control_unit(
 	output reg [31:0] final_output,                                                                              //goes into Rfile as rd
 	output reg wr_en_rf
 );
- 
-    
+ reg [31:0] temp = 0;
+ reg [1:0] mem_count = 0;
 initial begin 
 	wr_en_rf <= 0;
 	wr_en <= 0;
@@ -42,24 +42,62 @@ always@(*) begin
 			if(wr_en==1) wr_en<=0;
         end
         7'b0000011 : begin                                                                          // mem read set
-			addr <= rs1_input + imm;
+			addr <= rs1_input + imm;																						//sending required address
+			mem_count <= addr % 4;
 			case(out_signal) 
-				37'h80000 : final_output <= { {24{mem_read[7]}}, mem_read[7:0]};                    //lb
-                37'h100000 : final_output <= { {16{mem_read[15]}}, mem_read[15:0]};                 //lh
-                37'h200000 : final_output <= mem_read[31:0];                                        //lw
-                37'h400000 : final_output <= mem_read[7:0];                                         //lbu
-                37'h800000 : final_output <= mem_read[15:0];                                        //lhu
-            endcase                                                            //sending required address
+				37'h80000 :begin
+					case (mem_count)
+						2'b00:final_output <= { {24{mem_read[7]}}, mem_read[7:0]};                        				 //lb
+						2'b01:final_output <= { {24{mem_read[15]}}, mem_read[15:8]};
+						2'b10:final_output <= { {24{mem_read[23]}}, mem_read[23:16]};
+						2'b11:final_output <= { {24{mem_read[31]}},  mem_read[31:24]};
+					endcase
+				end
+            37'h100000 :begin
+					case (mem_count)
+						2'b00: final_output <= { {16{mem_read[15]}}, mem_read[15:0]};                 										//lh
+						2'b10: final_output <= { {16{mem_read[31]}}, mem_read[31:16]};
+					endcase
+				end
+				37'h200000 : final_output <= mem_read[31:0];                                        //lw
+            37'h400000 :begin
+					case (mem_count)
+						2'b00: final_output <= mem_read[7:0];                                         //lbu
+						2'b01: final_output <= mem_read[15:8];
+						2'b10: final_output <= mem_read[23:16];
+						2'b11: final_output <= mem_read[31:24];
+					endcase
+				end
+				37'h800000 :begin
+					case(mem_count)
+						2'b00: final_output <= mem_read[15:0];                                        //lhu
+						2'b10: final_output <= mem_read[31:16];
+					endcase
+				end
+			endcase                                                            
 			if(j_signal==1)j_signal<=0;			                                           //enable read signal
 			if(wr_en==1) wr_en<=0;
         end
         7'b0100011 : begin
-			addr <= rs1_input + imm;                                                                //send assigned address
+				addr <= rs1_input + imm;                                                                //send assigned address
             wr_en <= 2'b1;                                                                          //enable write signal
-            case(out_signal)
-				37'h1000000 : mem_write <= rs2_input[7:0];                                          //sb
-                37'h2000000 : mem_write <= rs2_input[15:0];                                         //sh
-                37'h4000000 : mem_write <= rs2_input[31:0];
+            mem_count <= addr % 4;
+				case(out_signal)
+					 37'h1000000 :begin
+						case(mem_count)
+							2'b00: mem_write <= {mem_read[31:8], rs2_input[7:0]};                                      //sb
+							2'b01: mem_write <= { mem_read[31:16],  rs2_input[7:0], mem_read[7:0]};
+							2'b10: mem_write <= { mem_read[31:24], rs2_input[7:0], mem_read[15:0]};
+							2'b11: mem_write <= { rs2_input[7:0], mem_read[23:0]};
+						endcase
+					end
+                37'h2000000 :begin
+						case(mem_count)
+							2'b00: mem_write <= {mem_read[31:16], rs2_input[15:0]};                                     //sh
+							2'b10: mem_write <= { rs2_input[15:0], mem_read[15:0]};
+						endcase
+					end
+                37'h4000000 : mem_write <= rs2_input[31:0];													//sw
             endcase
 			if(j_signal==1)j_signal<=0;
         end
