@@ -1,23 +1,52 @@
-# RISC-V-Eklavya'23
----
-
-#### The RISC-V CPU will be implemented with IMAF instruction extensions, and also verified using custom verification methods.
+# RISC-V-CPU
 
 ---
 ### Introduction
 
 RISC-V  is an instruction set architecture like ARM based on RISC (Reduced Instruction Set Architecture) principles. What sets RISC-V ISA different from others ISAs is its completely open source and free to use.
 
-Due to being open-source in nature, RISC-V provides a vital step in designing, building and testing new hardware without paying any license fees or royalties
+Above project is a 32-bit RISC-V CPU core written in Verilog , supporting RV32IM instructions. This CPU has been tested on a simulator with an example program and flashed on an UPduino 3.0 FPGA board using Icestorm toolchain
 
 ---
-### How to flash the code on FPGA
+### Instructions to compile the CPU and view simulation
+
+An example C program can be loaded on the CPU’s program memory for operations.(We have provided an example code under `sim/fibonacci.c` for testing purposes).
+
+Using RISC-V toolchain, we compile this C code into binary file and then convert into hex files which will be loaded into Instruction memory of our CPU
+
+To compile Verilog files, we are using both Icarus Verilog and Verilator to cross verify our CPU output which will be simulated on Gtkwave. Installation process of above software are linked below:-
+
+-[Icarus Verilog](https://steveicarus.github.io/iverilog/usage/installation.html)
+-[Verilator](https://verilator.org/guide/latest/install.html)
+-[Gtkwave](https://gtkwave.sourceforge.net/)
+
+All the necessary commands have been added to the `sim/Makefile`
+
+##### Steps to compile and view simulation-
+
+Navigate to your cloned repository and into the sim folder
+``` 
+cd RISC_V_CPU/sim  
+```
+and run the following command to compile with Icarus Verilog
+``` 
+make sim 
+```
+or run the following command to compile with Verilator
+```
+make sim_verilator
+```
+
+---
+### Instructions to flash the code on FPGA
 
 To flash the code in your FPGA, you must have first have yosys suite installed. Installations can be done from [here](https://github.com/YosysHQ/yosys)
 
-After installation, navigate to your cloned repository and into the code folder
+All the necessary commands have been added to the `flash/Makefile`
+
+After installation, navigate to your cloned repository and into the flash folder
 ```
-$ cd RISC-V-Eklavya-23/code
+$ cd RISC-V-CPU/flash
 ```
 
 and run following command 
@@ -44,11 +73,8 @@ And in 2nd stage,
 - PC executes jump instruction 
 - Show output on seven segment display.
 
-Following is the block diagram and workflow in simple terms of our CPU:-
-![image.png](https://hackmd.io/_uploads/rJScfOEXT.png)
 
 
-![image.png](https://hackmd.io/_uploads/rk-YYoMXp.png)
 
 ---
 
@@ -57,13 +83,12 @@ Following is the block diagram and workflow in simple terms of our CPU:-
 - Verilog
 - Quartus Prime IDE
 - Modelsim Altera
+- Icarus Verilog
+- Verilator
+- Gtkwave
 - Lattice Framework 
 ---
-### Future Work
-- [ ] Fix issues with Seven Segment Display
-- [ ] Verify CPU output with every cases, possible, edge and false cases.
-- [ ] Implement a UART module to enable write compatibility in Instruction memory. 
----
+
 ## Contributors
 
 - [Saish Karole](https://github.com/saishock1504)
