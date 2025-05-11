@@ -16,7 +16,10 @@ reg [4:0] register_array [0:15];
 integer value = 0;
 wire [31:0] ProgramCounter;
 
-top uut (clk, reset, Ext_MemWrite, Ext_WriteData, Ext_DataAdr, MemWrite, WriteData, DataAdr, ReadData, ProgramCounter);
+top uut (
+    .clk(clk), .reset(reset), .Ext_MemWrite(Ext_MemWrite), .Ext_WriteData(Ext_WriteData),
+    .Ext_DataAdr(Ext_DataAdr), .MemWrite(MemWrite), .WriteData(WriteData), .DataAdr(DataAdr),
+    .ReadData(ReadData), .ProgramCounter(ProgramCounter));
 
 initial begin
     $dumpfile("tb.vcd");
@@ -40,11 +43,10 @@ always begin
         $display("WriteData = %d", WriteData);
     end
     //end simulation when DataAdr is  0x0200000c and WriteData is 1
-    if (DataAdr == 32'h0200000c && WriteData == 55 && clk == 1) begin
+    if (DataAdr == 32'h0200000c && WriteData == 1 && clk == 1) begin
         $display("Simulation ended successfully");
         $finish;
     end
 end
 
 endmodule
-

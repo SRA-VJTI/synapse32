@@ -45,7 +45,7 @@ assign	PC = SYNTHESIZED_WIRE_22;
 
 
 
-PC	b2v_inst(
+pc	b2v_inst(
 	.clk(clk),
 	.reset(reset),
 	.j_signal(SYNTHESIZED_WIRE_0),
@@ -108,4 +108,3 @@ registerfile	b2v_inst4(
 	.rs2_value(SYNTHESIZED_WIRE_24));
 
 endmodule
-
