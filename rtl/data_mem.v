@@ -18,7 +18,11 @@ end
 // word-aligned memory access
 //if address is greater than 0x02000000, then it is a data memory access
 //if it is less than 0x02000000, then it is an instruction memory access
-assign rd_data_mem = (wr_en == 0) ? (wr_addr >= 32'h02000000) ? data_ram[wr_addr[DATA_WIDTH-1:2] % 64] : instr_ram[wr_addr[DATA_WIDTH-1:2]] : 0;
+assign rd_data_mem =
+    (wr_en == 0) ?
+        ((wr_addr >= 32'h02000000) ?
+            data_ram[wr_addr[DATA_WIDTH-1:2] % 64] : instr_ram[wr_addr[DATA_WIDTH-1:2]])
+        : 0;
 
 // synchronous write logic
 always @(posedge clk) begin
