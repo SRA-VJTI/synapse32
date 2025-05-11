@@ -55,6 +55,7 @@ int main() {
             index++;
         }
     #endif
+    // Signal that the CPU has completed its task by setting CPU_DONE to 1.
     CPU_DONE = 1;
     #ifdef HOST // for host pc
         printf("N: ");
