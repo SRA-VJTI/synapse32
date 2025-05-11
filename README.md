@@ -81,7 +81,8 @@ And in 2nd stage,
 ### Tech Stack
 
 - Verilog
-- Xilinx Vivado Ecosystem
+- Quartus Prime IDE
+- Modelsim Altera
 - Icarus Verilog
 - Verilator
 - Gtkwave
@@ -92,9 +93,12 @@ And in 2nd stage,
 
 - [Saish Karole](https://github.com/saishock1504)
 - [Atharva Kashalkar](https://github.com/RapidRoger18)
+
+--- 
+## Mentors 
+
 - [Zain Siddavatam](https://github.com/SuperChamp234)
 - [Chanchal Bahrani](https://github.com/Chanchal1010)
-- [Shri Vishakh Devanand](https://github.com/5iri)
 
 ---
 ### Acknowledgements and Resources
