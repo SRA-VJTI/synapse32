@@ -20,56 +20,63 @@
 # Note: Make sure to set the appropriate variables and paths in this Makefile
 #       according to your system configuration, if necessary.
 
-#----- Compile C file to binary file -----
-
-# C file
+#------ File and Toolchain Config ------
 infile_name := fibonacci
-infile := fibonacci.c
 build_dir := build
 
-# RISC-V toolchain and flags
 CC := riscv64-unknown-elf-gcc
 OBJDUMP := riscv64-unknown-elf-objdump
 OBJCOPY := riscv64-unknown-elf-objcopy
 SIZE := riscv64-unknown-elf-size
-CFLAGS := -march=rv32i -mabi=ilp32 --specs=picolibc.specs -O3 -g3 -flto -DPICOLIBC_INTEGER_PRINTF_SCANF -Wall
-LDFLAGS := -march=rv32i -mabi=ilp32 --specs=picolibc.specs -O3 -g3 -flto -DPICOLIBC_INTEGER_PRINTF_SCANF
-LDFLAGS += -Wl,--gc-sections,--defsym=__flash=0x00000000,--defsym=__flash_size=2048 --crt0=minimal
-LDFLAGS += -Wl,--defsym=__ram=0x02000000,--defsym=__ram_size=256,--defsym=__stack_size=64 -Tpicolibc.ld
 
-# Compile C file to object file
-$(build_dir)/%.o : %.c
+CFLAGS := -march=rv32i -mabi=ilp32 -O3 -g3 -nostdlib -ffreestanding -Wall
+LDFLAGS := -nostdlib -Wl,-Tlink.ld -Wl,--no-relax -Wl,-m,elf32lriscv
+
+SRC_C := fibonacci.c
+SRC_S := start.S
+
+OBJ_C := $(build_dir)/fibonacci.o
+OBJ_S := $(build_dir)/start.o
+
+ELF := $(build_dir)/$(infile_name).elf
+BIN := $(build_dir)/$(infile_name).bin
+HEX := $(build_dir)/$(infile_name).hex
+LSS := $(build_dir)/$(infile_name).lss
+
+#------ Rules ------
+
+.PHONY: generate_hex clean
+
+generate_hex: program_dump.hex machine_code.lss
+	@echo "Successfully Built: program_dump.hex and machine_code.lss from $(infile_name).c"
+
+$(OBJ_C): $(SRC_C)
 	mkdir -p $(build_dir)
-	$(CC) $(CFLAGS) -c $^ -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
-# Link object file to create ELF file
-$(build_dir)/%.elf : $(build_dir)/%.o
+$(OBJ_S): $(SRC_S)
+	mkdir -p $(build_dir)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(ELF): $(OBJ_C) $(OBJ_S)
 	$(CC) $(LDFLAGS) -o $@ $^
 	$(SIZE) -B --common $@
 
-# Generate assembly listing file
-$(build_dir)/%.lss : $(build_dir)/%.elf
+$(LSS): $(ELF)
 	$(OBJDUMP) --visualize-jumps -t -S --source-comment='     ### ' $< -M no-aliases,numeric > $@
-machine_code.lss : $(build_dir)/$(infile_name).lss
-	mv $^ $@
 
-# Convert ELF file to binary file
-$(build_dir)/%.bin : $(build_dir)/%.elf
-	$(OBJCOPY) -O binary $^ $@
+machine_code.lss: $(LSS)
+	cp $< $@
 
-# Convert binary file to hex file
-$(build_dir)/%.hex : $(build_dir)/%.bin
-	truncate -s 2048 $^
-	$(OBJCOPY) --verilog-data-width=4 --reverse-bytes=4 -I binary -O verilog $^ $@
+$(BIN): $(ELF)
+	$(OBJCOPY) -O binary $< $@
 
-# Generate program_dump.hex and machine_code.lss
-program_dump.hex: $(build_dir)/$(infile_name).hex
-	mv $^ $@
+$(HEX): $(BIN)
+	truncate -s 2048 $<
+	$(OBJCOPY) --verilog-data-width=4 --reverse-bytes=4 -I binary -O verilog $< $@
 
-.PHONY: generate_hex
-generate_hex: program_dump.hex machine_code.lss
-	@echo "program_dump.hex and machine_code.lss have been successfully generated from $(infile)" || \
-	echo "And therefore, $(infile) could not be converted into binary format. :("
+program_dump.hex: $(HEX)
+	cp $< $@
 
 .PHONY: clean
 clean_program:
