@@ -8,3 +8,10 @@
 #verilog build files
 *.vcd
 *.vvp
+
+#python build files
+*.pyc
+*.pyo
+__pycache__
+.venv*
+*.egg-info
