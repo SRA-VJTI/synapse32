@@ -1,110 +1,145 @@
+`default_nettype none
 module riscv_cpu (
-    input clk, reset,
-    output [31:0] PC,
-    input  [31:0] Instr,
-    output MemWrite,
-    output [31:0] Mem_WrAddr, Mem_WrData,
-    input  [31:0] ReadData
+    input wire clk,
+    input wire rst,
+    input wire [31:0] module_instr_in,
+    output wire [31:0] module_pc_out
 );
 
-// Uncomment the following lines if you are going to use module instantiation method
+    // Instantiate the PC
 
-// wire ALUSrc, RegWrite, Jump, Zero;
-// wire [1:0] ResultSrc, ImmSrc;
-// wire [2:0] ALUControl;
+    wire pc_inst0_jsignal_in;
+    wire [31:0] pc_inst0_jump_in;
+    wire [31:0] pc_inst0_out;
 
-// controller c (Instr[6:0], Instr[14:12], Instr[30], Zero,
-//              ResultSrc, MemWrite, PCSrc,
-//              ALUSrc, RegWrite, Jump, Op5, ImmSrc, ALUControl);
+    pc pc_inst0 (
+        .clk(clk),
+        .reset(rst),
+        .j_signal(pc_inst0_jsignal_in),
+        .jump(pc_inst0_jump_in),
+        .out(pc_inst0_out)
+    );
 
-// datapath dp (clk, reset, ResultSrc, PCSrc, Op5,
-//              ALUSrc, RegWrite, ImmSrc, ALUControl,
-//              Zero, PC, Instr, Mem_WrAddr, Mem_WrData, ReadData);
+    // Instantiate the IF_ID pipeline register
+    wire [31:0] if_id_inst0_pc_in;
+    wire [31:0] if_id_inst0_instruction_in;
+    wire [31:0] if_id_inst0_pc_out;
+    wire [31:0] if_id_inst0_instruction_out;
+    IF_ID if_id_inst0 (
+        .clk(clk),
+        .rst(rst),
+        .pc_in(if_id_inst0_pc_in),
+        .instruction_in(if_id_inst0_instruction_in),
+        .pc_out(if_id_inst0_pc_out),
+        .instruction_out(if_id_inst0_instruction_out)
+    );
 
+    // PC - IF_ID pipeline register connections
+    // Connect PC output to IF_ID input and module output
+    assign if_id_inst0_pc_in = pc_inst0_out;
+    assign if_id_inst0_instruction_in = module_instr_in;
+    assign module_pc_out = pc_inst0_out;
 
-wire	SYNTHESIZED_WIRE_0;
-wire	[31:0] SYNTHESIZED_WIRE_1;
-wire	[31:0] SYNTHESIZED_WIRE_21;
-wire	[36:0] SYNTHESIZED_WIRE_3;
-wire	[31:0] SYNTHESIZED_WIRE_22;
-wire	[31:0] SYNTHESIZED_WIRE_23;
-wire	[31:0] SYNTHESIZED_WIRE_24;
-wire	[31:0] SYNTHESIZED_WIRE_7;
-wire	[6:0] SYNTHESIZED_WIRE_9;
-wire	[36:0] SYNTHESIZED_WIRE_10;
-wire	SYNTHESIZED_WIRE_14;
-wire	SYNTHESIZED_WIRE_15;
-wire	SYNTHESIZED_WIRE_16;
-wire	[31:0] SYNTHESIZED_WIRE_17;
-wire	[31:0] SYNTHESIZED_WIRE_18;
-wire	[4:0] SYNTHESIZED_WIRE_19;
-wire	[4:0] SYNTHESIZED_WIRE_20;
+    // Instantiate Decoder
+    wire [31:0] decoder_inst0_instruction_in;
+    wire [4:0] decoder_inst0_rs2_out;
+    wire [4:0] decoder_inst0_rs1_out;
+    wire [31:0] decoder_inst0_imm_out;
+    wire [4:0] decoder_inst0_rd_out;
+    wire decoder_inst0_rs1_valid_out;
+    wire decoder_inst0_rs2_valid_out;
+    wire [6:0] decoder_inst0_opcode_out;
+    wire [5:0] decoder_inst0_instr_id_out;
+    decoder decoder_inst0 (
+        .instr(decoder_inst0_instruction_in),
+        .rs2(decoder_inst0_rs2_out),
+        .rs1(decoder_inst0_rs1_out),
+        .imm(decoder_inst0_imm_out),
+        .rd(decoder_inst0_rd_out),
+        .rs1_valid(decoder_inst0_rs1_valid_out),
+        .rs2_valid(decoder_inst0_rs2_valid_out),
+        .opcode(decoder_inst0_opcode_out),
+        .instr_id(decoder_inst0_instr_id_out)
+    );
 
-assign	PC = SYNTHESIZED_WIRE_22;
+    // Decoder connections
+    assign decoder_inst0_instruction_in = if_id_inst0_instruction_out;
 
+    // Instantiate Register File
 
+    wire [4:0] registerfile_inst0_rs1_addr_in;
+    wire [4:0] registerfile_inst0_rs2_addr_in;
+    wire [4:0] registerfile_inst0_rd_addr_in;
+    wire registerfile_inst0_rs1_valid_in;
+    wire registerfile_inst0_rs2_valid_in;
+    wire [31:0] registerfile_inst0_rd_value_in;
+    wire registerfile_inst0_wr_en_in;
+    wire [31:0] registerfile_inst0_rs1_value_out;
+    wire [31:0] registerfile_inst0_rs2_value_out;
 
+    registerfile registerfile_inst0 (
+        .clk(clk),
+        .rs1(registerfile_inst0_rs1_addr_in),
+        .rs2(registerfile_inst0_rs2_addr_in),
+        .rs1_valid(registerfile_inst0_rs1_valid_in),
+        .rs2_valid(registerfile_inst0_rs2_valid_in),
+        .rd(registerfile_inst0_rd_addr_in),
+        .wr_en(registerfile_inst0_wr_en_in),
+        .rd_value(registerfile_inst0_rd_value_in),
+        .rs1_value(registerfile_inst0_rs1_value_out),
+        .rs2_value(registerfile_inst0_rs2_value_out)
+    );
 
-pc	b2v_inst(
-	.clk(clk),
-	.reset(reset),
-	.j_signal(SYNTHESIZED_WIRE_0),
-	.jump(SYNTHESIZED_WIRE_1),
-	.out(SYNTHESIZED_WIRE_22));
+    // Instantiate ID_EX pipeline register
+    wire id_ex_inst0_rs1_valid_in;
+    wire id_ex_inst0_rs2_valid_in;
+    wire [31:0] id_ex_inst0_imm_in;
+    wire [4:0] id_ex_inst0_rs1_addr_in;
+    wire [4:0] id_ex_inst0_rs2_addr_in;
+    wire [4:0] id_ex_inst0_rd_addr_in;
+    wire [6:0] id_ex_inst0_opcode_in;
+    wire [5:0] id_ex_inst0_instr_id_in;
+    wire id_ex_inst0_rs1_valid_out;
+    wire id_ex_inst0_rs2_valid_out;
+    wire [31:0] id_ex_inst0_imm_out;
+    wire [4:0] id_ex_inst0_rs1_addr_out;
+    wire [4:0] id_ex_inst0_rs2_addr_out;
+    wire [4:0] id_ex_inst0_rd_addr_out;
+    wire [6:0] id_ex_inst0_opcode_out;
+    wire [5:0] id_ex_inst0_instr_id_out;
 
+    // Connect Decoder outputs to ID_EX inputs
+    assign id_ex_inst0_rs1_valid_in = decoder_inst0_rs1_valid_out;
+    assign id_ex_inst0_rs2_valid_in = decoder_inst0_rs2_valid_out;
+    assign id_ex_inst0_imm_in = decoder_inst0_imm_out;
+    assign id_ex_inst0_rs1_addr_in = decoder_inst0_rs1_out;
+    assign id_ex_inst0_rs2_addr_in = decoder_inst0_rs2_out;
+    assign id_ex_inst0_rd_addr_in = decoder_inst0_rd_out;
+    assign id_ex_inst0_opcode_in = decoder_inst0_opcode_out;
+    assign id_ex_inst0_instr_id_in = decoder_inst0_instr_id_out;
 
-alu	b2v_inst1(
-	.imm(SYNTHESIZED_WIRE_21),
-	.instructions(SYNTHESIZED_WIRE_3),
-	.pc_input(SYNTHESIZED_WIRE_22),
-	.rs1(SYNTHESIZED_WIRE_23),
-	.rs2(SYNTHESIZED_WIRE_24),
-	.ALUoutput(SYNTHESIZED_WIRE_7));
+    ID_EX id_ex_inst0 (
+        .clk(clk),
+        .rst(rst),
+        .rs1_valid_in(id_ex_inst0_rs1_valid_in),
+        .rs2_valid_in(id_ex_inst0_rs2_valid_in),
+        .imm_in(id_ex_inst0_imm_in),
+        .rs1_addr_in(id_ex_inst0_rs1_addr_in),
+        .rs2_addr_in(id_ex_inst0_rs2_addr_in),
+        .rd_addr_in(id_ex_inst0_rd_addr_in),
+        .opcode_in(id_ex_inst0_opcode_in),
+        .instr_id_in(id_ex_inst0_instr_id_in),
+        .rs1_valid_out(id_ex_inst0_rs1_valid_out),
+        .rs2_valid_out(id_ex_inst0_rs2_valid_out),
+        .imm_out(id_ex_inst0_imm_out),
+        .rs1_addr_out(id_ex_inst0_rs1_addr_out),
+        .rs2_addr_out(id_ex_inst0_rs2_addr_out),
+        .rd_addr_out(id_ex_inst0_rd_addr_out),
+        .opcode_out(id_ex_inst0_opcode_out),
+        .instr_id_out(id_ex_inst0_instr_id_out)
+    );
 
+    // Instantiate ALU
 
-control_unit	b2v_inst2(
-	.clk(clk),
-	.rst(reset),
-	.ALUoutput(SYNTHESIZED_WIRE_7),
-	.imm(SYNTHESIZED_WIRE_21),
-	.mem_read(ReadData),
-	.opcode(SYNTHESIZED_WIRE_9),
-	.out_signal(SYNTHESIZED_WIRE_10),
-	.pc_input(SYNTHESIZED_WIRE_22),
-	.rs1_input(SYNTHESIZED_WIRE_23),
-	.rs2_input(SYNTHESIZED_WIRE_24),
-	.j_signal(SYNTHESIZED_WIRE_0),
-	.wr_en_rf(SYNTHESIZED_WIRE_16),
-	.wr_en(MemWrite),
-	.addr(Mem_WrAddr),
-	.final_output(SYNTHESIZED_WIRE_18),
-	.instructions(SYNTHESIZED_WIRE_3),
-	.jump(SYNTHESIZED_WIRE_1),
-	.mem_write(Mem_WrData));
-
-
-decoder	b2v_inst3(
-	.instr(Instr),
-	.rs1_valid(SYNTHESIZED_WIRE_14),
-	.rs2_valid(SYNTHESIZED_WIRE_15),
-	.imm(SYNTHESIZED_WIRE_21),
-	.opcode(SYNTHESIZED_WIRE_9),
-	.out_signal(SYNTHESIZED_WIRE_10),
-	.rd(SYNTHESIZED_WIRE_17),
-	.rs1(SYNTHESIZED_WIRE_19),
-	.rs2(SYNTHESIZED_WIRE_20));
-
-
-registerfile	b2v_inst4(
-	.clk(clk),
-	.rs1_valid(SYNTHESIZED_WIRE_14),
-	.rs2_valid(SYNTHESIZED_WIRE_15),
-	.wr_en(SYNTHESIZED_WIRE_16),
-	.rd(SYNTHESIZED_WIRE_17),
-	.rd_value(SYNTHESIZED_WIRE_18),
-	.rs1(SYNTHESIZED_WIRE_19),
-	.rs2(SYNTHESIZED_WIRE_20),
-	.rs1_value(SYNTHESIZED_WIRE_23),
-	.rs2_value(SYNTHESIZED_WIRE_24));
 
 endmodule
