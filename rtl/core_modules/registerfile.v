@@ -12,6 +12,7 @@ module registerfile (
     output reg [31:0] rs1_value,
     output reg [31:0] rs2_value
 );
+
     reg [31:0] register_file[31:0];
 
     initial begin

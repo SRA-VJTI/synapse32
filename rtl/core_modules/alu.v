@@ -1,5 +1,5 @@
 `default_nettype none
-`include "instr_decode.vh"
+`include "instr_defines.vh"
 module alu (
     input wire [31:0] rs1,
     input wire [31:0] rs2,

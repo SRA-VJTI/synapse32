@@ -1,5 +1,5 @@
 `default_nettype none
-`include "instr_decode.vh"
+`include "instr_defines.vh"
 module decoder (
     input  wire [31:0] instr,
     output wire [ 4:0] rs2,
@@ -9,6 +9,7 @@ module decoder (
 
     output wire rs1_valid,
     output wire rs2_valid,
+    output wire rd_valid,
 
     output wire [6:0] opcode,
     output reg  [5:0] instr_id  // changed from 32-bit one-hot to 6-bit IDIs
@@ -20,12 +21,12 @@ module decoder (
 
     assign opcode = instr[6:0];
 
-    assign is_i_instr = (opcode == 7'b0000011) || (opcode == 7'b0010011) || (opcode == 7'b1100111);
-    assign is_u_instr = (opcode == 7'b0010111) || (opcode == 7'b0110111);
-    assign is_b_instr = (opcode == 7'b1100011);
-    assign is_j_instr = (opcode == 7'b1101111);
-    assign is_s_instr = (opcode == 7'b0100011);
-    assign is_r_instr = (opcode == 7'b0110011) || (opcode == 7'b0100111) || (opcode == 7'b1010011);
+    assign is_i_instr = (opcode == 7'b0000011) || (opcode == 7'b0010011) || (opcode == 7'b1100111) ? 1'b1 : 1'b0;
+    assign is_u_instr = (opcode == 7'b0010111) || (opcode == 7'b0110111) ? 1'b1 : 1'b0;
+    assign is_b_instr = (opcode == 7'b1100011) ? 1'b1 : 1'b0;
+    assign is_j_instr = (opcode == 7'b1101111) ? 1'b1 : 1'b0;
+    assign is_s_instr = (opcode == 7'b0100011) ? 1'b1 : 1'b0;
+    assign is_r_instr = (opcode == 7'b0110011) || (opcode == 7'b0100111) || (opcode == 7'b1010011) ? 1'b1 : 1'b0;
 
     assign rs2 = (is_r_instr || is_s_instr || is_b_instr) ? instr[24:20] : 5'b0;
     assign rs1 = (is_r_instr || is_s_instr || is_b_instr || is_i_instr) ? instr[19:15] : 5'b0;
@@ -36,7 +37,8 @@ module decoder (
 
     assign rs1_valid = is_r_instr || is_i_instr || is_s_instr || is_b_instr;
     assign rs2_valid = is_r_instr || is_s_instr || is_b_instr;
-
+    assign rd_valid = is_r_instr || is_u_instr || is_j_instr || is_i_instr;
+    
     assign imm = 
         is_i_instr ? { {21{instr[31]}}, instr[30:20] } :
         is_s_instr ? { {21{instr[31]}}, instr[30:25], instr[11:7] } :
@@ -116,9 +118,9 @@ module decoder (
             default:    instr_id = INSTR_INVALID;
         endcase
         // Log all debug information
-        $display("DEBUG Instruction: %b, ID: %d", instr, instr_id);
-        $display("rs1: %d, rs2: %d, rd: %d, imm: %d", rs1, rs2, rd, imm);
-        $display("opcode: %b, func3: %b, func7: %b", opcode, func3, func7);
+        // $display("DEBUG Instruction: %b, ID: %d", instr, instr_id);
+        // $display("rs1: %d, rs2: %d, rd: %d, imm: %d", rs1, rs2, rd, imm);
+        // $display("opcode: %b, func3: %b, func7: %b", opcode, func3, func7);
     end
 
 endmodule

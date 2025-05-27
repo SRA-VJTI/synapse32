@@ -1,7 +1,7 @@
 // Instruction Decode Constants
 
-`ifndef INSTR_DECODE_VH
-`define INSTR_DECODE_VH
+`ifndef INSTR_DEFINES_VH
+`define INSTR_DEFINES_VH
 
 // R-type
 localparam [5:0] INSTR_ADD   = 6'h01;
