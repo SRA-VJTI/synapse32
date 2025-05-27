@@ -1,0 +1,46 @@
+# list of directories with header files
+include_dirs:
+  - rtl
+  - tb
+# list of directories to recursively search for SystemVerilog/Verilog sources
+source_dirs:
+  - rtl
+  - tb
+# if true, recursively search the working directory for files to run diagnostics on
+# default: true
+# auto_search_workdir: true,
+# verible tool configuration
+# verible:
+#   # verible-verilog-syntax configuration
+#   syntax:
+#     # default: true if in path
+#     enabled: true,
+#     path: "verible-verilog-syntax"
+#     # default: none
+#     # args:
+#     #   - arg1
+#     #   - arg2
+#   # verible-verilog-format configuration
+#   format:
+#     # default: true if in path
+#     enabled: true,
+#     path: "verible-verilog-format"
+#     # default: none
+#     # args:
+#     #   - arg1
+#     #   - arg2
+verilator:
+  # verilator configuration
+  syntax:
+    # default: true if in path
+    enabled: true
+    path: "verilator"
+    # default: specified below
+    args:
+      - --lint-only
+      - -Wall
+      - -Irtl
+      - -Itb
+# set log level
+# default: Info
+log_level: Debug

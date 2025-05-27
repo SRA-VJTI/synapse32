@@ -1,0 +1,17 @@
+{
+  "name": "Digital Tools for Synapse",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "runArgs": [
+    "-e",
+    "DISPLAY=host.docker.internal:0",
+    "-e",
+    "XAUTHORITY=/tmp/.Xauthority",
+    "-v",
+    "${localEnv:HOME}/.Xauthority:/tmp/.Xauthority"
+  ],
+  "mounts": [
+    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached"
+  ]
+}
