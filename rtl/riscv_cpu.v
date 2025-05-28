@@ -193,7 +193,7 @@ module riscv_cpu (
         .forward_a(forward_a),
         .forward_b(forward_b),
         .ex_mem_result(ex_mem_inst0_exec_output_out),
-        .mem_wb_result(mem_wb_inst0_exec_output_out),
+        .mem_wb_result(wb_inst0_rd_value_out),
         .exec_output(ex_inst0_exec_output_out),
         .jump_signal(ex_inst0_jump_signal_out),
         .jump_addr(ex_inst0_jump_addr_out),

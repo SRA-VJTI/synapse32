@@ -19,3 +19,4 @@ __pycache__
 #cocotb build files
 *.log
 sim_build/
+build/

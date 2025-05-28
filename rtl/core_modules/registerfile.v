@@ -51,10 +51,24 @@ module registerfile (
     end
 
     always @(*) begin
-        if (rs1_valid) rs1_value = register_file[rs1[4:0]];
-        else rs1_value = 0;
-        if (rs2_valid) rs2_value = register_file[rs2[4:0]];
-        else rs2_value = 0;
+        if (rs1_valid) begin
+            if(rs1 == rd && wr_en) begin
+                rs1_value = rd_value; // Forwarding if rd is being written
+            end else begin
+                rs1_value = register_file[rs1];
+            end
+        end else begin
+            rs1_value = 32'b0; // Default value if rs1 is not valid
+        end
+        if (rs2_valid) begin
+            if(rs2 == rd && wr_en) begin
+                rs2_value = rd_value; // Forwarding if rd is being written
+            end else begin
+                rs2_value = register_file[rs2];
+            end
+        end else begin
+            rs2_value = 32'b0; // Default value if rs2 is not valid
+        end
     end
 
     always @(posedge clk) begin

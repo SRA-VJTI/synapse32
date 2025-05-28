@@ -176,7 +176,13 @@ always @(*) begin
             mem_addr = 0;
         end
         7'b0110111: begin // LUI
-            exec_output = imm << 12;
+            exec_output = imm;
+            jump_signal = 0;
+            jump_addr = 0;
+            mem_addr = 0;
+        end
+        7'b0010111: begin // AUIPC - Add this case
+            exec_output = pc_input + imm;
             jump_signal = 0;
             jump_addr = 0;
             mem_addr = 0;
