@@ -9,31 +9,25 @@
 #endif
 
 #define N 10
-
+#define MMIO_BASE 0x02000000
 int main() {
 
     uint8_t elements[N] = {0};
     #ifdef HOST // for host pc
-        uint8_t final_location = 0;
         uint8_t CPU_DONE = 0;
     #else // for the test device
-        #define final_location (* (volatile uint8_t * ) 0x02000004)
         #define CPU_DONE (* (volatile uint8_t * ) 0x0200000c)
     #endif
 
-    uint8_t k = 0;
-    for (uint8_t j = 0; j < N/10; j++){
-        uint8_t a = 0;
-        uint8_t b = 1;
-        uint8_t c = 0;
-        for (uint8_t i = 0; i < 10; i++) {
-            c = a + b;
-            a = b;
-            b = c;
-            elements[k] = a;
-            k++;
-        }
+    uint8_t a = 0;
+    uint8_t b = 1;
+    for (uint8_t i = 0; i < N; i++) {
+        elements[i] = b;
+        uint8_t next = a + b;
+        a = b;
+        b = next;
     }
+
 
     #ifdef HOST // for host pc
         //print elements array
@@ -48,7 +42,7 @@ int main() {
     #else
         uint8_t index = 0;
         //start writing elements to memory from 0x02000010
-        uint8_t *mem_ptr = (uint8_t *) 0x02000010;
+        volatile uint8_t *mem_ptr = (volatile uint8_t *)(MMIO_BASE + 0x10);
         for (uint8_t i = 0; i < N; i++) {
             *mem_ptr = elements[index];
             mem_ptr+=0x1;

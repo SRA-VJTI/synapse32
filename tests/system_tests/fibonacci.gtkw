@@ -1,0 +1,182 @@
+[*]
+[*] GTKWave Analyzer v3.3.120 (w)1999-2024 BSI
+[*] Wed May 28 11:27:54 2025
+[*]
+[dumpfile] "/workspaces/synapse32/waveforms/fibonacci_test.vcd"
+[dumpfile_mtime] "Wed May 28 11:19:38 2025"
+[dumpfile_size] 330722
+[savefile] "/workspaces/synapse32/tests/system_tests/fibonacci.gtkw"
+[timestart] 1583300
+[size] 1854 1121
+[pos] -1 -1
+*-15.000000 1675000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] top.
+[treeopen] top.cpu_inst.
+[sst_width] 297
+[signals_width] 302
+[sst_expanded] 1
+[sst_vpaned_height] 260
+@28
+top.cpu_inst.clk
+top.cpu_inst.rst
+@800200
+-fetch
+@22
+top.cpu_inst.module_pc_out[31:0]
+top.cpu_inst.module_instr_in[31:0]
+@1000200
+-fetch
+@800200
+-decode
+@22
+top.cpu_inst.decoder_inst0.instr[31:0]
+top.cpu_inst.decoder_inst0.instr_id[5:0]
+top.cpu_inst.decoder_inst0.opcode[6:0]
+@24
+top.cpu_inst.decoder_inst0.rs1[4:0]
+top.cpu_inst.decoder_inst0.rs2[4:0]
+top.cpu_inst.decoder_inst0.rd[4:0]
+@22
+top.cpu_inst.decoder_inst0.imm[31:0]
+@1000200
+-decode
+@800200
+-execute
+@22
+top.cpu_inst.ex_unit_inst0.pc_input[31:0]
+top.cpu_inst.ex_unit_inst0.instr_id[5:0]
+@420
+top.cpu_inst.ex_unit_inst0.rs1_addr[4:0]
+@22
+top.cpu_inst.ex_unit_inst0.rs1_value[31:0]
+@420
+top.cpu_inst.ex_unit_inst0.rs2_addr[4:0]
+@22
+top.cpu_inst.ex_unit_inst0.rs2_value[31:0]
+@420
+top.cpu_inst.ex_unit_inst0.imm[31:0]
+@28
+top.cpu_inst.ex_unit_inst0.jump_signal
+@22
+top.cpu_inst.ex_unit_inst0.jump_addr[31:0]
+top.cpu_inst.ex_unit_inst0.mem_addr[31:0]
+@420
+top.cpu_inst.ex_unit_inst0.exec_output[31:0]
+@1000200
+-execute
+@800200
+-mem
+@22
+top.cpu_inst.mem_unit_inst0.instr_id[5:0]
+top.cpu_inst.mem_unit_inst0.mem_addr[31:0]
+top.cpu_inst.mem_unit_inst0.read_addr[31:0]
+@28
+top.cpu_inst.mem_unit_inst0.read_enable
+@22
+top.cpu_inst.mem_unit_inst0.rs2_value[31:0]
+top.cpu_inst.mem_unit_inst0.wr_addr[31:0]
+@24
+top.cpu_inst.mem_unit_inst0.wr_data[31:0]
+@28
+top.cpu_inst.mem_unit_inst0.wr_enable
+@1000200
+-mem
+@800200
+-wb
+@22
+top.cpu_inst.wb_inst0.instr_id_in[5:0]
+@28
+top.cpu_inst.wb_inst0.is_load_instr
+@22
+top.cpu_inst.wb_inst0.mem_data_in[31:0]
+@420
+top.cpu_inst.wb_inst0.rd_addr_in[4:0]
+top.cpu_inst.wb_inst0.rd_addr_out[4:0]
+@28
+top.cpu_inst.wb_inst0.rd_valid_in
+@22
+top.cpu_inst.wb_inst0.rd_value_in[31:0]
+@c00022
+top.cpu_inst.wb_inst0.rd_value_out[31:0]
+@28
+(0)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(1)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(2)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(3)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(4)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(5)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(6)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(7)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(8)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(9)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(10)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(11)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(12)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(13)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(14)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(15)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(16)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(17)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(18)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(19)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(20)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(21)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(22)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(23)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(24)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(25)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(26)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(27)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(28)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(29)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(30)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+(31)top.cpu_inst.wb_inst0.rd_value_out[31:0]
+@1401200
+-group_end
+@28
+top.cpu_inst.wb_inst0.wr_en_out
+@1000200
+-wb
+@c00200
+-rfile
+@420
+top.cpu_inst.rf_inst0.rd[4:0]
+top.cpu_inst.rf_inst0.rd_value[31:0]
+top.cpu_inst.rf_inst0.rs1[4:0]
+top.cpu_inst.rf_inst0.rs1_value[31:0]
+top.cpu_inst.rf_inst0.rs2[4:0]
+top.cpu_inst.rf_inst0.rs2_value[31:0]
+@28
+top.cpu_inst.rf_inst0.wr_en
+@1401200
+-rfile
+@800200
+-forward_unit
+@25
+top.cpu_inst.forwarding_unit_inst0.forward_a[1:0]
+top.cpu_inst.forwarding_unit_inst0.forward_b[1:0]
+@22
+top.cpu_inst.forwarding_unit_inst0.instr_id_mem[5:0]
+@28
+top.cpu_inst.forwarding_unit_inst0.is_mem_load
+@22
+top.cpu_inst.forwarding_unit_inst0.rd_addr_mem[4:0]
+top.cpu_inst.forwarding_unit_inst0.rd_addr_wb[4:0]
+@28
+top.cpu_inst.forwarding_unit_inst0.rd_valid_mem
+top.cpu_inst.forwarding_unit_inst0.rd_valid_wb
+@24
+top.cpu_inst.forwarding_unit_inst0.rs1_addr_ex[4:0]
+@28
+top.cpu_inst.forwarding_unit_inst0.rs1_valid_ex
+@24
+top.cpu_inst.forwarding_unit_inst0.rs2_addr_ex[4:0]
+@28
+top.cpu_inst.forwarding_unit_inst0.rs2_valid_ex
+top.cpu_inst.forwarding_unit_inst0.wr_en_wb
+@1000200
+-forward_unit
+@22
+top.cpu_inst.mem_wb_inst0_exec_output_out[31:0]
+[pattern_trace] 1
+[pattern_trace] 0
