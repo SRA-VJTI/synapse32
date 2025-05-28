@@ -264,9 +264,16 @@ import os
 def runCocotbTests():
     # All Verilog sources under rtl directory and subdirectories
     sources = []
-    for root, dirs, files in os.walk("../../rtl"):
+    root_dir = os.getcwd()
+    while not os.path.exists(os.path.join(root_dir, "rtl")):
+        if os.path.dirname(root_dir) == root_dir:
+            raise FileNotFoundError("rtl directory not found in the current or parent directories.")
+        root_dir = os.path.dirname(root_dir)
+    print(f"Using RTL directory: {root_dir}/rtl")
+    rtl_dir = os.path.join(root_dir, "rtl")
+    for root, _, files in os.walk(rtl_dir):
         for file in files:
-            if file.endswith(".v") or file.endswith(".vh"):
+            if file.endswith(".v") or file.endswith(".sv"):
                 sources.append(os.path.join(root, file))
     
     # Define the tests
@@ -276,8 +283,11 @@ def runCocotbTests():
         "test_riscv_cpu_memory_hazards"
     ]
     
-    # Create waveforms directory
-    os.makedirs("waveforms", exist_ok=True)
+    # Create waveforms directory in the current working directory if it doesn't exist
+    curr_dir = os.getcwd()
+    waveform_dir = os.path.join(curr_dir, "waveforms")
+    if not os.path.exists(waveform_dir):
+        os.makedirs(waveform_dir)
     # Query full path of the directory
     waveform_dir = os.path.abspath("waveforms")
     
@@ -292,7 +302,7 @@ def runCocotbTests():
             toplevel="riscv_cpu",
             module="test_riscv_cpu_basic",
             testcase=test_name,
-            includes=["../../rtl"],
+            includes=[rtl_dir],
             simulator="icarus",
             timescale="1ns/1ps",
             plus_args=[f"+dumpfile={waveform_path}"]

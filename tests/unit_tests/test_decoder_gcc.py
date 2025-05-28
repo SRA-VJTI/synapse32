@@ -116,13 +116,23 @@ from cocotb_test.simulator import run
 def runCocotbTests():
     """Run all tests"""
 
-    test_dir = os.path.dirname(__file__)
-    verilog_dir = os.path.join(test_dir, "..", ".." , "rtl")
+    root_dir = os.getcwd()
+    while not os.path.exists(os.path.join(root_dir, "rtl")):
+        if os.path.dirname(root_dir) == root_dir:
+            raise FileNotFoundError("rtl directory not found in the current or parent directories.")
+        root_dir = os.path.dirname(root_dir)
+    print(f"Using RTL directory: {root_dir}/rtl")
+    rtl_dir = os.path.join(root_dir, "rtl")
+    instr_defines_file = os.path.join(rtl_dir, "instr_defines.vh")
+    decoder_file = os.path.join(rtl_dir, "core_modules", "decoder.v")
 
     run(
-        verilog_sources=[os.path.join(verilog_dir, "decoder.v"), os.path.join(verilog_dir, "instr_defines.vh")],
+        verilog_sources=[
+            decoder_file,
+            instr_defines_file
+        ],
         toplevel="decoder",
         module="test_decoder_gcc",
         simulator="verilator",
-        includes=[verilog_dir]
+        includes=[rtl_dir],
     )

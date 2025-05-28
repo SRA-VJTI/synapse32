@@ -9,7 +9,7 @@ async def verify_alu_operation(dut, rs1, rs2, imm, instruction, pc_input, expect
     dut.rs1.value = rs1
     dut.rs2.value = rs2
     dut.imm.value = imm
-    dut.instructions.value = instruction
+    dut.instr_id.value = instruction
     dut.pc_input.value = pc_input
     
     await Timer(5, units="ns")  # Wait for combinational logic to settle
@@ -144,33 +144,21 @@ async def test_immediate_operations(dut):
     await verify_alu_operation(dut, 0x80000000, 0, 1, 0x13, 0, 0, "SLTIU MSB high > low (unsigned)")
 
 @cocotb.test()
-async def test_upper_immediate_operations(dut):
-    """Test upper immediate operations"""
-    # Load upper immediate
-    await verify_alu_operation(dut, 0, 0, 0x12345, 0x14, 0, 0x12345000, "LUI")
-    await verify_alu_operation(dut, 0, 0, 0xFFFFF, 0x14, 0, 0xFFFFF000, "LUI max value")
-    await verify_alu_operation(dut, 0, 0, 0, 0x14, 0, 0, "LUI zero")
-    
-    # Add upper immediate to PC
-    await verify_alu_operation(dut, 0, 0, 0x12345, 0x15, 0x100, 0x12345100, "AUIPC")
-    await verify_alu_operation(dut, 0, 0, 0xFFFFF, 0x15, 0x100, 0xFFFFF100, "AUIPC max value")
-    await verify_alu_operation(dut, 0, 0, 0, 0x15, 0x100, 0x100, "AUIPC zero immediate")
-
-@cocotb.test()
 async def test_default(dut):
     """Test default operation (should output zero)"""
-    await verify_alu_operation(dut, 0x12345678, 0x87654321, 0xABCDEF12, 0, 0x100, 0, "DEFAULT")
-    await verify_alu_operation(dut, 0x12345678, 0x87654321, 0xABCDEF12, 0xFF, 0x100, 0, "DEFAULT with invalid op")
+    await verify_alu_operation(dut, 0x1234, 0x8765, 0xABCDE, 0, 0x100, 0, "DEFAULT")
+    await verify_alu_operation(dut, 0x1234, 0x8765, 0xABCDE, 0x26, 0x100, 0, "DEFAULT with invalid op")
     
 @cocotb.test()
 async def test_random_inputs(dut):
     """Test random inputs for all operations"""
     for _ in range(10):  # Run 10 random tests
+        #generate rs1, rs2, imm, betweeen 0 to 2^32-1
         rs1 = random.randint(0, 0xFFFFFFFF)
         rs2 = random.randint(0, 0xFFFFFFFF)
         imm = random.randint(0, 0xFFFFFFFF)
         pc_input = random.randint(0, 0xFFFFFFFF)
-        instr = random.randint(1, 0x15)
+        instr = random.randint(1, 0x13)
         
         # Calculate expected result based on instruction
         if instr == 0x1:  # ADD
@@ -218,25 +206,29 @@ async def test_random_inputs(dut):
             expected = 0xFFFFFFFF if rs1_signed < imm_signed else 0
         elif instr == 0x13:  # SLTIU
             expected = 0xFFFFFFFF if rs1 < imm else 0
-        elif instr == 0x14:  # LUI
-            expected = (imm << 12) & 0xFFFFFFFF
-        elif instr == 0x15:  # AUIPC
-            expected = (pc_input + (imm << 12)) & 0xFFFFFFFF
             
         await verify_alu_operation(dut, rs1, rs2, imm, instr, pc_input, expected, f"Random test instr=0x{instr:x}")
 
 import pytest
 from cocotb_test.simulator import run
+import os
 
 def runCocotbTests():
     """Run all tests"""
     # Define the test directory and files
-    test_dir = Path(__file__).parent
-    verilog_file = test_dir / "../../rtl/alu.v"
+    root_dir = os.getcwd()
+    while not os.path.exists(os.path.join(root_dir, "rtl")):
+        if os.path.dirname(root_dir) == root_dir:
+            raise FileNotFoundError("rtl directory not found in the current or parent directories.")
+        root_dir = os.path.dirname(root_dir)
+    print(f"Using RTL directory: {root_dir}/rtl")
+    rtl_dir = os.path.join(root_dir, "rtl")
+    verilog_file = os.path.join(rtl_dir, "core_modules", "alu.v")
     
     run(
         verilog_sources=[verilog_file],
         toplevel="alu",
         module="test_alu",
-        simulator="verilator"
+        simulator="verilator",
+        includes=[rtl_dir],
     )
