@@ -1,0 +1,93 @@
+[*]
+[*] GTKWave Analyzer v3.3.120 (w)1999-2024 BSI
+[*] Tue May 27 11:41:30 2025
+[*]
+[dumpfile] "/workspaces/synapse32/tests/system_tests/waveforms/test_riscv_cpu_control_hazards.vcd"
+[dumpfile_mtime] "Mon May 26 19:06:51 2025"
+[dumpfile_size] 28298
+[savefile] "/workspaces/synapse32/tests/system_tests/work.gtkw"
+[timestart] 5200
+[size] 1854 1121
+[pos] -101 -101
+*-14.700000 144700 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] riscv_cpu.
+[sst_width] 297
+[signals_width] 198
+[sst_expanded] 1
+[sst_vpaned_height] 338
+@28
+riscv_cpu.clk
+riscv_cpu.rst
+@800200
+-fetch
+@22
+riscv_cpu.pc_inst0.out[31:0]
+riscv_cpu.module_instr_in[31:0]
+@1000200
+-fetch
+@800200
+-decoder
+@22
+riscv_cpu.decoder_inst0.instr[31:0]
+riscv_cpu.decoder_inst0.instr_id[5:0]
+riscv_cpu.decoder_inst0.rs1[4:0]
+riscv_cpu.decoder_inst0.rs2[4:0]
+riscv_cpu.decoder_inst0.imm[31:0]
+@1000200
+-decoder
+@800200
+-execute
+@22
+riscv_cpu.ex_unit_inst0.instr_id[5:0]
+riscv_cpu.ex_unit_inst0.rs1_addr[4:0]
+riscv_cpu.ex_unit_inst0.rs1_value[31:0]
+riscv_cpu.ex_unit_inst0.rs2_addr[4:0]
+riscv_cpu.ex_unit_inst0.rs2_value[31:0]
+riscv_cpu.ex_unit_inst0.imm[31:0]
+riscv_cpu.ex_unit_inst0.jump_addr[31:0]
+@28
+riscv_cpu.ex_unit_inst0.jump_signal
+@29
+riscv_cpu.branch_flush
+@22
+riscv_cpu.ex_unit_inst0.mem_addr[31:0]
+riscv_cpu.ex_unit_inst0.pc_input[31:0]
+@1000200
+-execute
+@800200
+-mem
+@22
+riscv_cpu.mem_unit_inst0.instr_id[5:0]
+riscv_cpu.mem_unit_inst0.mem_addr[31:0]
+riscv_cpu.mem_unit_inst0.read_addr[31:0]
+@28
+riscv_cpu.mem_unit_inst0.read_enable
+@22
+riscv_cpu.mem_unit_inst0.rs2_value[31:0]
+riscv_cpu.mem_unit_inst0.wr_addr[31:0]
+riscv_cpu.mem_unit_inst0.wr_data[31:0]
+@28
+riscv_cpu.mem_unit_inst0.wr_enable
+@1000200
+-mem
+@800200
+-wb
+@22
+riscv_cpu.wb_inst0.instr_id_in[5:0]
+@28
+riscv_cpu.wb_inst0.is_load_instr
+@22
+riscv_cpu.wb_inst0.mem_data_in[31:0]
+riscv_cpu.wb_inst0.rd_addr_in[4:0]
+riscv_cpu.wb_inst0.rd_addr_out[4:0]
+@28
+riscv_cpu.wb_inst0.rd_valid_in
+@22
+riscv_cpu.wb_inst0.rd_value_in[31:0]
+riscv_cpu.wb_inst0.rd_value_out[31:0]
+@28
+riscv_cpu.wb_inst0.wr_en_out
+@1000200
+-wb
+[pattern_trace] 1
+[pattern_trace] 0

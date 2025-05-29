@@ -1,0 +1,16 @@
+{
+    "verilog.formatting.veribleVerilogFormatter.arguments": "--indentation_spaces 4",
+    "verilog.formatting.verilogHDL.formatter": "verible-verilog-format",
+    "verilog.languageServer.rustHdl.enabled": false,
+    "verilog.languageServer.veribleVerilogLs.enabled": true,
+    "verilog.linting.iverilog.includePath": [
+        "rtl"
+    ],
+    "verilog.linting.verilator.includePath": [
+        "rtl",
+        "rtl/pipeline_stages",
+        "rtl/core_modules"
+    ],
+    "verilog.linting.linter": "verilator",
+    "verilog.languageServer.rustHdl.path": ""
+}

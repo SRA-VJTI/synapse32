@@ -1,36 +1,66 @@
+`default_nettype none
 module top (
-    input clk,
-    input reset,
-    input Ext_MemWrite,
-    input [31:0] Ext_WriteData, Ext_DataAdr,
-    output MemWrite,
-    output [31:0] WriteData, DataAdr, ReadData,
-    output [31:0] ProgramCounter
+    input wire clk,
+    input wire rst,
+    // Optional debug outputs
+    output wire [31:0] pc_debug,
+    output wire [31:0] instr_debug
 );
 
-// wire lines from other modules
-wire [31:0] PC;
-assign ProgramCounter = PC;
-wire [31:0] Instr;
-wire MemWrite_rv32;
-wire [31:0] DataAdr_rv32, WriteData_rv32;
+    // Wires to connect CPU and memories
+    wire [31:0] cpu_pc_out;
+    wire [31:0] instr_to_cpu;
+    wire [31:0] cpu_mem_read_addr;
+    wire [31:0] cpu_mem_write_addr;
+    wire [31:0] cpu_mem_write_data;
+    wire [31:0] mem_read_data;
+    wire cpu_mem_write_en;
+    wire cpu_mem_read_en;
+    wire [31:0] data_mem_addr;
 
-// instantiate processor and memories
-riscv_cpu rvsingle (
-    .clk(clk), .reset(reset), .PC(PC), .Instr(Instr),
-    .MemWrite(MemWrite_rv32), .Mem_WrAddr(DataAdr_rv32), .Mem_WrData(WriteData_rv32),
-    .ReadData(ReadData)
-);
-instr_mem imem (
-    .instr_addr(PC), .instr(Instr)
-);
-data_mem dmem (
-    .clk(clk), .wr_en(MemWrite), .wr_addr(DataAdr), .wr_data(WriteData), .rd_data_mem(ReadData)
-);
+    // Select the appropriate address for data memory access
+    // Use write address when writing, read address when reading
+    assign data_mem_addr = cpu_mem_write_en ? cpu_mem_write_addr : cpu_mem_read_addr;
+    
+    // Debug outputs
+    assign pc_debug = cpu_pc_out;
+    assign instr_debug = instr_to_cpu;
 
-// output assignments
-assign MemWrite = (Ext_MemWrite && reset) ? 1 : MemWrite_rv32;
-assign WriteData = (Ext_MemWrite && reset) ? Ext_WriteData : WriteData_rv32;
-assign DataAdr = (reset) ? Ext_DataAdr : DataAdr_rv32;
+    // Instantiate the RISC-V CPU core
+    riscv_cpu cpu_inst (
+        .clk(clk),
+        .rst(rst),
+        .module_instr_in(instr_to_cpu),
+        .module_read_data_in(mem_read_data),
+        .module_pc_out(cpu_pc_out),
+        .module_wr_data_out(cpu_mem_write_data),
+        .module_mem_wr_en(cpu_mem_write_en),
+        .module_mem_rd_en(cpu_mem_read_en),
+        .module_read_addr(cpu_mem_read_addr),
+        .module_write_addr(cpu_mem_write_addr)
+    );
+
+    // Instantiate instruction memory
+    instr_mem #(
+        .DATA_WIDTH(32),
+        .ADDR_WIDTH(32),
+        .MEM_SIZE(512)
+    ) instr_mem_inst (
+        .instr_addr(cpu_pc_out),
+        .instr(instr_to_cpu)
+    );
+
+    // Instantiate data memory
+    data_mem #(
+        .DATA_WIDTH(32),
+        .ADDR_WIDTH(32),
+        .MEM_SIZE(64)
+    ) data_mem_inst (
+        .clk(clk),
+        .wr_en(cpu_mem_write_en),
+        .addr(data_mem_addr),
+        .wr_data(cpu_mem_write_data),
+        .rd_data_out(mem_read_data)
+    );
 
 endmodule
