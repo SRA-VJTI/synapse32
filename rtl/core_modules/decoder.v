@@ -50,7 +50,7 @@ module decoder (
     // Instruction ID encoding
     always @(*) begin
         case (opcode)
-            7'b0110011: begin  // R-type
+            7'b0110011: begin  // R-type with M Extensions
                 case ({
                     func7, func3
                 })
@@ -64,6 +64,14 @@ module decoder (
                     {7'h20, 3'h5} : instr_id = INSTR_SRA;
                     {7'h00, 3'h2} : instr_id = INSTR_SLT;
                     {7'h00, 3'h3} : instr_id = INSTR_SLTU;
+                    {7'h01, 3'h0} : instr_id = INSTR_MUL;
+                    {7'h01, 3'h1} : instr_id = INSTR_MULH;
+                    {7'h01, 3'h2} : instr_id = INSTR_MULHSU;
+                    {7'h01, 3'h3} : instr_id = INSTR_MULHU;
+                    {7'h01, 3'h4} : instr_id = INSTR_DIV;
+                    {7'h01, 3'h5} : instr_id = INSTR_DIVU;
+                    {7'h01, 3'h6} : instr_id = INSTR_REM;
+                    {7'h01, 3'h7} : instr_id = INSTR_REMU;
                     default:        instr_id = INSTR_INVALID;
                 endcase
             end
@@ -82,6 +90,7 @@ module decoder (
                     default: instr_id = INSTR_INVALID;
                 endcase
             end
+
             7'b0000011: begin  // loads
                 case (func3)
                     3'h0: instr_id = INSTR_LB;
