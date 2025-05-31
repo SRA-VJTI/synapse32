@@ -54,6 +54,16 @@ localparam [5:0] INSTR_JALR  = 6'h23;
 localparam [5:0] INSTR_LUI   = 6'h24;
 localparam [5:0] INSTR_AUIPC = 6'h25;
 
+// M Extensions
+localparam [5:0] INSTR_MUL   = 6'h26;
+localparam [5:0] INSTR_MULH  = 6'h27;
+localparam [5:0] INSTR_MULHSU = 6'h28;
+localparam [5:0] INSTR_MULHU = 6'h29;
+localparam [5:0] INSTR_DIV   = 6'h2A;
+localparam [5:0] INSTR_DIVU  = 6'h2B;
+localparam [5:0] INSTR_REM   = 6'h2C;
+localparam [5:0] INSTR_REMU  = 6'h2D;
+
 // Unknown or NOP
 localparam [5:0] INSTR_INVALID = 6'h00;
 

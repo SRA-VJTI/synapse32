@@ -144,10 +144,48 @@ async def test_immediate_operations(dut):
     await verify_alu_operation(dut, 0x80000000, 0, 1, 0x13, 0, 0, "SLTIU MSB high > low (unsigned)")
 
 @cocotb.test()
+async def test_m_extension(dut):
+    """Test M-extension operations (MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU)"""
+    # MUL (signed x signed, low 32 bits)
+    await verify_alu_operation(dut, 3, 4, 0, 0x26, 0, 12, "MUL basic")
+    await verify_alu_operation(dut, 0xFFFFFFFF, 0xFFFFFFFF, 0, 0x26, 0, 1, "MUL -1 * -1")
+    await verify_alu_operation(dut, 0xFFFFFFFF, 0x7FFFFFFF, 0, 0x26, 0, 0x80000001, "MUL -1 * max")
+
+    # MULH (signed x signed, high 32 bits of 64-bit result)
+    await verify_alu_operation(dut, 0xFFFFFFFF, 0xFFFFFFFF, 0, 0x27, 0, 0x00000000, "MULH -1 * -1 (high)")
+    await verify_alu_operation(dut, 0x7FFFFFFF, 0x7FFFFFFF, 0, 0x27, 0, 0x3FFFFFFF, "MULH max * max (high)")
+
+    # MULHSU (signed x unsigned, high 32 bits)
+    await verify_alu_operation(dut, 0xFFFFFFFF, 2, 0, 0x28, 0, 0xFFFFFFFF, "MULHSU -1 * 2 (high)")
+    await verify_alu_operation(dut, 0x80000000, 2, 0, 0x28, 0, 0xFFFFFFFF, "MULHSU int_min * 2 (high)")
+
+    # MULHU (unsigned x unsigned, high 32 bits)
+    await verify_alu_operation(dut, 0xFFFFFFFF, 0xFFFFFFFF, 0, 0x29, 0, 0xFFFFFFFE, "MULHU max * max (high)")
+    await verify_alu_operation(dut, 0x00000002, 0x80000000, 0, 0x29, 0, 0x00000001, "MULHU 2 * MSB (high)")
+
+    # DIV (signed)
+    await verify_alu_operation(dut, 10, 2, 0, 0x2A, 0, 5, "DIV 10 / 2")
+    await verify_alu_operation(dut, 0xFFFFFFFF, 2, 0, 0x2A, 0, 0, "DIV -1 / 2")
+    await verify_alu_operation(dut, 0x80000000, 0xFFFFFFFF, 0, 0x2A, 0, 0, "DIV int_min / -1 (overflow case)")
+
+    # DIVU (unsigned)
+    await verify_alu_operation(dut, 10, 2, 0, 0x2B, 0, 5, "DIVU 10 / 2")
+    await verify_alu_operation(dut, 0xFFFFFFFF, 2, 0, 0x2B, 0, 0x7FFFFFFF, "DIVU max / 2")
+
+    # REM (signed)
+    await verify_alu_operation(dut, 10, 3, 0, 0x2C, 0, 1, "REM 10 % 3")
+    await verify_alu_operation(dut, 0xFFFFFFFF, 2, 0, 0x2C, 0, 0xFFFFFFFF, "REM -1 % 2")
+    await verify_alu_operation(dut, 0x80000000, 0xFFFFFFFF, 0, 0x2C, 0, 0, "REM int_min % -1")
+
+    # REMU (unsigned)
+    await verify_alu_operation(dut, 10, 3, 0, 0x2D, 0, 1, "REMU 10 % 3")
+    await verify_alu_operation(dut, 0xFFFFFFFF, 2, 0, 0x2D, 0, 1, "REMU max % 2")
+
+@cocotb.test()
 async def test_default(dut):
     """Test default operation (should output zero)"""
     await verify_alu_operation(dut, 0x1234, 0x8765, 0xABCDE, 0, 0x100, 0, "DEFAULT")
-    await verify_alu_operation(dut, 0x1234, 0x8765, 0xABCDE, 0x26, 0x100, 0, "DEFAULT with invalid op")
+    await verify_alu_operation(dut, 0x1234, 0x8765, 0xABCDE, 0x2E, 0x104, 0, "DEFAULT with invalid op")
     
 @cocotb.test()
 async def test_random_inputs(dut):
@@ -232,3 +270,5 @@ def runCocotbTests():
         simulator="verilator",
         includes=[rtl_dir],
     )
+
+
