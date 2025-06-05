@@ -154,6 +154,12 @@ cd tests/system_tests
 python test_riscv_cpu_basic.py
 ```
 
+#### Running the Full Test Suite
+Once the virtual environment is set up you can execute all tests using `pytest` from the repository root:
+```
+pytest -q
+```
+
 #### Available Tests
 1. **Raw Hazards Test**: Verifies data forwarding functionality
 2. **Control Hazards Test**: Validates branch and jump handling
