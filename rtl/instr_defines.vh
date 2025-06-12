@@ -57,6 +57,14 @@ localparam [5:0] INSTR_AUIPC = 6'h25;
 // System instructions
 localparam [5:0] INSTR_FENCE_I = 6'h26;
 
+// CSR instructions
+localparam [5:0] INSTR_CSRRW  = 6'h27;
+localparam [5:0] INSTR_CSRRS  = 6'h28;
+localparam [5:0] INSTR_CSRRC  = 6'h29;
+localparam [5:0] INSTR_CSRRWI = 6'h2A;
+localparam [5:0] INSTR_CSRRSI = 6'h2B;
+localparam [5:0] INSTR_CSRRCI = 6'h2C;
+
 // Unknown or NOP
 localparam [5:0] INSTR_INVALID = 6'h00;
 

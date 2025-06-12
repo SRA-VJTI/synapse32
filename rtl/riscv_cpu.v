@@ -186,6 +186,26 @@ module riscv_cpu (
         .forward_b(forward_b)
     );
 
+    // CSR file signals
+    wire [11:0] csr_addr;
+    wire [31:0] csr_read_data;
+    wire [31:0] csr_write_data;
+    wire csr_write_enable;
+    wire csr_read_enable;
+    wire csr_valid;
+
+    // Instantiate CSR file at CPU level
+    csr_file csr_file_inst (
+        .clk(clk),
+        .rst(rst),
+        .csr_addr(csr_addr),
+        .write_data(csr_write_data),
+        .write_enable(csr_write_enable),
+        .read_enable(csr_read_enable),
+        .read_data(csr_read_data),
+        .csr_valid(csr_valid)
+    );
+
     execution_unit ex_unit_inst0 (
         .rs1(id_ex_inst0_rs1_value_out),
         .rs2(id_ex_inst0_rs2_value_out),
@@ -201,13 +221,22 @@ module riscv_cpu (
         .forward_b(forward_b),
         .ex_mem_result(ex_mem_inst0_exec_output_out),
         .mem_wb_result(wb_inst0_rd_value_out),
+        
+        // CSR interface connections
+        .csr_read_data(csr_read_data),
+        .csr_valid(csr_valid),
+        .csr_addr(csr_addr),
+        .csr_read_enable(csr_read_enable),
+        .csr_write_data(csr_write_data),
+        .csr_write_enable(csr_write_enable),
+        
         .exec_output(ex_inst0_exec_output_out),
         .jump_signal(ex_inst0_jump_signal_out),
         .jump_addr(ex_inst0_jump_addr_out),
         .mem_addr(ex_inst0_mem_addr_out),
         .rs1_value_out(ex_inst0_rs1_value_out),
         .rs2_value_out(ex_inst0_rs2_value_out),
-        .flush_pipeline(execution_flush)  // Connect the flush signal
+        .flush_pipeline(execution_flush)
     );
 
     // Memory Stage

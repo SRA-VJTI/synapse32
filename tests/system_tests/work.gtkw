@@ -1,20 +1,21 @@
 [*]
 [*] GTKWave Analyzer v3.3.120 (w)1999-2024 BSI
-[*] Tue May 27 11:41:30 2025
+[*] Thu Jun 12 14:16:41 2025
 [*]
-[dumpfile] "/workspaces/synapse32/tests/system_tests/waveforms/test_riscv_cpu_control_hazards.vcd"
-[dumpfile_mtime] "Mon May 26 19:06:51 2025"
-[dumpfile_size] 28298
+[dumpfile] "/workspaces/synapse32/tests/system_tests/waveforms/test_csr_mstatus_operations.vcd"
+[dumpfile_mtime] "Thu Jun 12 14:15:35 2025"
+[dumpfile_size] 28883
 [savefile] "/workspaces/synapse32/tests/system_tests/work.gtkw"
-[timestart] 5200
+[timestart] 1700
 [size] 1854 1121
-[pos] -101 -101
-*-14.700000 144700 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[pos] -1 -1
+*-14.400000 74600 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] riscv_cpu.
+[treeopen] riscv_cpu.ex_unit_inst0.
 [sst_width] 297
 [signals_width] 198
 [sst_expanded] 1
-[sst_vpaned_height] 338
+[sst_vpaned_height] 321
 @28
 riscv_cpu.clk
 riscv_cpu.rst
@@ -47,7 +48,6 @@ riscv_cpu.ex_unit_inst0.imm[31:0]
 riscv_cpu.ex_unit_inst0.jump_addr[31:0]
 @28
 riscv_cpu.ex_unit_inst0.jump_signal
-@29
 riscv_cpu.branch_flush
 @22
 riscv_cpu.ex_unit_inst0.mem_addr[31:0]
@@ -89,5 +89,48 @@ riscv_cpu.wb_inst0.rd_value_out[31:0]
 riscv_cpu.wb_inst0.wr_en_out
 @1000200
 -wb
+@800200
+-csr
+@22
+riscv_cpu.ex_unit_inst0.csr_exec_inst.csr_read_data[31:0]
+riscv_cpu.ex_unit_inst0.csr_exec_inst.csr_write_data[31:0]
+@28
+riscv_cpu.ex_unit_inst0.csr_exec_inst.csr_write_enable
+@22
+riscv_cpu.ex_unit_inst0.csr_exec_inst.instr_id[5:0]
+riscv_cpu.ex_unit_inst0.csr_exec_inst.rd_value[31:0]
+riscv_cpu.ex_unit_inst0.csr_exec_inst.rs1_addr[4:0]
+riscv_cpu.ex_unit_inst0.csr_exec_inst.rs1_value[31:0]
+riscv_cpu.ex_unit_inst0.csr_exec_inst.uimm[31:0]
+@1000200
+-csr
+@800200
+-csrfile
+@22
+riscv_cpu.csr_file_inst.csr_addr[11:0]
+@28
+riscv_cpu.csr_file_inst.csr_valid
+@421
+riscv_cpu.csr_file_inst.cycle_counter[63:0]
+@22
+riscv_cpu.csr_file_inst.mcause[31:0]
+riscv_cpu.csr_file_inst.mepc[31:0]
+riscv_cpu.csr_file_inst.mie[31:0]
+riscv_cpu.csr_file_inst.mip[31:0]
+riscv_cpu.csr_file_inst.misa[31:0]
+riscv_cpu.csr_file_inst.mscratch[31:0]
+riscv_cpu.csr_file_inst.mstatus[31:0]
+riscv_cpu.csr_file_inst.mtval[31:0]
+riscv_cpu.csr_file_inst.mtvec[31:0]
+riscv_cpu.csr_file_inst.read_data[31:0]
+@28
+riscv_cpu.csr_file_inst.read_enable
+riscv_cpu.csr_file_inst.rst
+@22
+riscv_cpu.csr_file_inst.write_data[31:0]
+@28
+riscv_cpu.csr_file_inst.write_enable
+@1000200
+-csrfile
 [pattern_trace] 1
 [pattern_trace] 0

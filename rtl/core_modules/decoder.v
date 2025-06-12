@@ -15,7 +15,7 @@ module decoder (
     output reg  [5:0] instr_id  // changed from 32-bit one-hot to 6-bit IDIs
 );
 
-    wire is_r_instr, is_u_instr, is_s_instr, is_b_instr, is_j_instr, is_i_instr;
+    wire is_r_instr, is_u_instr, is_s_instr, is_b_instr, is_j_instr, is_i_instr, is_csr_instr;
     wire [2:0] func3;
     wire [6:0] func7;
 
@@ -27,17 +27,20 @@ module decoder (
     assign is_j_instr = (opcode == 7'b1101111) ? 1'b1 : 1'b0;
     assign is_s_instr = (opcode == 7'b0100011) ? 1'b1 : 1'b0;
     assign is_r_instr = (opcode == 7'b0110011) || (opcode == 7'b0100111) || (opcode == 7'b1010011) ? 1'b1 : 1'b0;
+    assign is_csr_instr = (opcode == 7'b1110011) ? 1'b1 : 1'b0;  // CSR instructions
 
     assign rs2 = (is_r_instr || is_s_instr || is_b_instr) ? instr[24:20] : 5'b0;
-    assign rs1 = (is_r_instr || is_s_instr || is_b_instr || is_i_instr) ? instr[19:15] : 5'b0;
-    assign rd = (is_r_instr || is_u_instr || is_j_instr || is_i_instr) ? instr[11:7] : 5'b0;
+    assign rs1 = (is_r_instr || is_s_instr || is_b_instr || is_i_instr || is_csr_instr) ? instr[19:15] : 5'b0;
+    assign rd = (is_r_instr || is_u_instr || is_j_instr || is_i_instr || is_csr_instr) ? instr[11:7] : 5'b0;
 
     assign func3 = instr[14:12];
     assign func7 = is_r_instr ? instr[31:25] : 7'b0;
 
-    assign rs1_valid = is_r_instr || is_i_instr || is_s_instr || is_b_instr;
-    assign rs2_valid = is_r_instr || is_s_instr || is_b_instr;
-    assign rd_valid = is_r_instr || is_u_instr || is_j_instr || is_i_instr;
+    // Validity signals - CSR instructions use rs1 and rd, but rs1 validity depends on instruction type
+    assign rs1_valid = is_r_instr || is_i_instr || is_s_instr || is_b_instr || 
+                      (is_csr_instr && (func3[2] == 1'b0));  // CSRRW/CSRRS/CSRRC use rs1, immediate versions don't
+    assign rs2_valid = is_r_instr || is_s_instr || is_b_instr;  // CSR instructions don't use rs2
+    assign rd_valid = is_r_instr || is_u_instr || is_j_instr || is_i_instr || is_csr_instr;  // CSR instructions write to rd
     
     assign imm = 
         is_i_instr ? { {21{instr[31]}}, instr[30:20] } :
@@ -45,6 +48,7 @@ module decoder (
         is_b_instr ? { {20{instr[31]}}, instr[7], instr[30:25], instr[11:8], 1'b0 } :
         is_u_instr ? { instr[31:12], 12'b0 } :
         is_j_instr ? { {12{instr[31]}}, instr[19:12], instr[20], instr[30:25], instr[24:21], 1'b0 } :
+        is_csr_instr ? { 20'b0, instr[31:20] } :  // CSR address in upper 12 bits, zero-extended
         32'b0;
 
     // Instruction ID encoding
@@ -118,6 +122,17 @@ module decoder (
             7'b0001111: begin
                 case (func3)
                     3'h1: instr_id = INSTR_FENCE_I;
+                    default: instr_id = INSTR_INVALID;
+                endcase
+            end
+            7'b1110011: begin  // CSR instructions
+                case (func3)
+                    3'h1: instr_id = INSTR_CSRRW;
+                    3'h2: instr_id = INSTR_CSRRS;
+                    3'h3: instr_id = INSTR_CSRRC;
+                    3'h5: instr_id = INSTR_CSRRWI;
+                    3'h6: instr_id = INSTR_CSRRSI;
+                    3'h7: instr_id = INSTR_CSRRCI;
                     default: instr_id = INSTR_INVALID;
                 endcase
             end

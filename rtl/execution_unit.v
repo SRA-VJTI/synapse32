@@ -1,4 +1,5 @@
 `default_nettype none
+`include "instr_defines.vh"
 module execution_unit(
     input wire [31:0] rs1,
     input wire [31:0] rs2,
@@ -16,6 +17,16 @@ module execution_unit(
     input wire [1:0] forward_b,
     input wire [31:0] ex_mem_result,
     input wire [31:0] mem_wb_result,
+    
+    // CSR interface inputs
+    input wire [31:0] csr_read_data,
+    input wire csr_valid,
+    
+    // CSR interface outputs
+    output wire [11:0] csr_addr,
+    output wire csr_read_enable,
+    output wire [31:0] csr_write_data,
+    output wire csr_write_enable,
     
     output reg [31:0] exec_output,
     output reg jump_signal,
@@ -37,6 +48,26 @@ assign rs2_value_out = rs2_value;
 localparam NO_FORWARDING = 2'b00;
 localparam FORWARD_FROM_MEM = 2'b01;
 localparam FORWARD_FROM_WB = 2'b10;
+
+// CSR-related signals
+assign csr_addr = imm[11:0];  // Extract CSR address from immediate field
+
+// CSR read enable for all CSR instructions
+assign csr_read_enable = (instr_id == INSTR_CSRRW) || (instr_id == INSTR_CSRRS) || 
+                        (instr_id == INSTR_CSRRC) || (instr_id == INSTR_CSRRWI) || 
+                        (instr_id == INSTR_CSRRSI) || (instr_id == INSTR_CSRRCI);
+
+// CSR execution unit for handling CSR operations
+wire [31:0] csr_rd_value;
+csr_exec csr_exec_inst (
+    .instr_id(instr_id),
+    .rs1_value(rs1_value),
+    .rs1_addr(rs1_addr),
+    .csr_read_data(csr_read_data),
+    .csr_write_data(csr_write_data),
+    .csr_write_enable(csr_write_enable),
+    .rd_value(csr_rd_value)
+);
 
 // Select forwarded values if needed
 always @(*) begin
@@ -101,42 +132,42 @@ always @(*) begin
                     if (rs1_value == rs2_value) begin
                         jump_signal = 1;
                         jump_addr = pc_input + imm;
-                        flush_pipeline = 1;  // Also flush on taken branches
+                        flush_pipeline = 1;
                     end
                 end
                 6'h1D: begin // BNE
                     if (rs1_value != rs2_value) begin
                         jump_signal = 1;
                         jump_addr = pc_input + imm;
-                        flush_pipeline = 1;  // Also flush on taken branches
+                        flush_pipeline = 1;
                     end
                 end
                 6'h1E: begin // BLT
                     if ($signed(rs1_value) < $signed(rs2_value)) begin
                         jump_signal = 1;
                         jump_addr = pc_input + imm;
-                        flush_pipeline = 1;  // Also flush on taken branches
+                        flush_pipeline = 1;
                     end
                 end
                 6'h1F: begin // BGE
                     if ($signed(rs1_value) >= $signed(rs2_value)) begin
                         jump_signal = 1;
                         jump_addr = pc_input + imm;
-                        flush_pipeline = 1;  // Also flush on taken branches
+                        flush_pipeline = 1;
                     end
                 end
                 6'h20: begin // BLTU
                     if (rs1_value < rs2_value) begin
                         jump_signal = 1;
                         jump_addr = pc_input + imm;
-                        flush_pipeline = 1;  // Also flush on taken branches
+                        flush_pipeline = 1;
                     end
                 end
                 6'h21: begin // BGEU
                     if (rs1_value >= rs2_value) begin
                         jump_signal = 1;
                         jump_addr = pc_input + imm;
-                        flush_pipeline = 1;  // Also flush on taken branches
+                        flush_pipeline = 1;
                     end
                 end
                 default: begin
@@ -147,24 +178,26 @@ always @(*) begin
             jump_signal = 1;
             jump_addr = pc_input + imm;
             exec_output = pc_input + 4;
-            flush_pipeline = 1;  // JAL always flushes pipeline
+            flush_pipeline = 1;
         end
         7'b1100111: begin // JALR
             jump_signal = 1;
             jump_addr = (rs1_value + imm) & 32'hFFFFFFFE;
             exec_output = pc_input + 4;
-            flush_pipeline = 1;  // JALR always flushes pipeline
+            flush_pipeline = 1;
         end
         7'b0110111: begin // LUI
             exec_output = imm;
         end
-        7'b0010111: begin // AUIPC - Add this case
+        7'b0010111: begin // AUIPC
             exec_output = pc_input + imm;
+        end
+        7'b1110011: begin // CSR instructions
+            exec_output = csr_rd_value;  // Use CSR execution unit output
         end
         7'b0001111: begin // MISC-MEM (fence instructions)
             if (instr_id == INSTR_FENCE_I) begin
-                // fence.i: signal pipeline flush but don't jump
-                flush_pipeline = 1;  // Trigger pipeline flush
+                flush_pipeline = 1;
             end
         end
         default: begin
