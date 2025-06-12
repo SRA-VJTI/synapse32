@@ -22,7 +22,8 @@ module execution_unit(
     output reg [31:0] jump_addr,
     output reg [31:0] mem_addr,
     output reg [31:0] rs1_value_out,
-    output reg [31:0] rs2_value_out
+    output reg [31:0] rs2_value_out,
+    output reg flush_pipeline
 );
 
 // Internal signals for forwarded values
@@ -74,30 +75,25 @@ alu alu_inst(
 // For all U-type instructions, the exec_output is the output of the ALU
 // For NOP, do nothing
 always @(*) begin
+    // Default values
+    exec_output = 0;
+    jump_signal = 0;
+    jump_addr = 0;
+    mem_addr = 0;
+    flush_pipeline = 0;  // Default: no flush
+    
     case (opcode)
         7'b0110011: begin // R-type instructions
             exec_output = alu_inst.ALUoutput;
-            jump_signal = 0;
-            jump_addr = 0;
-            mem_addr = 0;
         end
         7'b0010011: begin // I-type instructions
             exec_output = alu_inst.ALUoutput;
-            jump_signal = 0;
-            jump_addr = 0;
-            mem_addr = 0;
         end
         7'b0000011: begin // Load instructions
             mem_addr = rs1_value + imm;
-            exec_output = 0;
-            jump_signal = 0;
-            jump_addr = 0;
         end
         7'b0100011: begin // Store instructions
             mem_addr = rs1_value + imm;
-            exec_output = 0;
-            jump_signal = 0;
-            jump_addr = 0;
         end
         7'b1100011: begin // Branch instructions
             case (instr_id)
@@ -105,93 +101,73 @@ always @(*) begin
                     if (rs1_value == rs2_value) begin
                         jump_signal = 1;
                         jump_addr = pc_input + imm;
-                    end else begin
-                        jump_signal = 0;
-                        jump_addr = 0;
+                        flush_pipeline = 1;  // Also flush on taken branches
                     end
                 end
                 6'h1D: begin // BNE
                     if (rs1_value != rs2_value) begin
                         jump_signal = 1;
                         jump_addr = pc_input + imm;
-                    end else begin
-                        jump_signal = 0;
-                        jump_addr = 0;
+                        flush_pipeline = 1;  // Also flush on taken branches
                     end
                 end
                 6'h1E: begin // BLT
                     if ($signed(rs1_value) < $signed(rs2_value)) begin
                         jump_signal = 1;
                         jump_addr = pc_input + imm;
-                    end else begin
-                        jump_signal = 0;
-                        jump_addr = 0;
+                        flush_pipeline = 1;  // Also flush on taken branches
                     end
                 end
                 6'h1F: begin // BGE
                     if ($signed(rs1_value) >= $signed(rs2_value)) begin
                         jump_signal = 1;
                         jump_addr = pc_input + imm;
-                    end else begin
-                        jump_signal = 0;
-                        jump_addr = 0;
+                        flush_pipeline = 1;  // Also flush on taken branches
                     end
                 end
                 6'h20: begin // BLTU
                     if (rs1_value < rs2_value) begin
                         jump_signal = 1;
                         jump_addr = pc_input + imm;
-                    end else begin
-                        jump_signal = 0;
-                        jump_addr = 0;
+                        flush_pipeline = 1;  // Also flush on taken branches
                     end
                 end
                 6'h21: begin // BGEU
                     if (rs1_value >= rs2_value) begin
                         jump_signal = 1;
                         jump_addr = pc_input + imm;
-                    end else begin
-                        jump_signal = 0;
-                        jump_addr = 0;
+                        flush_pipeline = 1;  // Also flush on taken branches
                     end
                 end
                 default: begin
-                    jump_signal = 0;
-                    jump_addr = 0;
                 end
             endcase
-            exec_output = 0;
-            mem_addr = 0;
         end
         7'b1101111: begin // JAL
             jump_signal = 1;
             jump_addr = pc_input + imm;
             exec_output = pc_input + 4;
-            mem_addr = 0;
+            flush_pipeline = 1;  // JAL always flushes pipeline
         end
         7'b1100111: begin // JALR
             jump_signal = 1;
             jump_addr = (rs1_value + imm) & 32'hFFFFFFFE;
             exec_output = pc_input + 4;
-            mem_addr = 0;
+            flush_pipeline = 1;  // JALR always flushes pipeline
         end
         7'b0110111: begin // LUI
             exec_output = imm;
-            jump_signal = 0;
-            jump_addr = 0;
-            mem_addr = 0;
         end
         7'b0010111: begin // AUIPC - Add this case
             exec_output = pc_input + imm;
-            jump_signal = 0;
-            jump_addr = 0;
-            mem_addr = 0;
+        end
+        7'b0001111: begin // MISC-MEM (fence instructions)
+            if (instr_id == INSTR_FENCE_I) begin
+                // fence.i: signal pipeline flush but don't jump
+                flush_pipeline = 1;  // Trigger pipeline flush
+            end
         end
         default: begin
-            exec_output = 0;
-            jump_addr = 0;
-            jump_signal = 0;
-            mem_addr = 0;
         end
     endcase
 end

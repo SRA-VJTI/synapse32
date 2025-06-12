@@ -54,6 +54,9 @@ localparam [5:0] INSTR_JALR  = 6'h23;
 localparam [5:0] INSTR_LUI   = 6'h24;
 localparam [5:0] INSTR_AUIPC = 6'h25;
 
+// System instructions
+localparam [5:0] INSTR_FENCE_I = 6'h26;
+
 // Unknown or NOP
 localparam [5:0] INSTR_INVALID = 6'h00;
 

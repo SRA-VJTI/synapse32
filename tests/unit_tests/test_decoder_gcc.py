@@ -8,7 +8,7 @@ def assemble_riscv_instruction(assembly_code, bin_file="temp.bin"):
         f.write(assembly_code)
 
     subprocess.run([
-        "riscv64-unknown-elf-as", "-march=rv32i", "-mabi=ilp32", "-o", "temp.o", "temp.s"
+        "riscv64-unknown-elf-as", "-march=rv32i_zifencei", "-mabi=ilp32", "-o", "temp.o", "temp.s"
     ], check=True)
 
     subprocess.run([
@@ -95,6 +95,8 @@ async def test_decoder_exhaustive(dut):
         """, {"opcode": 0b1100011, "rs1": 13, "rs2": 14, "rd": 0, "instr_id": 0x1C, "imm": 8}),
         ("jal x15, 16", {"opcode": 0b1101111, "rs1": 0, "rs2": 0, "rd": 15, "instr_id": 0x22, "imm": 16}),
         ("lui x16, 0x12345", {"opcode": 0b0110111, "rs1": 0, "rs2": 0, "rd": 16, "instr_id": 0x24, "imm": 0x12345000}),
+        # Add fence.i test
+        ("fence.i", {"opcode": 0b0001111, "rs1": 0, "rs2": 0, "rd": 0, "instr_id": 0x26, "imm": 0}),
     ]
 
     for instr, expected in instructions:

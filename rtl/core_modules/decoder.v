@@ -115,12 +115,14 @@ module decoder (
             7'b1100111: instr_id = INSTR_JALR;
             7'b0110111: instr_id = INSTR_LUI;
             7'b0010111: instr_id = INSTR_AUIPC;
+            7'b0001111: begin
+                case (func3)
+                    3'h1: instr_id = INSTR_FENCE_I;
+                    default: instr_id = INSTR_INVALID;
+                endcase
+            end
             default:    instr_id = INSTR_INVALID;
         endcase
-        // Log all debug information
-        // $display("DEBUG Instruction: %b, ID: %d", instr, instr_id);
-        // $display("rs1: %d, rs2: %d, rd: %d, imm: %d", rs1, rs2, rd, imm);
-        // $display("opcode: %b, func3: %b, func7: %b", opcode, func3, func7);
     end
 
 endmodule

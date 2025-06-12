@@ -121,6 +121,13 @@ module riscv_cpu (
     wire [31:0] id_ex_inst0_rs1_value_out;
     wire [31:0] id_ex_inst0_rs2_value_out;
 
+    // Pipeline flush signals
+    wire execution_flush;
+    wire pipeline_flush;
+    
+    // Combine branch flush and execution unit flush
+    assign pipeline_flush = branch_flush || execution_flush;
+
     ID_EX id_ex_inst0 (
         .clk(clk),
         .rst(rst),
@@ -136,7 +143,7 @@ module riscv_cpu (
         .pc_in(if_id_pc_out),
         .rs1_value_in(rf_inst0_rs1_value_out),
         .rs2_value_in(rf_inst0_rs2_value_out),
-        .stall(branch_flush || stall_pipeline), // Stall on load-use hazard or branch flush
+        .stall(pipeline_flush || stall_pipeline), // Use combined flush
         .rs1_valid_out(id_ex_inst0_rs1_valid_out),
         .rs2_valid_out(id_ex_inst0_rs2_valid_out),
         .rd_valid_out(id_ex_inst0_rd_valid_out),
@@ -199,7 +206,8 @@ module riscv_cpu (
         .jump_addr(ex_inst0_jump_addr_out),
         .mem_addr(ex_inst0_mem_addr_out),
         .rs1_value_out(ex_inst0_rs1_value_out),
-        .rs2_value_out(ex_inst0_rs2_value_out)
+        .rs2_value_out(ex_inst0_rs2_value_out),
+        .flush_pipeline(execution_flush)  // Connect the flush signal
     );
 
     // Memory Stage
