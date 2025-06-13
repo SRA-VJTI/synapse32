@@ -34,7 +34,19 @@ module execution_unit(
     output reg [31:0] mem_addr,
     output reg [31:0] rs1_value_out,
     output reg [31:0] rs2_value_out,
-    output reg flush_pipeline
+    output reg flush_pipeline,
+    
+    // Add interrupt/exception inputs
+    input wire interrupt_pending,
+    input wire [31:0] interrupt_cause,
+    input wire [31:0] mtvec,
+    input wire [31:0] mepc,
+    
+    // Add interrupt/exception outputs
+    output reg interrupt_taken,
+    output reg mret_instruction,
+    output reg ecall_exception,
+    output reg ebreak_exception
 );
 
 // Internal signals for forwarded values
@@ -111,22 +123,33 @@ always @(*) begin
     jump_signal = 0;
     jump_addr = 0;
     mem_addr = 0;
-    flush_pipeline = 0;  // Default: no flush
+    flush_pipeline = 0;
+    interrupt_taken = 0;
+    mret_instruction = 0;
+    ecall_exception = 0;
+    ebreak_exception = 0;
     
-    case (opcode)
-        7'b0110011: begin // R-type instructions
+    // Handle interrupts first (highest priority)
+    if (interrupt_pending) begin
+        jump_signal = 1;
+        jump_addr = mtvec;  // Jump to interrupt handler
+        flush_pipeline = 1;
+        interrupt_taken = 1;
+    end else begin
+        case (opcode)
+            7'b0110011: begin // R-type instructions
             exec_output = alu_inst.ALUoutput;
-        end
-        7'b0010011: begin // I-type instructions
+            end
+            7'b0010011: begin // I-type instructions
             exec_output = alu_inst.ALUoutput;
-        end
-        7'b0000011: begin // Load instructions
+            end
+            7'b0000011: begin // Load instructions
             mem_addr = rs1_value + imm;
-        end
-        7'b0100011: begin // Store instructions
+            end
+            7'b0100011: begin // Store instructions
             mem_addr = rs1_value + imm;
-        end
-        7'b1100011: begin // Branch instructions
+            end
+            7'b1100011: begin // Branch instructions
             case (instr_id)
                 6'h1C: begin // BEQ
                     if (rs1_value == rs2_value) begin
@@ -173,36 +196,59 @@ always @(*) begin
                 default: begin
                 end
             endcase
-        end
-        7'b1101111: begin // JAL
+            end
+            7'b1101111: begin // JAL
             jump_signal = 1;
             jump_addr = pc_input + imm;
             exec_output = pc_input + 4;
             flush_pipeline = 1;
-        end
-        7'b1100111: begin // JALR
+            end
+            7'b1100111: begin // JALR
             jump_signal = 1;
             jump_addr = (rs1_value + imm) & 32'hFFFFFFFE;
             exec_output = pc_input + 4;
             flush_pipeline = 1;
-        end
-        7'b0110111: begin // LUI
+            end
+            7'b0110111: begin // LUI
             exec_output = imm;
-        end
-        7'b0010111: begin // AUIPC
+            end
+            7'b0010111: begin // AUIPC
             exec_output = pc_input + imm;
-        end
-        7'b1110011: begin // CSR instructions
-            exec_output = csr_rd_value;  // Use CSR execution unit output
-        end
-        7'b0001111: begin // MISC-MEM (fence instructions)
+            end
+            7'b1110011: begin // System instructions
+            case (instr_id)
+                INSTR_MRET: begin
+                    jump_signal = 1;
+                    jump_addr = mepc;  // Return from interrupt
+                    flush_pipeline = 1;
+                    mret_instruction = 1;
+                end
+                INSTR_ECALL: begin
+                    jump_signal = 1;
+                    jump_addr = mtvec;  // Jump to trap handler
+                    flush_pipeline = 1;
+                    ecall_exception = 1;
+                end
+                INSTR_EBREAK: begin
+                    jump_signal = 1;
+                    jump_addr = mtvec;  // Jump to trap handler
+                    flush_pipeline = 1;
+                    ebreak_exception = 1;
+                end
+                default: begin
+                    exec_output = csr_rd_value;  // CSR instructions
+                end
+            endcase
+            end
+            7'b0001111: begin // MISC-MEM (fence instructions)
             if (instr_id == INSTR_FENCE_I) begin
                 flush_pipeline = 1;
             end
-        end
-        default: begin
-        end
-    endcase
+            end
+            default: begin
+            end
+        endcase
+    end
 end
 
 endmodule

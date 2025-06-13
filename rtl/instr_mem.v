@@ -11,6 +11,7 @@ reg [DATA_WIDTH-1:0] instr_ram [0:MEM_SIZE-1];
 
 `ifdef COCOTB_SIM
 initial begin
+    $display("Loading instruction memory from file: %s", `INSTR_HEX_FILE);
     $readmemh(`INSTR_HEX_FILE, instr_ram);
 end
 `else

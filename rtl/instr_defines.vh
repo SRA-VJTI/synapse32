@@ -65,6 +65,11 @@ localparam [5:0] INSTR_CSRRWI = 6'h2A;
 localparam [5:0] INSTR_CSRRSI = 6'h2B;
 localparam [5:0] INSTR_CSRRCI = 6'h2C;
 
+// System instructions (add these after CSR instructions)
+localparam [5:0] INSTR_MRET    = 6'h2D;
+localparam [5:0] INSTR_ECALL   = 6'h2E;
+localparam [5:0] INSTR_EBREAK  = 6'h2F;
+
 // Unknown or NOP
 localparam [5:0] INSTR_INVALID = 6'h00;
 

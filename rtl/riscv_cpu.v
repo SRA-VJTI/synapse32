@@ -9,7 +9,12 @@ module riscv_cpu (
     output wire module_mem_wr_en,
     output wire module_mem_rd_en,
     output wire [31:0] module_read_addr,
-    output wire [31:0] module_write_addr
+    output wire [31:0] module_write_addr,
+
+    // Add interrupt input ports (add these to module ports)
+    input wire timer_interrupt,
+    input wire software_interrupt,
+    input wire external_interrupt
 );
 
     // Instantiate PC
@@ -194,6 +199,32 @@ module riscv_cpu (
     wire csr_read_enable;
     wire csr_valid;
 
+    // Interrupt controller signals
+    wire interrupt_pending;
+    wire [31:0] interrupt_cause;
+    wire [31:0] interrupt_pc;
+    wire interrupt_taken;
+    wire mret_instruction;
+    wire ecall_exception;
+    wire ebreak_exception;
+
+    // Instantiate interrupt controller
+    interrupt_controller int_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .timer_interrupt(timer_interrupt),
+        .software_interrupt(software_interrupt),
+        .external_interrupt(external_interrupt),
+        .mstatus(csr_read_data), // Will need to connect properly
+        .mie(csr_file_inst.mie),
+        .mip(csr_file_inst.mip),
+        .interrupt_pending(interrupt_pending),
+        .interrupt_cause(interrupt_cause),
+        .interrupt_taken(interrupt_taken),
+        .current_pc(pc_inst0_out),
+        .interrupt_pc(interrupt_pc)
+    );
+
     // Instantiate CSR file at CPU level
     csr_file csr_file_inst (
         .clk(clk),
@@ -203,7 +234,17 @@ module riscv_cpu (
         .write_enable(csr_write_enable),
         .read_enable(csr_read_enable),
         .read_data(csr_read_data),
-        .csr_valid(csr_valid)
+        .csr_valid(csr_valid),
+        .interrupt_pending(interrupt_pending),
+        .interrupt_cause_in(interrupt_cause),
+        .interrupt_pc_in(interrupt_pc),
+        .interrupt_taken(interrupt_taken),
+        .mret_instruction(mret_instruction),
+        .ecall_exception(ecall_exception),
+        .ebreak_exception(ebreak_exception),
+        .timer_interrupt(timer_interrupt),
+        .software_interrupt(software_interrupt),
+        .external_interrupt(external_interrupt)
     );
 
     execution_unit ex_unit_inst0 (
@@ -236,7 +277,17 @@ module riscv_cpu (
         .mem_addr(ex_inst0_mem_addr_out),
         .rs1_value_out(ex_inst0_rs1_value_out),
         .rs2_value_out(ex_inst0_rs2_value_out),
-        .flush_pipeline(execution_flush)
+        .flush_pipeline(execution_flush),
+
+        // Interrupt connections
+        .interrupt_pending(interrupt_pending),
+        .interrupt_cause(interrupt_cause),
+        .mtvec(csr_file_inst.mtvec),
+        .mepc(csr_file_inst.mepc),
+        .interrupt_taken(interrupt_taken),
+        .mret_instruction(mret_instruction),
+        .ecall_exception(ecall_exception),
+        .ebreak_exception(ebreak_exception)
     );
 
     // Memory Stage

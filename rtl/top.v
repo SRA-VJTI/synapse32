@@ -2,6 +2,12 @@
 module top (
     input wire clk,
     input wire rst,
+    
+    // Interrupt inputs
+    input wire timer_interrupt,
+    input wire software_interrupt,
+    input wire external_interrupt,
+    
     // Optional debug outputs
     output wire [31:0] pc_debug,
     output wire [31:0] instr_debug
@@ -30,6 +36,9 @@ module top (
     riscv_cpu cpu_inst (
         .clk(clk),
         .rst(rst),
+        .timer_interrupt(timer_interrupt),
+        .software_interrupt(software_interrupt),
+        .external_interrupt(external_interrupt),
         .module_instr_in(instr_to_cpu),
         .module_read_data_in(mem_read_data),
         .module_pc_out(cpu_pc_out),

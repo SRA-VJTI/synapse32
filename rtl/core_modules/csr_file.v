@@ -7,7 +7,21 @@ module csr_file (
     input wire write_enable,
     input wire read_enable,
     output reg [31:0] read_data,
-    output wire csr_valid
+    output wire csr_valid,
+
+    // Add interrupt handling ports
+    input wire interrupt_pending,
+    input wire [31:0] interrupt_cause_in,
+    input wire [31:0] interrupt_pc_in,
+    input wire interrupt_taken,
+    input wire mret_instruction,
+    input wire ecall_exception,
+    input wire ebreak_exception,
+    
+    // Timer interrupt input
+    input wire timer_interrupt,
+    input wire software_interrupt,
+    input wire external_interrupt
 );
 
     // Common CSR addresses
@@ -59,7 +73,43 @@ module csr_file (
         end else begin
             cycle_counter <= cycle_counter + 1;
             
-            if (write_enable && csr_valid) begin
+            // Update MIP based on interrupt inputs
+            mip[3] <= software_interrupt;  // MSIP
+            mip[7] <= timer_interrupt;     // MTIP
+            mip[11] <= external_interrupt; // MEIP
+            
+            // Handle interrupt entry
+            if (interrupt_taken) begin
+                mepc <= interrupt_pc_in;        // Save current PC
+                mcause <= interrupt_cause_in;   // Save interrupt cause
+                mstatus[7] <= mstatus[3];        // Save MIE to MPIE
+                mstatus[3] <= 1'b0;              // Disable interrupts
+            end
+            
+            // Handle MRET
+            else if (mret_instruction) begin
+                mstatus[3] <= mstatus[7];        // Restore MIE from MPIE
+                mstatus[7] <= 1'b1;              // Set MPIE to 1
+            end
+            
+            // Handle ECALL exception
+            else if (ecall_exception) begin
+                mepc <= interrupt_pc_in;         // Save current PC
+                mcause <= 32'h0000000B;          // Environment call from M-mode
+                mstatus[7] <= mstatus[3];        // Save MIE to MPIE
+                mstatus[3] <= 1'b0;              // Disable interrupts
+            end
+            
+            // Handle EBREAK exception
+            else if (ebreak_exception) begin
+                mepc <= interrupt_pc_in;         // Save current PC
+                mcause <= 32'h00000003;          // Breakpoint
+                mstatus[7] <= mstatus[3];        // Save MIE to MPIE
+                mstatus[3] <= 1'b0;              // Disable interrupts
+            end
+            
+            // Normal CSR writes
+            else if (write_enable && csr_valid) begin
                 case (csr_addr)
                     CSR_MSTATUS:  mstatus <= write_data;
                     CSR_MIE:      mie <= write_data;
@@ -68,10 +118,9 @@ module csr_file (
                     CSR_MEPC:     mepc <= write_data;
                     CSR_MCAUSE:   mcause <= write_data;
                     CSR_MTVAL:    mtval <= write_data;
-                    CSR_MIP:      mip <= write_data;
-                    default: // Read-only CSRs
-                        // Do nothing for read-only CSRs
-                        ;
+                    // MIP is updated by hardware, only software bits writable
+                    CSR_MIP:      mip <= (mip & 32'h888) | (write_data & 32'h777);
+                    default: ;
                 endcase
             end
         end

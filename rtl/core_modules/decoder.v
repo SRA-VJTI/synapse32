@@ -125,16 +125,24 @@ module decoder (
                     default: instr_id = INSTR_INVALID;
                 endcase
             end
-            7'b1110011: begin  // CSR instructions
-                case (func3)
-                    3'h1: instr_id = INSTR_CSRRW;
-                    3'h2: instr_id = INSTR_CSRRS;
-                    3'h3: instr_id = INSTR_CSRRC;
-                    3'h5: instr_id = INSTR_CSRRWI;
-                    3'h6: instr_id = INSTR_CSRRSI;
-                    3'h7: instr_id = INSTR_CSRRCI;
-                    default: instr_id = INSTR_INVALID;
-                endcase
+            7'b1110011: begin  // System instructions
+                if (instr == 32'h30200073) begin      // MRET
+                    instr_id = INSTR_MRET;
+                end else if (instr == 32'h00000073) begin  // ECALL
+                    instr_id = INSTR_ECALL;
+                end else if (instr == 32'h00100073) begin  // EBREAK
+                    instr_id = INSTR_EBREAK;
+                end else begin
+                    case (func3)
+                        3'h1: instr_id = INSTR_CSRRW;
+                        3'h2: instr_id = INSTR_CSRRS;
+                        3'h3: instr_id = INSTR_CSRRC;
+                        3'h5: instr_id = INSTR_CSRRWI;
+                        3'h6: instr_id = INSTR_CSRRSI;
+                        3'h7: instr_id = INSTR_CSRRCI;
+                        default: instr_id = INSTR_INVALID;
+                    endcase
+                end
             end
             default:    instr_id = INSTR_INVALID;
         endcase
