@@ -10,8 +10,10 @@ module riscv_cpu (
     output wire module_mem_rd_en,
     output wire [31:0] module_read_addr,
     output wire [31:0] module_write_addr,
+    output wire [3:0] module_write_byte_enable,  // Write byte enables
+    output wire [2:0] module_load_type,          // Load type
 
-    // Add interrupt input ports (add these to module ports)
+    // Interrupt inputs
     input wire timer_interrupt,
     input wire software_interrupt,
     input wire external_interrupt
@@ -215,7 +217,7 @@ module riscv_cpu (
         .timer_interrupt(timer_interrupt),
         .software_interrupt(software_interrupt),
         .external_interrupt(external_interrupt),
-        .mstatus(csr_read_data), // Will need to connect properly
+        .mstatus(csr_file_inst.mstatus),
         .mie(csr_file_inst.mie),
         .mip(csr_file_inst.mip),
         .interrupt_pending(interrupt_pending),
@@ -336,18 +338,21 @@ module riscv_cpu (
     );
 
     // Instantiate Memory Unit
-    // Sets read and write enable signals based on instruction ID
     wire mem_unit_inst0_wr_enable_out;
     wire mem_unit_inst0_read_enable_out;
     wire [31:0] mem_unit_inst0_wr_data_out;
     wire [31:0] mem_unit_inst0_read_addr_out;
     wire [31:0] mem_unit_inst0_wr_addr_out;
+    wire [3:0] mem_unit_inst0_write_byte_enable_out;  // Write byte enables
+    wire [2:0] mem_unit_inst0_load_type_out;          // Load type
 
     assign module_mem_wr_en = mem_unit_inst0_wr_enable_out;
     assign module_mem_rd_en = mem_unit_inst0_read_enable_out;
     assign module_write_addr = mem_unit_inst0_wr_addr_out;
     assign module_read_addr = mem_unit_inst0_read_addr_out;
     assign module_wr_data_out = mem_unit_inst0_wr_data_out;
+    assign module_write_byte_enable = mem_unit_inst0_write_byte_enable_out;
+    assign module_load_type = mem_unit_inst0_load_type_out;
 
     memory_unit mem_unit_inst0 (
         .instr_id(ex_mem_inst0_instr_id_out),
@@ -357,7 +362,9 @@ module riscv_cpu (
         .read_enable(mem_unit_inst0_read_enable_out),
         .wr_data(mem_unit_inst0_wr_data_out),
         .read_addr(mem_unit_inst0_read_addr_out),
-        .wr_addr(mem_unit_inst0_wr_addr_out)
+        .wr_addr(mem_unit_inst0_wr_addr_out),
+        .write_byte_enable(mem_unit_inst0_write_byte_enable_out),
+        .load_type(mem_unit_inst0_load_type_out)
     );
 
     // Instantiate MEM_WB pipeline register
@@ -448,24 +455,5 @@ module riscv_cpu (
     );
 
     // Write Back Stage
-
-
-`ifdef COCOTB_SIM
-    // Add parameter to control FST file path
-    reg [1023:0] dumpfile_path = "riscv_cpu.fst"; // Default path
-    
-    initial begin
-        // Check for custom dump file name from plusargs
-        if (!$value$plusargs("dumpfile=%s", dumpfile_path)) begin
-            // Use default if not specified
-            dumpfile_path = "riscv_cpu.fst";
-        end
-        
-        // Set up wave dumping
-        $dumpfile(dumpfile_path);
-        $dumpvars(0, riscv_cpu);
-        $display("FST dump file: %s", dumpfile_path);
-    end
-`endif
 
 endmodule

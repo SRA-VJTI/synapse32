@@ -9,7 +9,8 @@
     "verilog.linting.verilator.includePath": [
         "rtl",
         "rtl/pipeline_stages",
-        "rtl/core_modules"
+        "rtl/core_modules",
+        "rtl/include"
     ],
     "verilog.linting.linter": "verilator",
     "verilog.languageServer.rustHdl.path": ""
