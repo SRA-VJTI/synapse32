@@ -293,6 +293,7 @@ def runCocotbTests():
         root_dir = os.path.dirname(root_dir)
     print(f"Using RTL directory: {root_dir}/rtl")
     rtl_dir = os.path.join(root_dir, "rtl")
+    incl_dir = os.path.join(rtl_dir, "include")
     for root, _, files in os.walk(rtl_dir):
         for file in files:
             if file.endswith(".v") or file.endswith(".sv"):
@@ -325,7 +326,7 @@ def runCocotbTests():
             toplevel="riscv_cpu",
             module="test_csr",
             testcase=test_name,
-            includes=[rtl_dir],
+            includes=[str(incl_dir)],
             simulator="icarus",
             timescale="1ns/1ps",
             plus_args=[f"+dumpfile={waveform_path}"]
