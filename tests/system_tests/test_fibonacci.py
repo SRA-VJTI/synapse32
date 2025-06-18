@@ -12,7 +12,6 @@ import binascii
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
-# Updated memory addresses using new memory map
 DATA_MEM_BASE = 0x10000000
 CPU_DONE_ADDR = DATA_MEM_BASE + 0xFF          # 0x10000000
 FIBONACCI_START_ADDR = DATA_MEM_BASE + 0x10    # 0x10000010

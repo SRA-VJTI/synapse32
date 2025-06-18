@@ -10,7 +10,6 @@
 
 #define N 10
 static uint8_t elements[N] = {0};
-// Use new memory map addresses
 #define DATA_MEM_BASE 0x10000000
 #define CPU_DONE_ADDR (DATA_MEM_BASE + 0xFF)      // 0x10000000
 #define FIBONACCI_START_ADDR (DATA_MEM_BASE + 0x10) // 0x10000010

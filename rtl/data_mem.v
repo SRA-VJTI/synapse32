@@ -62,7 +62,7 @@ module data_mem #(parameter DATA_WIDTH = 32, ADDR_WIDTH = 32, MEM_SIZE = 1048576
         32'h0  // Invalid load type
     ) : 32'h0;
 
-    // CORRECTED: Synchronous write logic for byte-addressable memory
+    // Synchronous write logic for byte-addressable memory
     always @(posedge clk) begin
         if (wr_en && (addr < MEM_SIZE)) begin
             // For byte writes: always write wr_data[7:0] to data_ram[addr]

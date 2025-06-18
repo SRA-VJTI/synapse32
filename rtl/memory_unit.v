@@ -19,7 +19,7 @@ assign wr_enable = (instr_id == INSTR_SB) || (instr_id == INSTR_SH) || (instr_id
 assign wr_addr = mem_addr;
 assign read_addr = mem_addr;
 
-// SIMPLIFIED: For byte-addressable memory, byte enable is much simpler
+// For byte-addressable memory, byte enable is much simpler
 assign write_byte_enable = 
     (instr_id == INSTR_SB) ? 4'b0001 :  // Always write 1 byte at addr
     (instr_id == INSTR_SH) ? (
@@ -29,7 +29,7 @@ assign write_byte_enable =
         (mem_addr[1:0] == 2'b00) ? 4'b1111 : 4'b0000  // Word must be aligned
     ) : 4'b0000;
 
-// Generate load type encoding (unchanged)
+// Generate load type encoding
 assign load_type = 
     (instr_id == INSTR_LB)  ? 3'b000 :
     (instr_id == INSTR_LH)  ? 3'b001 :
@@ -38,7 +38,7 @@ assign load_type =
     (instr_id == INSTR_LHU) ? 3'b101 :
     3'b111;
 
-// Always put data in the low bits (unchanged)
+// Always put data in the low bits
 assign wr_data = 
     (instr_id == INSTR_SB) ? {24'b0, rs2_value[7:0]} :
     (instr_id == INSTR_SH) ? {16'b0, rs2_value[15:0]} :
