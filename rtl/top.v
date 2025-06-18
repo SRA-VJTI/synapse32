@@ -5,9 +5,12 @@ module top (
     input wire clk,
     input wire rst,
     
-    // External interrupt inputs (timer is now internal)
+    // External interrupt inputs
     input wire software_interrupt,
     input wire external_interrupt,
+    
+    // UART output
+    output wire uart_tx,
     
     // Optional debug outputs
     output wire [31:0] pc_debug,
@@ -32,6 +35,11 @@ module top (
     wire timer_valid;
     wire timer_interrupt;
     
+    // UART module wires
+    wire [31:0] uart_read_data;
+    wire uart_valid;
+    wire uart_access;
+    
     // Memory address decoding using memory map
     wire data_mem_access;
     wire timer_access;
@@ -39,13 +47,15 @@ module top (
     // Use memory map macros for clean address decoding
     assign data_mem_access = `IS_DATA_MEM(data_mem_addr);
     assign timer_access = `IS_TIMER_MEM(data_mem_addr);
+    assign uart_access = `IS_UART_MEM(data_mem_addr);
     
     // Select the appropriate address for memory access
     assign data_mem_addr = cpu_mem_write_en ? cpu_mem_write_addr : cpu_mem_read_addr;
     
     // Multiplex read data based on address
     assign mem_read_data = timer_access ? timer_read_data : 
-                          data_mem_access ? data_mem_read_data : 32'h0;
+                          data_mem_access ? data_mem_read_data :
+                          uart_access ? uart_read_data : 32'h0;
     
     // Debug outputs
     assign pc_debug = cpu_pc_out;
@@ -112,6 +122,18 @@ module top (
         .timer_interrupt(timer_interrupt)
     );
 
+    // Instantiate the UART module
+    uart uart_inst (
+        .clk(clk),
+        .rst(rst),
+        .addr(data_mem_addr),
+        .write_data(cpu_mem_write_data),
+        .write_enable(cpu_mem_write_en && uart_access),
+        .read_enable(cpu_mem_read_en && uart_access),
+        .read_data(uart_read_data),
+        .uart_valid(uart_valid),
+        .tx(uart_tx)
+    );
 
 `ifdef COCOTB_SIM
     // Add parameter to control FST file path

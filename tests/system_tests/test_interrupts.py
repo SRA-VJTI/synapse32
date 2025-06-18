@@ -28,7 +28,7 @@ def create_interrupt_test_hex(test_name, instr_mem):
         while len(padded_instr) < 512:
             padded_instr.append(0x00000013)  # NOP
         
-        # Write instructions as 4 per line (matching your format)
+        # Write instructions as 4 per line
         for i in range(0, len(padded_instr), 4):
             line = " ".join(f"{padded_instr[j]:08x}" for j in range(i, min(i+4, len(padded_instr))))
             f.write(f"{line}\n")
