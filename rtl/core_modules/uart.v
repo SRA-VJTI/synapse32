@@ -170,7 +170,7 @@ module uart (
                         
                         TX_DATA: begin
                             if (tx_bit_count < 8) begin
-                                tx_out <= tx_data[tx_bit_count];
+                                tx_out <= tx_data[tx_bit_count[2:0]];
                                 tx_bit_count <= tx_bit_count + 1'b1;
                             end else begin
                                 tx_state <= TX_STOP;

@@ -29,6 +29,7 @@ module top (
     wire [31:0] data_mem_addr;
     wire [3:0] cpu_write_byte_enable;  // Write byte enables
     wire [2:0] cpu_load_type;          // Load type
+    wire [31:0] instr_read_data;
     
     // Timer module wires
     wire [31:0] timer_read_data;
@@ -43,11 +44,13 @@ module top (
     // Memory address decoding using memory map
     wire data_mem_access;
     wire timer_access;
+    wire instr_mem_access;
     
     // Use memory map macros for clean address decoding
     assign data_mem_access = `IS_DATA_MEM(data_mem_addr);
     assign timer_access = `IS_TIMER_MEM(data_mem_addr);
     assign uart_access = `IS_UART_MEM(data_mem_addr);
+    assign instr_mem_access = `IS_INSTR_MEM(data_mem_addr);
     
     // Select the appropriate address for memory access
     assign data_mem_addr = cpu_mem_write_en ? cpu_mem_write_addr : cpu_mem_read_addr;
@@ -55,7 +58,8 @@ module top (
     // Multiplex read data based on address
     assign mem_read_data = timer_access ? timer_read_data : 
                           data_mem_access ? data_mem_read_data :
-                          uart_access ? uart_read_data : 32'h0;
+                          uart_access ? uart_read_data :
+                            instr_mem_access ? instr_read_data : 32'h00000000;
     
     // Debug outputs
     assign pc_debug = cpu_pc_out;
@@ -90,7 +94,10 @@ module top (
         .MEM_SIZE(131072)  // 512KB / 4 bytes = 128K words
     ) instr_mem_inst (
         .instr_addr(cpu_pc_out),
-        .instr(instr_to_cpu)
+        .instr_addr_p2(data_mem_addr),
+        .load_type(cpu_load_type),
+        .instr(instr_to_cpu),
+        .instr_p2(instr_read_data)
     );
 
     // Instantiate data memory  
