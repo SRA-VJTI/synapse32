@@ -109,7 +109,6 @@ jobs:
           set -x  # Enable command echo for debugging
 
           # Set simulator environment variable to use Icarus Verilog
-          export SIM=icarus
           export COCOTB_REDUCED_LOG_FMT=1
 
           # Show directories and project structure
@@ -127,7 +126,6 @@ jobs:
           set -x  # Enable command echo for debugging
 
           # Set simulator environment variables
-          export SIM=icarus
           export COCOTB_REDUCED_LOG_FMT=1
 
           echo "Running tests individually for better error messages..."
