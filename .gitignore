@@ -8,6 +8,8 @@
 #verilog build files
 *.vcd
 *.vvp
+*.fst
+results.xml
 
 #python build files
 *.pyc

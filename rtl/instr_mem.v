@@ -25,14 +25,10 @@ initial begin
         $display("No instruction file specified, initializing memory with NOPs.");
     `endif
     // Debug: Print first few instructions after loading
-    $display("Instruction memory loaded - first few entries:");
-    $display("  [0x00]: 0x%08h", instr_ram[0]);
-    $display("  [0x04]: 0x%08h", instr_ram[1]);
-    $display("  [0x08]: 0x%08h", instr_ram[2]);
-    if (MEM_SIZE > 74) begin // Address 0x128 / 4 = 74 (0x4A)
-        $display("  [0x128]: 0x%08h (string area)", instr_ram[74]);
-        $display("  [0x12C]: 0x%08h", instr_ram[75]);
-    end
+    // $display("Instruction memory loaded - first few entries:");
+    // $display("  [0x00]: 0x%08h", instr_ram[0]);
+    // $display("  [0x04]: 0x%08h", instr_ram[1]);
+    // $display("  [0x08]: 0x%08h", instr_ram[2]);
 end
 `else
 initial begin
@@ -126,15 +122,5 @@ always @(*) begin
         default: instr_p2 = 32'h0;                              // Invalid load type
     endcase
 end
-
-`ifdef COCOTB_SIM
-// Debug: Monitor data accesses to instruction memory
-always @(instr_addr_p2 or load_type) begin
-    if (instr_addr_p2 > 0 && instr_addr_p2 <= 32'h0007FFFF) begin // Within instruction memory range
-        $display("Time %t: Data read from instruction memory - addr=0x%08h, load_type=%b, data=0x%08h", 
-                 $time, instr_addr_p2, load_type, instr_p2);
-    end
-end
-`endif
 
 endmodule
