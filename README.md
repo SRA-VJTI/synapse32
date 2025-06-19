@@ -2,8 +2,6 @@
 
 Synapse-32 is a 32-bit RISC-V CPU core written in Verilog, supporting RV32I instructions, along with Zicsr and Zifencei extensions.
 
----
-
 ## Processor Architecture
 
 ### 5-Stage Pipeline
@@ -49,8 +47,6 @@ The CPU implements several techniques to handle pipeline hazards:
    - Flushes the pipeline when branches are taken
    - Supports efficient control flow
 
----
-
 ## Running Code on the CPU
 
 To compile the CPU and view the simulation, you need to have the following tools installed:
@@ -83,8 +79,6 @@ To compile the CPU and run the simulation of the example hello world program, fo
    ```
 
 The helper script `run_c_code.py` will compile the C code, generate the necessary files, and run the simulation using verilator. It will also generate a waveform file for viewing in GTKWave.
-
----
 
 ## CPU Regression Tests
 
@@ -120,17 +114,6 @@ The regression tests include:
 - **CSR Tests**: Validates the control and status register operations.
 - **UART Tests**: Validates the UART communication functionality.
 
----
-
-### Tech Stack
-
-- Verilog
-- Icarus Verilog
-- Verilator
-- Gtkwave
-- Python with Cocotb
----
-
 ## Contributors
 
 - [Saish Karole](https://github.com/saishock1504)
@@ -139,7 +122,6 @@ The regression tests include:
 - [Chanchal Bahrani](https://github.com/Chanchal1010)
 - [Shri Devanand](https://github.com/5iri)
 
----
 ### Acknowledgements and Resources
 
 - [SRA VJTI Eklavya 2023](https://sravjti.in/)
