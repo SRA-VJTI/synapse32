@@ -1,0 +1,167 @@
+name: CI_Workflow
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install system dependencies
+        run: |
+          set -x  # Enable command echo for debugging
+          sudo apt-get update
+          sudo apt-get install -y iverilog gtkwave
+
+          # Check if tools are installed correctly
+          which iverilog || echo "Iverilog not found"
+          which gtkwave || echo "GTKWave not found"
+
+          # Install RISC-V toolchain
+          wget -q https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack/releases/download/v12.3.0-1/xpack-riscv-none-elf-gcc-12.3.0-1-linux-x64.tar.gz
+          mkdir -p ~/.local/xPacks
+          tar xf xpack-riscv-none-elf-gcc-12.3.0-1-linux-x64.tar.gz -C ~/.local/xPacks
+          echo "$HOME/.local/xPacks/xpack-riscv-none-elf-gcc-12.3.0-1/bin" >> $GITHUB_PATH
+
+          # Verify RISC-V toolchain installation
+          ls -la ~/.local/xPacks/xpack-riscv-none-elf-gcc-12.3.0-1/bin/
+
+      - name: Install Python dependencies
+        run: |
+          set -x  # Enable command echo for debugging
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements.txt
+
+          # Verify installed packages
+          pip list
+
+      - name: Setup tools and symlinks
+        run: |
+          set -x  # Enable command echo for debugging
+
+          # Create symlinks for compatibility
+          sudo ln -sf ~/.local/xPacks/xpack-riscv-none-elf-gcc-12.3.0-1/bin/riscv-none-elf-gcc /usr/local/bin/riscv64-unknown-elf-gcc
+          sudo ln -sf ~/.local/xPacks/xpack-riscv-none-elf-gcc-12.3.0-1/bin/riscv-none-elf-objcopy /usr/local/bin/riscv64-unknown-elf-objcopy
+          sudo ln -sf ~/.local/xPacks/xpack-riscv-none-elf-gcc-12.3.0-1/bin/riscv-none-elf-objdump /usr/local/bin/riscv64-unknown-elf-objdump
+          sudo ln -sf ~/.local/xPacks/xpack-riscv-none-elf-gcc-12.3.0-1/bin/riscv-none-elf-as /usr/local/bin/riscv64-unknown-elf-as
+          sudo ln -sf ~/.local/xPacks/xpack-riscv-none-elf-gcc-12.3.0-1/bin/riscv-none-elf-ld /usr/local/bin/riscv64-unknown-elf-ld
+
+          # Also create symlinks for truncate command used in the tests
+          sudo ln -sf /usr/bin/truncate /usr/local/bin/truncate
+
+          # Verify symlinks were created correctly
+          ls -la /usr/local/bin/riscv64-unknown-elf-*
+          ls -la /usr/local/bin/truncate
+
+      - name: Verify tools
+        run: |
+          set -x  # Enable command echo for debugging
+
+          # Verify tools are installed and working
+          riscv64-unknown-elf-gcc --version
+          iverilog -v || true
+
+          # Verify tools exist with which command
+          which riscv64-unknown-elf-gcc
+          which iverilog
+
+      - name: Setup Python environment
+        run: |
+          set -x  # Enable command echo for debugging
+
+          # Create a Python virtual environment for the tests
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r tests/requirements.txt
+
+          # Install additional dependencies that might be needed
+          pip install pytest-xdist
+
+          # Setup Python environment variables for cocotb
+          export PYTHONPATH=$PYTHONPATH:$(pwd)
+          export LIBPYTHON_LOC=$(python -c "import find_libpython; print(find_libpython.find_libpython())")
+
+          # Ensure Verilator uses the Python interpreter from the virtual environment
+          export PATH=$(pwd)/.venv/bin:$PATH
+
+          # Print environment variables for debugging
+          env | grep PYTHON
+          echo "LIBPYTHON_LOC: $LIBPYTHON_LOC"
+
+          # Save environment for other steps
+          echo "PYTHONPATH=$PYTHONPATH" >> $GITHUB_ENV
+          echo "LIBPYTHON_LOC=$LIBPYTHON_LOC" >> $GITHUB_ENV
+          echo "VIRTUAL_ENV=$(pwd)/.venv" >> $GITHUB_ENV
+          echo "$(pwd)/.venv/bin" >> $GITHUB_PATH
+
+      - name: Run project tests
+        run: |
+          set -x  # Enable command echo for debugging
+
+          # Set simulator environment variable to use Icarus Verilog
+          export SIM=icarus
+          export COCOTB_REDUCED_LOG_FMT=1
+
+          # Show directories and project structure
+          ls -la
+          find . -name "rtl" -type d
+          ls -la tests
+
+          # Run tests with more detailed output to diagnose issues
+          cd tests
+          python -m pytest -v
+
+      - name: Run individual tests on failure
+        if: failure()
+        run: |
+          set -x  # Enable command echo for debugging
+
+          # Set simulator environment variables
+          export SIM=icarus
+          export COCOTB_REDUCED_LOG_FMT=1
+
+          echo "Running tests individually for better error messages..."
+
+          # Verify tools are present
+          which iverilog
+          iverilog -v || true
+
+          cd tests
+
+          echo "===================="
+          echo "Running test_fibonacci.py:"
+          python -m pytest -v system_tests/test_fibonacci.py::runCocotbTests || echo "test_fibonacci.py failed with exit code $?"
+
+          echo "===================="
+          echo "Running test_riscv_cpu_basic.py:"
+          python -m pytest -v system_tests/test_riscv_cpu_basic.py::runCocotbTests || echo "test_riscv_cpu_basic.py failed with exit code $?"
+
+          echo "===================="
+          echo "Running test_alu.py:"
+          python -m pytest -v unit_tests/test_alu.py::runCocotbTests || echo "test_alu.py failed with exit code $?"
+
+          echo "===================="
+          echo "Running test_decoder_gcc.py:"
+          python -m pytest -v unit_tests/test_decoder_gcc.py::runCocotbTests || echo "test_decoder_gcc.py failed with exit code $?"
+
+          # Additional diagnostic information
+          echo "===================="
+          echo "Checking Iverilog installation:"
+          iverilog -v || true
+          which iverilog
+
+          echo "===================="
+          echo "Checking RISC-V toolchain:"
+          riscv64-unknown-elf-gcc --version
+          which riscv64-unknown-elf-gcc
+
