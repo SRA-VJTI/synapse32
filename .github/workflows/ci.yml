@@ -91,8 +91,8 @@ jobs:
           export PYTHONPATH=$PYTHONPATH:$(pwd)
           export LIBPYTHON_LOC=$(python -c "import find_libpython; print(find_libpython.find_libpython())")
 
-          # Make sure Verilator uses the same Python as our tests
-          sudo ln -sf $(which python) /usr/bin/python3
+          # Ensure Verilator uses the Python interpreter from the virtual environment
+          export PATH=$(pwd)/.venv/bin:$PATH
 
           # Print environment variables for debugging
           env | grep PYTHON
