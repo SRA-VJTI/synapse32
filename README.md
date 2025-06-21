@@ -1,13 +1,6 @@
-# RISC-V-CPU
+# Synapse-32
 
----
-### Introduction
-
-RISC-V  is an instruction set architecture like ARM based on RISC (Reduced Instruction Set Architecture) principles. What sets RISC-V ISA different from others ISAs is its completely open source and free to use.
-
-Above project is a 32-bit RISC-V CPU core written in Verilog , supporting RV32IM instructions. This CPU has been tested on a simulator with an example program and flashed on an UPduino 3.0 FPGA board using Icestorm toolchain
-
----
+Synapse-32 is a 32-bit RISC-V CPU core written in Verilog, supporting RV32I instructions, along with Zicsr and Zifencei extensions.
 
 ## Processor Architecture
 
@@ -54,113 +47,83 @@ The CPU implements several techniques to handle pipeline hazards:
    - Flushes the pipeline when branches are taken
    - Supports efficient control flow
 
----
+## Running Code on the CPU
 
-### Instructions to compile the CPU and view simulation
+To compile the CPU and view the simulation, you need to have the following tools installed:
 
-An example C program can be loaded on the CPU’s program memory for operations.(We have provided an example code under `sim/fibonacci.c` for testing purposes).
+- [Icarus Verilog](https://steveicarus.github.io/iverilog/usage/installation.html)
+- [Verilator](https://verilator.org/guide/latest/install.html)
+- [Gtkwave](https://gtkwave.sourceforge.net/)
+- [Cocotb](https://cocotb.readthedocs.io/en/stable/)
 
-Using RISC-V toolchain, we compile this C code into binary file and then convert into hex files which will be loaded into Instruction memory of our CPU
+You can write any C program to test the CPU, we provide a linker and startup file to help you with that. You can find the linker script and startup file in the `sim` folder of this repository. An example hello world program is provided in the `sim` folder as well.
 
-To compile Verilog files, we are using both Icarus Verilog and Verilator to cross verify our CPU output which will be simulated on Gtkwave. Installation process of above software are linked below:-
+### Compiling the CPU and Running Simulation of the Example Program
 
--[Icarus Verilog](https://steveicarus.github.io/iverilog/usage/installation.html)
--[Verilator](https://verilator.org/guide/latest/install.html)
--[Gtkwave](https://gtkwave.sourceforge.net/)
+To compile the CPU and run the simulation of the example hello world program, follow these steps:
 
-All the necessary commands have been added to the `sim/Makefile`
+1. Navigate to the `sim` folder in your cloned repository:
+   ```bash
+   cd sim
+   ```
+2. Create a virtual environment and install the required dependencies:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # On Windows use .venv\Scripts\activate
+   pip install -r ../tests/requirements.txt # install cocotb and other dependencies
+   ```
 
-##### Steps to compile and view simulation-
+3. Compile the CPU using python script:
+   ```bash
+   python run_c_code.py test_uart_hello.c
+   ```
 
-Navigate to your cloned repository and into the sim folder
-``` 
-cd RISC_V_CPU/sim  
-```
-and run the following command to compile with Icarus Verilog
-``` 
-make sim 
-```
-or run the following command to compile with Verilator
-```
-make sim_verilator
-```
+The helper script `run_c_code.py` will compile the C code, generate the necessary files, and run the simulation using verilator. It will also generate a waveform file for viewing in GTKWave.
 
----
-### Instructions to flash the code on FPGA
+## CPU Regression Tests
 
-To flash the code in your FPGA, you must have first have yosys suite installed. Installations can be done from [here](https://github.com/YosysHQ/yosys)
+The CPU comes with a set of regression tests to ensure its functionality. These tests cover various aspects of the CPU, including instruction execution, pipeline behavior, and hazard handling.
 
-All the necessary commands have been added to the `flash/Makefile`
+These tests are written in Python using the Cocotb framework, which allows for writing testbenches in Python and simulating them with Verilog.
 
-After installation, navigate to your cloned repository and into the flash folder
-```
-$ cd RISC-V-CPU/flash
-```
+To run the regression tests, follow these steps:
 
-and run following command 
-```
-$ make flash
-```
+1. Navigate to the `tests` folder in your cloned repository:
+   ```bash
+   cd tests
+   ```
+2. Create a virtual environment and install the required dependencies:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # On Windows use .venv\Scripts\
+   pip install -r requirements.txt
+   ```
+3. Run the regression tests using pytest:
+   ```bash
+   pytest
+   ```
 
-This will create binary file for flashing on FPGA, make sure that your FPGA is connected to your device before running above command
+### Available Tests
 
----
-
-### Tech Stack
-
-- Verilog
-- Quartus Prime IDE
-- Modelsim Altera
-- Icarus Verilog
-- Verilator
-- Gtkwave
-- Lattice Framework 
-- Python with Cocotb
----
+The regression tests include:
+- **Basic Arithmetic Operations**: Tests for addition, subtraction, and other arithmetic instructions.
+- **Decoder Tests**: Verifies the instruction decoding logic.
+- **Hazard Handling Tests**: Ensures that data forwarding and hazard detection work correctly.
+- **Control Flow Tests**: Validates branch and jump instructions.
+- **Memory Access Tests**: Checks load and store operations.
+- **CSR Tests**: Validates the control and status register operations.
+- **UART Tests**: Validates the UART communication functionality.
 
 ## Contributors
 
 - [Saish Karole](https://github.com/saishock1504)
 - [Atharva Kashalkar](https://github.com/RapidRoger18)
-
---- 
-## Mentors 
-
 - [Zain Siddavatam](https://github.com/SuperChamp234)
 - [Chanchal Bahrani](https://github.com/Chanchal1010)
+- [Shri Vishakh Devanand](https://github.com/5iri)
 
----
 ### Acknowledgements and Resources
 
 - [SRA VJTI Eklavya 2023](https://sravjti.in/)
 - https://www.chipverify.com/verilog/verilog-tutorial
 - https://www.edx.org/course/building-a-risc-v-cpu-core
-
-### Cocotb Testing Framework
-
-The CPU is thoroughly tested using the Cocotb framework, a Python-based testing framework for hardware design.
-
-#### Setting Up Cocotb Environment
-```
-cd tests
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-#### Running Cocotb Tests
-```
-cd tests/system_tests
-python test_riscv_cpu_basic.py
-```
-
-#### Available Tests
-1. **Raw Hazards Test**: Verifies data forwarding functionality
-2. **Control Hazards Test**: Validates branch and jump handling
-3. **Memory Hazards Test**: Tests memory operations and store-load hazards
-
-#### Viewing Test Results
-Test results are saved as FST waveform files in the `waveforms` directory and can be viewed with GTKWave:
-```
-gtkwave waveforms/test_riscv_cpu_raw_hazards.fst
-```
