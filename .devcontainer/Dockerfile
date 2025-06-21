@@ -3,7 +3,7 @@ FROM ubuntu:24.10
 # Install system dependencies and Verilator build deps
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        git help2man perl python3 make autoconf g++ flex bison ccache \
+        git help2man perl python3 python3-venv python3-pip make autoconf g++ flex bison ccache \
         libgoogle-perftools-dev numactl perl-doc \
         ca-certificates \
         libboost-all-dev \
