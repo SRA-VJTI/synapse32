@@ -120,7 +120,7 @@ The regression tests include:
 - [Atharva Kashalkar](https://github.com/RapidRoger18)
 - [Zain Siddavatam](https://github.com/SuperChamp234)
 - [Chanchal Bahrani](https://github.com/Chanchal1010)
-- [Shri Devanand](https://github.com/5iri)
+- [Shri Vishakh Devanand](https://github.com/5iri)
 
 ### Acknowledgements and Resources
 
