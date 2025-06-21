@@ -54,6 +54,22 @@ localparam [5:0] INSTR_JALR  = 6'h23;
 localparam [5:0] INSTR_LUI   = 6'h24;
 localparam [5:0] INSTR_AUIPC = 6'h25;
 
+// System instructions
+localparam [5:0] INSTR_FENCE_I = 6'h26;
+
+// CSR instructions
+localparam [5:0] INSTR_CSRRW  = 6'h27;
+localparam [5:0] INSTR_CSRRS  = 6'h28;
+localparam [5:0] INSTR_CSRRC  = 6'h29;
+localparam [5:0] INSTR_CSRRWI = 6'h2A;
+localparam [5:0] INSTR_CSRRSI = 6'h2B;
+localparam [5:0] INSTR_CSRRCI = 6'h2C;
+
+// System instructions (add these after CSR instructions)
+localparam [5:0] INSTR_MRET    = 6'h2D;
+localparam [5:0] INSTR_ECALL   = 6'h2E;
+localparam [5:0] INSTR_EBREAK  = 6'h2F;
+
 // Unknown or NOP
 localparam [5:0] INSTR_INVALID = 6'h00;
 

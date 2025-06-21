@@ -223,6 +223,7 @@ def runCocotbTests():
         root_dir = os.path.dirname(root_dir)
     print(f"Using RTL directory: {root_dir}/rtl")
     rtl_dir = os.path.join(root_dir, "rtl")
+    incl_dir = os.path.join(rtl_dir, "include")
     verilog_file = os.path.join(rtl_dir, "core_modules", "alu.v")
     
     run(
@@ -230,5 +231,5 @@ def runCocotbTests():
         toplevel="alu",
         module="test_alu",
         simulator="verilator",
-        includes=[rtl_dir],
+        includes=[incl_dir]
     )

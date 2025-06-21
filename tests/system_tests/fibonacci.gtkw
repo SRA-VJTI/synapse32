@@ -1,21 +1,22 @@
 [*]
 [*] GTKWave Analyzer v3.3.120 (w)1999-2024 BSI
-[*] Wed May 28 11:27:54 2025
+[*] Tue Jun 17 20:06:00 2025
 [*]
-[dumpfile] "/workspaces/synapse32/waveforms/fibonacci_test.vcd"
-[dumpfile_mtime] "Wed May 28 11:19:38 2025"
-[dumpfile_size] 330722
+[dumpfile] "/workspaces/synapse32/tests/system_tests/waveforms/uart_hello_output.vcd"
+[dumpfile_mtime] "Tue Jun 17 20:04:43 2025"
+[dumpfile_size] 2306844
 [savefile] "/workspaces/synapse32/tests/system_tests/fibonacci.gtkw"
-[timestart] 1583300
+[timestart] 0
 [size] 1854 1121
 [pos] -1 -1
-*-15.000000 1675000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-1.682103 239 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] top.
 [treeopen] top.cpu_inst.
+[treeopen] top.cpu_inst.ex_unit_inst0.
 [sst_width] 297
-[signals_width] 302
+[signals_width] 429
 [sst_expanded] 1
-[sst_vpaned_height] 260
+[sst_vpaned_height] 288
 @28
 top.cpu_inst.clk
 top.cpu_inst.rst
@@ -47,7 +48,7 @@ top.cpu_inst.ex_unit_inst0.pc_input[31:0]
 top.cpu_inst.ex_unit_inst0.instr_id[5:0]
 @420
 top.cpu_inst.ex_unit_inst0.rs1_addr[4:0]
-@22
+@24
 top.cpu_inst.ex_unit_inst0.rs1_value[31:0]
 @420
 top.cpu_inst.ex_unit_inst0.rs2_addr[4:0]
@@ -72,8 +73,9 @@ top.cpu_inst.mem_unit_inst0.mem_addr[31:0]
 top.cpu_inst.mem_unit_inst0.read_addr[31:0]
 @28
 top.cpu_inst.mem_unit_inst0.read_enable
-@22
+@23
 top.cpu_inst.mem_unit_inst0.rs2_value[31:0]
+@22
 top.cpu_inst.mem_unit_inst0.wr_addr[31:0]
 @24
 top.cpu_inst.mem_unit_inst0.wr_data[31:0]
@@ -150,9 +152,9 @@ top.cpu_inst.rf_inst0.rs2_value[31:0]
 top.cpu_inst.rf_inst0.wr_en
 @1401200
 -rfile
-@800200
+@c00200
 -forward_unit
-@25
+@24
 top.cpu_inst.forwarding_unit_inst0.forward_a[1:0]
 top.cpu_inst.forwarding_unit_inst0.forward_b[1:0]
 @22
@@ -174,9 +176,126 @@ top.cpu_inst.forwarding_unit_inst0.rs2_addr_ex[4:0]
 @28
 top.cpu_inst.forwarding_unit_inst0.rs2_valid_ex
 top.cpu_inst.forwarding_unit_inst0.wr_en_wb
-@1000200
+@1401200
 -forward_unit
 @22
 top.cpu_inst.mem_wb_inst0_exec_output_out[31:0]
+@c00200
+-csr_exec
+@22
+top.cpu_inst.csr_file_inst.csr_addr[11:0]
+@28
+top.cpu_inst.csr_file_inst.csr_valid
+@22
+top.cpu_inst.csr_file_inst.cycle_counter[63:0]
+@28
+top.cpu_inst.csr_file_inst.ebreak_exception
+top.cpu_inst.csr_file_inst.ecall_exception
+top.cpu_inst.csr_file_inst.external_interrupt
+@22
+top.cpu_inst.csr_file_inst.interrupt_cause_in[31:0]
+top.cpu_inst.csr_file_inst.interrupt_pc_in[31:0]
+@28
+top.cpu_inst.csr_file_inst.interrupt_pending
+top.cpu_inst.csr_file_inst.interrupt_taken
+@22
+top.cpu_inst.csr_file_inst.mcause[31:0]
+top.cpu_inst.csr_file_inst.mepc[31:0]
+top.cpu_inst.csr_file_inst.mie[31:0]
+top.cpu_inst.csr_file_inst.mip[31:0]
+top.cpu_inst.csr_file_inst.misa[31:0]
+@28
+top.cpu_inst.csr_file_inst.mret_instruction
+@22
+top.cpu_inst.csr_file_inst.mscratch[31:0]
+top.cpu_inst.csr_file_inst.mstatus[31:0]
+top.cpu_inst.csr_file_inst.mtval[31:0]
+top.cpu_inst.csr_file_inst.mtvec[31:0]
+top.cpu_inst.csr_file_inst.read_data[31:0]
+@28
+top.cpu_inst.csr_file_inst.read_enable
+top.cpu_inst.csr_file_inst.rst
+top.cpu_inst.csr_file_inst.software_interrupt
+top.cpu_inst.csr_file_inst.timer_interrupt
+@22
+top.cpu_inst.csr_file_inst.write_data[31:0]
+@28
+top.cpu_inst.csr_file_inst.write_enable
+@1401200
+-csr_exec
+@c00200
+-csr
+@22
+top.cpu_inst.ex_unit_inst0.csr_exec_inst.csr_read_data[31:0]
+top.cpu_inst.ex_unit_inst0.csr_exec_inst.csr_write_data[31:0]
+@28
+top.cpu_inst.ex_unit_inst0.csr_exec_inst.csr_write_enable
+@22
+top.cpu_inst.ex_unit_inst0.csr_exec_inst.instr_id[5:0]
+top.cpu_inst.ex_unit_inst0.csr_exec_inst.rd_value[31:0]
+top.cpu_inst.ex_unit_inst0.csr_exec_inst.rs1_addr[4:0]
+top.cpu_inst.ex_unit_inst0.csr_exec_inst.rs1_value[31:0]
+top.cpu_inst.ex_unit_inst0.csr_exec_inst.uimm[31:0]
+@1401200
+-csr
+@c00200
+-data_mem
+@22
+top.data_mem_inst.addr[31:0]
+top.data_mem_inst.byte_data[7:0]
+@28
+top.data_mem_inst.clk
+@22
+top.data_mem_inst.halfword_data[15:0]
+@28
+top.data_mem_inst.load_type[2:0]
+@22
+top.data_mem_inst.rd_data_out[31:0]
+@28
+top.data_mem_inst.rd_en
+@22
+top.data_mem_inst.word_data[31:0]
+top.data_mem_inst.wr_data[31:0]
+@28
+top.data_mem_inst.wr_en
+top.data_mem_inst.write_byte_enable[3:0]
+@1401200
+-data_mem
+@800200
+-uart
+@22
+top.uart_inst.addr[31:0]
+top.uart_inst.baud_counter[15:0]
+top.uart_inst.baud_div[15:0]
+@28
+top.uart_inst.clk
+@22
+top.uart_inst.read_data[31:0]
+@28
+top.uart_inst.read_enable
+top.uart_inst.rst
+top.uart_inst.tx
+@22
+top.uart_inst.tx_bit_count[3:0]
+@28
+top.uart_inst.tx_busy
+@22
+top.uart_inst.tx_data[7:0]
+@28
+top.uart_inst.tx_enable
+top.uart_inst.tx_fifo_empty
+top.uart_inst.tx_fifo_full
+top.uart_inst.tx_out
+top.uart_inst.tx_start_pending
+@22
+top.uart_inst.tx_state[3:0]
+@28
+top.uart_inst.uart_valid
+@22
+top.uart_inst.write_data[31:0]
+@28
+top.uart_inst.write_enable
+@1000200
+-uart
 [pattern_trace] 1
 [pattern_trace] 0

@@ -275,6 +275,7 @@ def runCocotbTests():
         for file in files:
             if file.endswith(".v") or file.endswith(".sv"):
                 sources.append(os.path.join(root, file))
+    incl_dir = os.path.join(rtl_dir, "include")
     
     # Define the tests
     tests = [
@@ -302,7 +303,7 @@ def runCocotbTests():
             toplevel="riscv_cpu",
             module="test_riscv_cpu_basic",
             testcase=test_name,
-            includes=[rtl_dir],
+            includes=[str(incl_dir)],
             simulator="icarus",
             timescale="1ns/1ps",
             plus_args=[f"+dumpfile={waveform_path}"]

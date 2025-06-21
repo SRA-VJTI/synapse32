@@ -11,8 +11,8 @@ module alu (
 
     always @(*) begin
         case (instr_id)
-            INSTR_ADD:   ALUoutput = rs1 + rs2;   // Addition
-            INSTR_SUB:   ALUoutput = rs1 - rs2;   // Subtraction
+            INSTR_ADD:   ALUoutput = $signed(rs1) + $signed(rs2);   // Addition
+            INSTR_SUB:   ALUoutput = $signed(rs1) - $signed(rs2);   // Subtraction
             INSTR_XOR:   ALUoutput = rs1 ^ rs2;   // Bitwise XOR
             INSTR_OR:    ALUoutput = rs1 | rs2;   // Bitwise OR
             INSTR_AND:   ALUoutput = rs1 & rs2;   // Bitwise AND
@@ -21,7 +21,7 @@ module alu (
             INSTR_SRA:   ALUoutput = $signed(rs1) >>> rs2[4:0];  // Arithmetic right shift
             INSTR_SLT:   ALUoutput = {32{$signed(rs1) < $signed(rs2)}};  // Set less than (signed comparison)
             INSTR_SLTU:  ALUoutput = {32{rs1 < rs2}};  // Set less than (unsigned comparison)
-            INSTR_ADDI:  ALUoutput = rs1 + imm;  // Add immediate
+            INSTR_ADDI:  ALUoutput = $signed(rs1) + $signed(imm);  // Add immediate
             INSTR_XORI:  ALUoutput = rs1 ^ imm;  // Bitwise XOR with immediate
             INSTR_ORI:   ALUoutput = rs1 | imm;  // Bitwise OR with immediate
             INSTR_ANDI:  ALUoutput = rs1 & imm;  // Bitwise AND with immediate

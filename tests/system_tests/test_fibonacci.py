@@ -12,10 +12,9 @@ import binascii
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
-# Memory-mapped I/O addresses from fibonacci.c
-MMIO_FINAL_LOCATION = 0x02000004
-MMIO_CPU_DONE = 0x0200000C
-MMIO_DATA_START = 0x02000010
+DATA_MEM_BASE = 0x10000000
+CPU_DONE_ADDR = DATA_MEM_BASE + 0xFF          # 0x10000000
+FIBONACCI_START_ADDR = DATA_MEM_BASE + 0x10    # 0x10000010
 
 def compile_fibonacci():
     """Compile fibonacci.c to RISC-V binary and prepare hex file for instruction memory"""
@@ -65,6 +64,7 @@ def compile_fibonacci():
             "-o", str(build_dir / "fibonacci.o")
         ], check=True)
         log.info("Compiled fibonacci.c to object file.")
+        
         # Create .o file from start.S
         subprocess.run([
             "riscv64-unknown-elf-gcc",
@@ -95,6 +95,7 @@ def compile_fibonacci():
             "-o", str(elf_file)
         ], check=True)
         log.info("Linked object files to create ELF binary.")
+        
         # Convert ELF to binary
         subprocess.run([
             "riscv64-unknown-elf-objcopy",
@@ -105,12 +106,13 @@ def compile_fibonacci():
         log.info("Converted ELF binary to raw binary format.")
         
         # Create hex file for instruction memory using objcopy
-        #firs truncate bin file to 2048 bytes
+        # First truncate bin file to 2048 bytes
         subprocess.run([
             "truncate",
             "-s", "2048",
             str(bin_file)
         ], check=True)
+        
         # Convert binary to Verilog hex format
         subprocess.run([
             "riscv64-unknown-elf-objcopy",
@@ -164,7 +166,7 @@ async def test_fibonacci_program(dut):
     # Track memory accesses
     mem_accesses = {}
     
-    for _ in range(max_cycles):
+    for cycle in range(max_cycles):
         await RisingEdge(dut.clk)
         
         # Check for memory writes
@@ -172,43 +174,50 @@ async def test_fibonacci_program(dut):
             addr = int(dut.cpu_mem_write_addr.value)
             data = int(dut.cpu_mem_write_data.value)
             mem_accesses[addr] = data
-            log.info(f"Memory write: addr=0x{addr:08x}, data=0x{data:08x}")
+            log.info(f"Cycle {cycle}: Memory write: addr=0x{addr:08x}, data=0x{data:08x}")
             
             # Check if CPU_DONE flag was set
-            if addr == MMIO_CPU_DONE and data == 1:
+            if addr == CPU_DONE_ADDR and (data & 0xFF) == 1:
                 cpu_done = True
                 log.info("CPU_DONE flag set - program finished execution")
                 
-            # Collect Fibonacci sequence values
-            if MMIO_DATA_START <= addr < MMIO_DATA_START + 10:
-                index = (addr - MMIO_DATA_START)
-                data_values.append(data & 0xFF)  # Extract lowest byte
-                log.info(f"Fibonacci[{index}] = {data & 0xFF}")
+            # Collect Fibonacci sequence values (byte writes)
+            if FIBONACCI_START_ADDR <= addr < FIBONACCI_START_ADDR + 10:
+                index = addr - FIBONACCI_START_ADDR
+                value = data & 0xFF  # Extract lowest byte for byte writes
+                if index < len(data_values):
+                    data_values[index] = value
+                else:
+                    # Extend list if needed
+                    while len(data_values) <= index:
+                        data_values.append(0)
+                    data_values[index] = value
+                log.info(f"Fibonacci[{index}] = {value}")
         
         # Exit simulation once CPU_DONE is set and we've collected all values
-        if cpu_done and len(data_values) >= 10:
+        if cpu_done and len([x for x in data_values if x != 0]) >= 10:
             break
     
     # Verify results
-    log.info(f"Program execution complete after {_+1} cycles")
-    log.info(f"Collected Fibonacci values: {data_values}")
-    # dump the data memory for debugging
+    log.info(f"Program execution complete after {cycle+1} cycles")
+    log.info(f"Collected Fibonacci values: {data_values[:10]}")
+    
+    # Dump memory accesses for debugging
     print("Memory accesses:")
-    for addr, data in mem_accesses.items():
+    for addr, data in sorted(mem_accesses.items()):
         print(f"  0x{addr:08x}: 0x{data:08x}")
     
     # Check if CPU_DONE was set
     assert cpu_done, "CPU_DONE flag was not set - program did not complete"
     
-    # Verify Fibonacci sequence values (if we collected them)
-    if data_values:
-        for i, (actual, expected) in enumerate(zip(data_values, expected_sequence)):
+    # Verify Fibonacci sequence values
+    actual_values = data_values[:10]
+    if any(actual_values):  # Check if we got any values
+        for i, (actual, expected) in enumerate(zip(actual_values, expected_sequence)):
             assert actual == expected, f"Fibonacci sequence mismatch at index {i}: actual={actual}, expected={expected}"
         log.info("Fibonacci sequence verification successful!")
     else:
         log.warning("No Fibonacci values were collected from memory")
-
-
 
 def runCocotbTests():
     """Run the cocotb test via cocotb-test"""
@@ -227,6 +236,7 @@ def runCocotbTests():
         root_dir = os.path.dirname(root_dir)
     print(f"Using RTL directory: {root_dir}/rtl")
     rtl_dir = os.path.join(root_dir, "rtl")
+    incl_dir = os.path.join(rtl_dir, "include")
     
     # Collect all Verilog sources
     sources = []
@@ -246,7 +256,7 @@ def runCocotbTests():
         toplevel="top",
         module="test_fibonacci",
         testcase="test_fibonacci_program",
-        includes=[str(rtl_dir)],
+        includes=[str(incl_dir)],
         simulator="icarus",
         timescale="1ns/1ps",
         plus_args=[f"+dumpfile={waveform_path}"],

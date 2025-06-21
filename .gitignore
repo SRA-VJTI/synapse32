@@ -8,6 +8,8 @@
 #verilog build files
 *.vcd
 *.vvp
+*.fst
+results.xml
 
 #python build files
 *.pyc
@@ -18,5 +20,5 @@ __pycache__
 
 #cocotb build files
 *.log
-sim_build/
+sim_build*/
 build/
