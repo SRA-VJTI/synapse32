@@ -26,7 +26,6 @@ jobs:
         with:
           runCmd: |
             python3 -m venv tests/.venv
-            source tests/.venv/bin/activate
-            pip install --upgrade pip
-            pip install -r tests/requirements.txt
-            pytest -v tests/
+            tests/.venv/bin/pip install --upgrade pip
+            tests/.venv/bin/pip install -r tests/requirements.txt
+            tests/.venv/bin/pytest -v tests/
