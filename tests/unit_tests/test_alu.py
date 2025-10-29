@@ -2,7 +2,29 @@ import cocotb
 from cocotb.triggers import Timer
 import random
 import os
-from pathlib import Path
+import sys
+from contextlib import contextmanager
+
+
+@contextmanager
+def prepend_to_path(*path_entries: str):
+    """Temporarily prepend directories to PATH for simulator subprocesses."""
+    entries = [entry for entry in path_entries if entry]
+    if not entries:
+        yield
+        return
+
+    original_path = os.environ.get("PATH")
+    prefix = os.pathsep.join(entries)
+    new_path = prefix if not original_path else f"{prefix}{os.pathsep}{original_path}"
+    os.environ["PATH"] = new_path
+    try:
+        yield
+    finally:
+        if original_path is None:
+            os.environ.pop("PATH", None)
+        else:
+            os.environ["PATH"] = original_path
 
 # Helper function to verify ALU operation
 async def verify_alu_operation(dut, rs1, rs2, imm, instruction, pc_input, expected_output, operation_name):
@@ -226,10 +248,14 @@ def runCocotbTests():
     incl_dir = os.path.join(rtl_dir, "include")
     verilog_file = os.path.join(rtl_dir, "core_modules", "alu.v")
     
-    run(
-        verilog_sources=[verilog_file],
-        toplevel="alu",
-        module="test_alu",
-        simulator="verilator",
-        includes=[incl_dir]
-    )
+    tools_dir = os.path.join(root_dir, "tests", "tools")
+    python_dir = os.path.dirname(sys.executable)
+    with prepend_to_path(tools_dir, python_dir):
+        run(
+            verilog_sources=[verilog_file],
+            toplevel="alu",
+            module="test_alu",
+            simulator="verilator",
+            includes=[incl_dir],
+            extra_env={"PYTHON3": sys.executable},
+        )

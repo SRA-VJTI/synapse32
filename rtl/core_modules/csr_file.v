@@ -21,7 +21,14 @@ module csr_file (
     // Timer interrupt input
     input wire timer_interrupt,
     input wire software_interrupt,
-    input wire external_interrupt
+    input wire external_interrupt,
+
+    // Expose key CSR registers for other modules
+    output reg [31:0] mstatus,
+    output reg [31:0] mie,
+    output reg [31:0] mip,
+    output reg [31:0] mtvec,
+    output reg [31:0] mepc
 );
 
     // Common CSR addresses
@@ -38,15 +45,10 @@ module csr_file (
     localparam CSR_CYCLEH    = 12'hC80;
 
     // CSR registers
-    reg [31:0] mstatus;
     reg [31:0] misa;
-    reg [31:0] mie;
-    reg [31:0] mtvec;
     reg [31:0] mscratch;
-    reg [31:0] mepc;
     reg [31:0] mcause;
     reg [31:0] mtval;
-    reg [31:0] mip;
     reg [63:0] cycle_counter;
 
     // Check if CSR address is valid

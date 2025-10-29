@@ -23,19 +23,67 @@ module top (
     output wire        rvfi_trap,
     output wire        rvfi_halt,
     output wire        rvfi_intr,
-    output wire [31:0] rvfi_rs1_addr,
-    output wire [31:0] rvfi_rs2_addr,
+    output wire [1:0]  rvfi_mode,
+    output wire [1:0]  rvfi_ixl,
+    output wire [4:0]  rvfi_rs1_addr,
+    output wire [4:0]  rvfi_rs2_addr,
     output wire [31:0] rvfi_rs1_rdata,
     output wire [31:0] rvfi_rs2_rdata,
-    output wire [31:0] rvfi_rd_addr,
+    output wire [4:0]  rvfi_rd_addr,
     output wire [31:0] rvfi_rd_wdata,
     output wire [31:0] rvfi_pc_rdata,
     output wire [31:0] rvfi_pc_wdata,
     output wire [31:0] rvfi_mem_addr,
+    output wire [3:0]  rvfi_mem_rmask,
     output wire [31:0] rvfi_mem_rdata,
     output wire [31:0] rvfi_mem_wdata,
-    output wire [3:0]  rvfi_mem_wmask
+    output wire [3:0]  rvfi_mem_wmask,
+    output wire [31:0] rvfi_csr_mstatus_rmask,
+    output wire [31:0] rvfi_csr_mstatus_wmask,
+    output wire [31:0] rvfi_csr_mstatus_rdata,
+    output wire [31:0] rvfi_csr_mstatus_wdata,
+    output wire [31:0] rvfi_csr_misa_rmask,
+    output wire [31:0] rvfi_csr_misa_wmask,
+    output wire [31:0] rvfi_csr_misa_rdata,
+    output wire [31:0] rvfi_csr_misa_wdata,
+    output wire [31:0] rvfi_csr_mie_rmask,
+    output wire [31:0] rvfi_csr_mie_wmask,
+    output wire [31:0] rvfi_csr_mie_rdata,
+    output wire [31:0] rvfi_csr_mie_wdata,
+    output wire [31:0] rvfi_csr_mtvec_rmask,
+    output wire [31:0] rvfi_csr_mtvec_wmask,
+    output wire [31:0] rvfi_csr_mtvec_rdata,
+    output wire [31:0] rvfi_csr_mtvec_wdata,
+    output wire [31:0] rvfi_csr_mscratch_rmask,
+    output wire [31:0] rvfi_csr_mscratch_wmask,
+    output wire [31:0] rvfi_csr_mscratch_rdata,
+    output wire [31:0] rvfi_csr_mscratch_wdata,
+    output wire [31:0] rvfi_csr_mepc_rmask,
+    output wire [31:0] rvfi_csr_mepc_wmask,
+    output wire [31:0] rvfi_csr_mepc_rdata,
+    output wire [31:0] rvfi_csr_mepc_wdata,
+    output wire [31:0] rvfi_csr_mcause_rmask,
+    output wire [31:0] rvfi_csr_mcause_wmask,
+    output wire [31:0] rvfi_csr_mcause_rdata,
+    output wire [31:0] rvfi_csr_mcause_wdata,
+    output wire [31:0] rvfi_csr_mtval_rmask,
+    output wire [31:0] rvfi_csr_mtval_wmask,
+    output wire [31:0] rvfi_csr_mtval_rdata,
+    output wire [31:0] rvfi_csr_mtval_wdata,
+    output wire [31:0] rvfi_csr_mip_rmask,
+    output wire [31:0] rvfi_csr_mip_wmask,
+    output wire [31:0] rvfi_csr_mip_rdata,
+    output wire [31:0] rvfi_csr_mip_wdata
 );
+
+    // Size memories differently for formal vs functional builds
+`ifdef FORMAL
+    localparam integer INSTR_MEM_WORDS = 32;
+    localparam integer DATA_MEM_BYTES  = 64;
+`else
+    localparam integer INSTR_MEM_WORDS = 4096;  // 16KB instruction space
+    localparam integer DATA_MEM_BYTES  = 4096;  // 4KB data space
+`endif
 
     // Wires to connect CPU and memories
     wire [31:0] cpu_pc_out;
@@ -113,6 +161,8 @@ module top (
         .rvfi_trap(rvfi_trap),
         .rvfi_halt(rvfi_halt),
         .rvfi_intr(rvfi_intr),
+        .rvfi_mode(rvfi_mode),
+        .rvfi_ixl(rvfi_ixl),
         .rvfi_rs1_addr(rvfi_rs1_addr),
         .rvfi_rs2_addr(rvfi_rs2_addr),
         .rvfi_rs1_rdata(rvfi_rs1_rdata),
@@ -122,16 +172,53 @@ module top (
         .rvfi_pc_rdata(rvfi_pc_rdata),
         .rvfi_pc_wdata(rvfi_pc_wdata),
         .rvfi_mem_addr(rvfi_mem_addr),
+        .rvfi_mem_rmask(rvfi_mem_rmask),
         .rvfi_mem_rdata(rvfi_mem_rdata),
         .rvfi_mem_wdata(rvfi_mem_wdata),
-        .rvfi_mem_wmask(rvfi_mem_wmask)
+        .rvfi_mem_wmask(rvfi_mem_wmask),
+        .rvfi_csr_mstatus_rmask(rvfi_csr_mstatus_rmask),
+        .rvfi_csr_mstatus_wmask(rvfi_csr_mstatus_wmask),
+        .rvfi_csr_mstatus_rdata(rvfi_csr_mstatus_rdata),
+        .rvfi_csr_mstatus_wdata(rvfi_csr_mstatus_wdata),
+        .rvfi_csr_misa_rmask(rvfi_csr_misa_rmask),
+        .rvfi_csr_misa_wmask(rvfi_csr_misa_wmask),
+        .rvfi_csr_misa_rdata(rvfi_csr_misa_rdata),
+        .rvfi_csr_misa_wdata(rvfi_csr_misa_wdata),
+        .rvfi_csr_mie_rmask(rvfi_csr_mie_rmask),
+        .rvfi_csr_mie_wmask(rvfi_csr_mie_wmask),
+        .rvfi_csr_mie_rdata(rvfi_csr_mie_rdata),
+        .rvfi_csr_mie_wdata(rvfi_csr_mie_wdata),
+        .rvfi_csr_mtvec_rmask(rvfi_csr_mtvec_rmask),
+        .rvfi_csr_mtvec_wmask(rvfi_csr_mtvec_wmask),
+        .rvfi_csr_mtvec_rdata(rvfi_csr_mtvec_rdata),
+        .rvfi_csr_mtvec_wdata(rvfi_csr_mtvec_wdata),
+        .rvfi_csr_mscratch_rmask(rvfi_csr_mscratch_rmask),
+        .rvfi_csr_mscratch_wmask(rvfi_csr_mscratch_wmask),
+        .rvfi_csr_mscratch_rdata(rvfi_csr_mscratch_rdata),
+        .rvfi_csr_mscratch_wdata(rvfi_csr_mscratch_wdata),
+        .rvfi_csr_mepc_rmask(rvfi_csr_mepc_rmask),
+        .rvfi_csr_mepc_wmask(rvfi_csr_mepc_wmask),
+        .rvfi_csr_mepc_rdata(rvfi_csr_mepc_rdata),
+        .rvfi_csr_mepc_wdata(rvfi_csr_mepc_wdata),
+        .rvfi_csr_mcause_rmask(rvfi_csr_mcause_rmask),
+        .rvfi_csr_mcause_wmask(rvfi_csr_mcause_wmask),
+        .rvfi_csr_mcause_rdata(rvfi_csr_mcause_rdata),
+        .rvfi_csr_mcause_wdata(rvfi_csr_mcause_wdata),
+        .rvfi_csr_mtval_rmask(rvfi_csr_mtval_rmask),
+        .rvfi_csr_mtval_wmask(rvfi_csr_mtval_wmask),
+        .rvfi_csr_mtval_rdata(rvfi_csr_mtval_rdata),
+        .rvfi_csr_mtval_wdata(rvfi_csr_mtval_wdata),
+        .rvfi_csr_mip_rmask(rvfi_csr_mip_rmask),
+        .rvfi_csr_mip_wmask(rvfi_csr_mip_wmask),
+        .rvfi_csr_mip_rdata(rvfi_csr_mip_rdata),
+        .rvfi_csr_mip_wdata(rvfi_csr_mip_wdata)
     );
 
     // Instantiate instruction memory
     instr_mem #(
         .DATA_WIDTH(32),
         .ADDR_WIDTH(32),
-        .MEM_SIZE(32)  // 512KB / 4 bytes = 128K words
+        .MEM_SIZE(INSTR_MEM_WORDS)
     ) instr_mem_inst (
         .instr_addr(cpu_pc_out),
         .instr_addr_p2(data_mem_addr),
@@ -144,7 +231,7 @@ module top (
     data_mem #(
         .DATA_WIDTH(32),
         .ADDR_WIDTH(32),
-        .MEM_SIZE(64)  // 64 bytes
+        .MEM_SIZE(DATA_MEM_BYTES)
     ) data_mem_inst (
         .clk(clk),
         .wr_en(cpu_mem_write_en && data_mem_access),

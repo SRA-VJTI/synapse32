@@ -1,0 +1,57 @@
+# running in riscv_formal/src/
+# --- Design files ---
+read_verilog -DFORMAL top.v
+read_verilog -DFORMAL riscv_cpu.v
+read_verilog -DFORMAL data_mem.v
+read_verilog -DFORMAL execution_unit.v
+read_verilog -DFORMAL instr_mem.v
+read_verilog -DFORMAL memory_unit.v
+read_verilog -DFORMAL seven_seg.v
+read_verilog -DFORMAL writeback.v
+
+# Core modules
+read_verilog -DFORMAL alu.v
+read_verilog -DFORMAL csr_exec.v
+read_verilog -DFORMAL csr_file.v
+read_verilog -DFORMAL decoder.v
+read_verilog -DFORMAL interrupt_controller.v
+read_verilog -DFORMAL pc.v
+read_verilog -DFORMAL registerfile.v
+read_verilog -DFORMAL timer.v
+read_verilog -DFORMAL uart.v
+
+# Pipeline stages
+read_verilog -DFORMAL EX_MEM.v
+read_verilog -DFORMAL forwarding_unit.v
+read_verilog -DFORMAL ID_EX.v
+read_verilog -DFORMAL IF_ID.v
+read_verilog -DFORMAL load_use_detector.v
+read_verilog -DFORMAL MEM_WB.v
+read_verilog -DFORMAL store_load_detector.v
+read_verilog -DFORMAL store_load_forward.v
+
+# Includes
+read_verilog -DFORMAL instr_defines.vh
+read_verilog -DFORMAL memory_map.vh
+
+# riscv-formal checks
+read_verilog -sv -formal -DFORMAL -DRISCV_FORMAL_NRET=1 -DRISCV_FORMAL_ILEN=32 -DRISCV_FORMAL_XLEN=32 -DRISCV_FORMAL_INSN_MODEL=rvfi_insn_model -DRISCV_FORMAL_CHANNEL_IDX=0 rvfi_macros.vh
+read_verilog -sv -formal -DFORMAL -DRISCV_FORMAL_NRET=1 -DRISCV_FORMAL_ILEN=32 -DRISCV_FORMAL_XLEN=32 -DRISCV_FORMAL_INSN_MODEL=rvfi_insn_model -DRISCV_FORMAL_CHANNEL_IDX=0 rvfi_insn_check.sv
+read_verilog -sv -formal -DFORMAL -DRISCV_FORMAL_NRET=1 -DRISCV_FORMAL_ILEN=32 -DRISCV_FORMAL_XLEN=32 -DRISCV_FORMAL_INSN_MODEL=rvfi_insn_model -DRISCV_FORMAL_CHANNEL_IDX=0 rvfi_reg_check.sv
+read_verilog -sv -formal -DFORMAL -DRISCV_FORMAL_NRET=1 -DRISCV_FORMAL_ILEN=32 -DRISCV_FORMAL_XLEN=32 -DRISCV_FORMAL_INSN_MODEL=rvfi_insn_model -DRISCV_FORMAL_CHANNEL_IDX=0 rvfi_pc_fwd_check.sv
+read_verilog -sv -formal -DFORMAL -DRISCV_FORMAL_NRET=1 -DRISCV_FORMAL_ILEN=32 -DRISCV_FORMAL_XLEN=32 -DRISCV_FORMAL_INSN_MODEL=rvfi_insn_model -DRISCV_FORMAL_CHANNEL_IDX=0 rvfi_pc_bwd_check.sv
+
+# --- Ordered passes (fixes "run proc first", keeps big RAM abstract) ---
+hierarchy -top top
+proc
+opt
+memory -nomap
+flatten
+setundef -undriven -anyseq
+check
+stat
+
+hierarchy -smtcheck
+rename -witness
+write_jny -no-connections ../model/design.json
+write_rtlil ../model/design.il

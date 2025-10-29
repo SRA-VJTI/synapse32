@@ -2,6 +2,29 @@ import cocotb
 from cocotb.triggers import Timer
 import subprocess
 import os
+import sys
+from contextlib import contextmanager
+
+
+@contextmanager
+def prepend_to_path(*path_entries: str):
+    """Temporarily prepend directories to PATH for simulator subprocesses."""
+    entries = [entry for entry in path_entries if entry]
+    if not entries:
+        yield
+        return
+
+    original_path = os.environ.get("PATH")
+    prefix = os.pathsep.join(entries)
+    new_path = prefix if not original_path else f"{prefix}{os.pathsep}{original_path}"
+    os.environ["PATH"] = new_path
+    try:
+        yield
+    finally:
+        if original_path is None:
+            os.environ.pop("PATH", None)
+        else:
+            os.environ["PATH"] = original_path
 
 def assemble_riscv_instruction(assembly_code, bin_file="temp.bin"):
     with open("temp.s", "w") as f:
@@ -129,12 +152,16 @@ def runCocotbTests():
     instr_defines_file = os.path.join(rtl_dir, "instr_defines.vh")
     decoder_file = os.path.join(rtl_dir, "core_modules", "decoder.v")
 
-    run(
-        verilog_sources=[
-            decoder_file        
-        ],
-        toplevel="decoder",
-        module="test_decoder_gcc",
-        simulator="verilator",
-        includes=[str(incl_dir)],
-    )
+    tools_dir = os.path.join(root_dir, "tests", "tools")
+    python_dir = os.path.dirname(sys.executable)
+    with prepend_to_path(tools_dir, python_dir):
+        run(
+            verilog_sources=[
+                decoder_file        
+            ],
+            toplevel="decoder",
+            module="test_decoder_gcc",
+            simulator="verilator",
+            includes=[str(incl_dir)],
+            extra_env={"PYTHON3": sys.executable},
+        )
