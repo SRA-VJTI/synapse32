@@ -1,0 +1,132 @@
+[tasks]
+--pycode-begin--
+with open("instruction_list.txt") as f:
+    for line in f:
+        name = line.strip()
+        if not name or name.startswith("#"):
+            continue
+        output(name)
+--pycode-end--
+
+[options]
+mode prove
+expect pass
+depth 20
+wait on
+
+[engines]
+smtbmc boolector
+
+[script]
+verilog_defines -D FORMAL
+verilog_defines -D RISCV_FORMAL_NRET=1
+verilog_defines -D RISCV_FORMAL_ILEN=32
+verilog_defines -D RISCV_FORMAL_XLEN=32
+verilog_defines -D RISCV_FORMAL_CHANNEL_IDX=0
+
+--pycode-begin--
+with open("instruction_list.txt") as f:
+    for line in f:
+        insn = line.strip()
+        if not insn or insn.startswith("#"):
+            continue
+        output(f"{insn}: verilog_defines -D RISCV_FORMAL_INSN_MODEL=rvfi_insn_{insn}")
+--pycode-end--
+
+--pycode-begin--
+design_sources = [
+    "top.v",
+    "riscv_cpu.v",
+    "data_mem.v",
+    "execution_unit.v",
+    "instr_mem.v",
+    "memory_unit.v",
+    "seven_seg.v",
+    "writeback.v",
+    "alu.v",
+    "csr_exec.v",
+    "csr_file.v",
+    "decoder.v",
+    "interrupt_controller.v",
+    "pc.v",
+    "registerfile.v",
+    "timer.v",
+    "uart.v",
+    "EX_MEM.v",
+    "forwarding_unit.v",
+    "ID_EX.v",
+    "IF_ID.v",
+    "load_use_detector.v",
+    "MEM_WB.v",
+    "store_load_detector.v",
+    "store_load_forward.v"
+]
+
+for src in design_sources:
+    output(f"read_verilog -formal {src}")
+--pycode-end--
+
+read_verilog -sv -formal instr_defines.vh
+read_verilog -sv -formal memory_map.vh
+read_verilog -sv -formal rvfi_macros.vh
+
+--pycode-begin--
+with open("instruction_list.txt") as f:
+    for line in f:
+        insn = line.strip()
+        if not insn or insn.startswith("#"):
+            continue
+        output(f"read_verilog -sv -formal insn_{insn}.v")
+--pycode-end--
+
+read_verilog -sv -formal rvfi_insn_check.sv
+
+hierarchy -top top
+proc
+opt
+memory -nomap
+flatten
+setundef -undriven -anyseq
+check
+stat
+
+[files]
+instruction_list.txt
+../../rtl/top.v
+../../rtl/riscv_cpu.v
+../../rtl/data_mem.v
+../../rtl/execution_unit.v
+../../rtl/instr_mem.v
+../../rtl/memory_unit.v
+../../rtl/seven_seg.v
+../../rtl/writeback.v
+../../rtl/core_modules/alu.v
+../../rtl/core_modules/csr_exec.v
+../../rtl/core_modules/csr_file.v
+../../rtl/core_modules/decoder.v
+../../rtl/core_modules/interrupt_controller.v
+../../rtl/core_modules/pc.v
+../../rtl/core_modules/registerfile.v
+../../rtl/core_modules/timer.v
+../../rtl/core_modules/uart.v
+../../rtl/pipeline_stages/EX_MEM.v
+../../rtl/pipeline_stages/forwarding_unit.v
+../../rtl/pipeline_stages/ID_EX.v
+../../rtl/pipeline_stages/IF_ID.v
+../../rtl/pipeline_stages/load_use_detector.v
+../../rtl/pipeline_stages/MEM_WB.v
+../../rtl/pipeline_stages/store_load_detector.v
+../../rtl/pipeline_stages/store_load_forward.v
+../../rtl/include/instr_defines.vh
+../../rtl/include/memory_map.vh
+../../riscv-formal/checks/rvfi_macros.vh
+../../riscv-formal/checks/rvfi_insn_check.sv
+
+--pycode-begin--
+with open("instruction_list.txt") as f:
+    for line in f:
+        insn = line.strip()
+        if not insn or insn.startswith("#"):
+            continue
+        output(f"../../riscv-formal/insns/insn_{insn}.v")
+--pycode-end--

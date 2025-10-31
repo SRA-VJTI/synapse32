@@ -12,7 +12,7 @@ import multiprocessing
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from typing import List, Dict, Optional, Tuple
+from typing import List, Optional, Tuple
 import json
 import argparse
 
@@ -35,20 +35,53 @@ class VerificationSuiteRunner:
         self.results: List[TestResult] = []
         self.start_time = None
 
-    def find_test_files(self, test_dir: Path) -> List[Path]:
-        """Find all .sby test files in a directory."""
+    def load_instruction_list(self, list_file: Path) -> List[str]:
+        """Load instruction names from a list file."""
+        if not list_file.exists():
+            return []
+
+        instructions = []
+        with open(list_file) as f:
+            for line in f:
+                name = line.strip()
+                if not name or name.startswith("#"):
+                    continue
+                instructions.append(name)
+        return instructions
+
+    def find_test_files(self, test_dir: Path) -> List[Tuple[Path, Optional[str]]]:
+        """Find all .sby test files (and associated tasks) in a directory."""
         if not test_dir.exists():
             return []
-        return list(test_dir.glob("*.sby"))
+        test_entries: List[Tuple[Path, Optional[str]]] = []
 
-    def run_single_test(self, test_file: Path, category: str) -> TestResult:
+        for test_file in sorted(test_dir.glob("*.sby")):
+            if test_file.name == "verify_instructions.sby":
+                instruction_list = self.load_instruction_list(test_dir / "instruction_list.txt")
+                if instruction_list:
+                    for insn in instruction_list:
+                        test_entries.append((test_file, insn))
+                    continue
+            test_entries.append((test_file, None))
+
+        return test_entries
+
+    def format_test_name(self, test_file: Path, task: Optional[str]) -> str:
+        """Create a human-readable test name."""
+        if task:
+            return f"{task}"
+        return test_file.stem
+
+    def run_single_test(self, test_file: Path, task: Optional[str], category: str) -> TestResult:
         """Run a single SBY test and return the result."""
-        test_name = test_file.stem
+        test_name = self.format_test_name(test_file, task)
         start_time = time.time()
 
         try:
             # Create command
             cmd = ["sby", "-f", str(test_file)]
+            if task:
+                cmd.append(task)
 
             # Run the test with timeout
             process = subprocess.run(
@@ -70,7 +103,8 @@ class VerificationSuiteRunner:
                 error_message = process.stderr or process.stdout
 
             # Find log file if it exists
-            log_dir = test_file.parent / test_name
+            job_dir_name = f"{test_file.stem}_{task}" if task else test_file.stem
+            log_dir = test_file.parent / job_dir_name
             log_file = None
             if log_dir.exists():
                 log_files = list(log_dir.glob("**/*.log"))
@@ -106,15 +140,15 @@ class VerificationSuiteRunner:
                 error_message=str(e)
             )
 
-    def run_tests_parallel(self, test_files: List[Tuple[Path, str]]) -> List[TestResult]:
+    def run_tests_parallel(self, test_files: List[Tuple[Path, Optional[str], str]]) -> List[TestResult]:
         """Run tests in parallel using ThreadPoolExecutor."""
         results = []
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             # Submit all tests
             future_to_test = {
-                executor.submit(self.run_single_test, test_file, category): (test_file.name, category)
-                for test_file, category in test_files
+                executor.submit(self.run_single_test, test_file, task, category): (self.format_test_name(test_file, task), category)
+                for test_file, task, category in test_files
             }
 
             # Collect results as they complete
@@ -259,17 +293,17 @@ class VerificationSuiteRunner:
             test_categories = {k: v for k, v in test_categories.items() if k in categories}
 
         # Collect all test files
-        all_test_files = []
+        all_test_files: List[Tuple[Path, Optional[str], str]] = []
         for category, subdir in test_categories.items():
             test_dir = formal_dir / subdir
             test_files = self.find_test_files(test_dir)
-            all_test_files.extend([(f, category) for f in test_files])
+            all_test_files.extend([(f, task, category) for f, task in test_files])
 
         if not all_test_files:
             print("[ERROR] No test files found!")
             return False
 
-        print(f"Found {len(all_test_files)} test files across {len(test_categories)} categories")
+        print(f"Found {len(all_test_files)} test cases across {len(test_categories)} categories")
         for category, subdir in test_categories.items():
             test_dir = formal_dir / subdir
             count = len(self.find_test_files(test_dir))
@@ -317,24 +351,19 @@ def main():
         print(f"[ERROR] Formal directory not found: {formal_dir}")
         return 1
 
-    # Generate test configurations first
-    if not (formal_dir / "instructions").exists() or args.generate_only:
-        print("Generating test configurations...")
-        try:
-            # Import and run the test generation script
-            sys.path.insert(0, str(formal_dir))
-            from generate_instruction_tests import main as generate_tests
-            generate_tests()
-            print("[PASS] Test configurations generated successfully")
+    instructions_dir = formal_dir / "instructions"
+    list_file = instructions_dir / "instruction_list.txt"
+    sby_file = instructions_dir / "verify_instructions.sby"
 
-            if args.generate_only:
-                return 0
-        except ImportError:
-            print("[ERROR] Could not import test generation script")
-            return 1
-        except Exception as e:
-            print(f"[ERROR] Error generating tests: {e}")
-            return 1
+    if args.generate_only:
+        print("Instruction test configurations are static and do not require generation.")
+        return 0
+
+    if not instructions_dir.exists() or not list_file.exists() or not sby_file.exists():
+        print("[ERROR] Instruction verification assets are missing.")
+        print(f"  Expected: {list_file}")
+        print(f"  Expected: {sby_file}")
+        return 1
 
     # Run verification suite
     runner = VerificationSuiteRunner(

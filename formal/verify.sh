@@ -40,6 +40,13 @@ print_info() {
     echo -e "${CYAN}[INFO] $1${NC}"
 }
 
+trim_string() {
+    local var="$1"
+    var="${var#"${var%%[![:space:]]*}"}"
+    var="${var%"${var##*[![:space:]]}"}"
+    printf '%s' "$var"
+}
+
 # Show usage
 show_usage() {
     cat << EOF
@@ -103,50 +110,77 @@ check_dependencies() {
     fi
 }
 
-# Generate test configurations if needed
-ensure_tests_generated() {
-    if [ ! -d "$FORMAL_DIR/instructions" ] || [ -z "$(ls -A "$FORMAL_DIR/instructions" 2>/dev/null)" ]; then
-        print_info "Generating test configurations..."
-        cd "$FORMAL_DIR"
-        python3 generate_instruction_tests.py
-        print_success "Test configurations generated"
+# Instruction test cache
+INSTRUCTION_TESTS=()
+
+# Load instruction tasks from the shared list
+load_instruction_tests() {
+    local list_file="$FORMAL_DIR/instructions/instruction_list.txt"
+    local sby_file="$FORMAL_DIR/instructions/verify_instructions.sby"
+
+    if [ ! -f "$list_file" ]; then
+        print_error "Instruction list not found: $list_file"
+        return 1
     fi
+
+    if [ ! -f "$sby_file" ]; then
+        print_error "Instruction verification file not found: $sby_file"
+        return 1
+    fi
+
+    INSTRUCTION_TESTS=()
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line%%#*}"
+        line="$(trim_string "$line")"
+        if [ -n "$line" ]; then
+            INSTRUCTION_TESTS+=("$line")
+        fi
+    done < "$list_file"
+
+    if [ ${#INSTRUCTION_TESTS[@]} -eq 0 ]; then
+        print_error "No instruction tests found in $list_file"
+        return 1
+    fi
+
+    return 0
 }
 
 # Run quick verification (core instructions only)
 run_quick() {
     print_header "QUICK VERIFICATION - Core Instructions"
 
-    local core_tests=(
-        "instructions/verify_add.sby"
-        "instructions/verify_sub.sby"
-        "instructions/verify_addi.sby"
-        "instructions/verify_and.sby"
-        "instructions/verify_or.sby"
-        "instructions/verify_xor.sby"
-        "instructions/verify_lw.sby"
-        "instructions/verify_sw.sby"
-        "instructions/verify_beq.sby"
-        "instructions/verify_jal.sby"
-    )
+    if ! load_instruction_tests; then
+        return 1
+    fi
+
+    local sby_file="$FORMAL_DIR/instructions/verify_instructions.sby"
+    local quick_candidates=(add sub addi and or xor lw sw beq jal)
+    local quick_tests=()
+
+    for task in "${quick_candidates[@]}"; do
+        if printf '%s\n' "${INSTRUCTION_TESTS[@]}" | grep -qx "$task"; then
+            quick_tests+=("$task")
+        else
+            print_warning "Skipping unavailable instruction test: $task"
+        fi
+    done
+
+    local total=${#quick_tests[@]}
+    if [ $total -eq 0 ]; then
+        print_error "No quick instruction tests available."
+        return 1
+    fi
 
     local passed=0
-    local total=${#core_tests[@]}
 
-    for test in "${core_tests[@]}"; do
-        local test_file="$FORMAL_DIR/$test"
-        if [ -f "$test_file" ]; then
-            local test_name=$(basename "$test" .sby)
-            print_info "Running $test_name..."
+    for task in "${quick_tests[@]}"; do
+        print_info "Running instruction test: $task..."
 
-            if run_single_test "$test_file"; then
-                print_success "$test_name PASSED"
-                ((passed++))
-            else
-                print_error "$test_name FAILED"
-            fi
+        if run_single_test "$sby_file" "$task"; then
+            print_success "$task PASSED"
+            ((passed++))
         else
-            print_warning "Test file not found: $test"
+            print_error "$task FAILED"
         fi
     done
 
@@ -166,26 +200,24 @@ run_quick() {
 run_basic() {
     print_header "BASIC VERIFICATION - All Instructions"
 
-    if [ ! -d "$FORMAL_DIR/instructions" ]; then
-        print_error "Instructions directory not found!"
+    if ! load_instruction_tests; then
         return 1
     fi
 
-    local test_files=($(find "$FORMAL_DIR/instructions" -name "verify_*.sby" | sort))
+    local sby_file="$FORMAL_DIR/instructions/verify_instructions.sby"
     local passed=0
-    local total=${#test_files[@]}
+    local total=${#INSTRUCTION_TESTS[@]}
 
     print_info "Running $total instruction tests..."
 
-    for test_file in "${test_files[@]}"; do
-        local test_name=$(basename "$test_file" .sby)
-        print_info "Running $test_name..."
+    for task in "${INSTRUCTION_TESTS[@]}"; do
+        print_info "Running instruction test: $task..."
 
-        if run_single_test "$test_file"; then
-            print_success "$test_name PASSED"
+        if run_single_test "$sby_file" "$task"; then
+            print_success "$task PASSED"
             ((passed++))
         else
-            print_error "$test_name FAILED"
+            print_error "$task FAILED"
         fi
     done
 
@@ -259,16 +291,22 @@ run_full() {
 # Run single test
 run_single_test() {
     local test_file="$1"
+    local task="${2:-}"
     local timeout="${TIMEOUT:-300}"
 
     cd "$(dirname "$test_file")"
 
+    local cmd=("sby" "-f" "$(basename "$test_file")")
+    if [ -n "$task" ]; then
+        cmd+=("$task")
+    fi
+
     if [ "$VERBOSE" = "true" ]; then
-        timeout "${timeout}s" sby -f "$(basename "$test_file")"
+        timeout "${timeout}s" "${cmd[@]}"
     elif [ "$QUIET" = "true" ]; then
-        timeout "${timeout}s" sby -f "$(basename "$test_file")" >/dev/null 2>&1
+        timeout "${timeout}s" "${cmd[@]}" >/dev/null 2>&1
     else
-        timeout "${timeout}s" sby -f "$(basename "$test_file")" >/dev/null 2>&1
+        timeout "${timeout}s" "${cmd[@]}" >/dev/null 2>&1
     fi
 
     return $?
@@ -374,27 +412,22 @@ main() {
     case "${COMMAND:-help}" in
         quick)
             check_dependencies
-            ensure_tests_generated
             run_quick
             ;;
         basic)
             check_dependencies
-            ensure_tests_generated
             run_basic
             ;;
         system)
             check_dependencies
-            ensure_tests_generated
             run_system
             ;;
         full)
             check_dependencies
-            ensure_tests_generated
             run_full "$@"
             ;;
         custom)
             check_dependencies
-            ensure_tests_generated
             print_header "CUSTOM VERIFICATION"
             print_info "Running custom test selection: $*"
             cd "$FORMAL_DIR"
@@ -402,9 +435,8 @@ main() {
             ;;
         generate)
             print_header "GENERATING TEST CONFIGURATIONS"
-            cd "$FORMAL_DIR"
-            python3 generate_instruction_tests.py
-            print_success "Test configurations generated"
+            print_info "Instruction tests are maintained via instruction_list.txt."
+            print_info "No additional generation step is required."
             ;;
         clean)
             clean_verification
