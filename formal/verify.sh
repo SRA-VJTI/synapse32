@@ -316,7 +316,14 @@ run_single_test() {
 clean_verification() {
     print_header "CLEANING VERIFICATION FILES"
 
-    find "$FORMAL_DIR" -name "verify_*" -type d -exec rm -rf {} + 2>/dev/null || true
+    find "$FORMAL_DIR/instructions" -maxdepth 1 -type d -name 'verify_instructions*' -exec rm -rf {} + 2>/dev/null || true
+
+    while IFS= read -r -d '' sby_file; do
+        local sby_dir="$(dirname "$sby_file")/$(basename "${sby_file%.sby}")"
+        rm -rf "$sby_dir" 2>/dev/null || true
+    done < <(find "$FORMAL_DIR" -maxdepth 2 -name "*.sby" -print0)
+
+    find "$FORMAL_DIR" -name "verify_*" -type d -exec rm -rf {} \; 2>/dev/null || true
     find "$FORMAL_DIR" -name "*.log" -delete 2>/dev/null || true
     find "$FORMAL_DIR" -name "verification_report.json" -delete 2>/dev/null || true
 
