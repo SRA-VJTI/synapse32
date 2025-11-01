@@ -22,3 +22,8 @@ __pycache__
 *.log
 sim_build*/
 build/
+
+# formal verification artifacts
+formal/instructions/verify_instructions*/
+formal/*/verify_*/
+formal/verification_report.json

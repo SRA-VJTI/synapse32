@@ -127,6 +127,48 @@ The regression tests include:
 
 Formal verification of the Synapse-32 CPU is performed using [Yosys's riscv-formal](https://github.com/cliffordwolf/riscv-formal) together with [SymbiYosys (SBY)](https://symbiyosys.readthedocs.io/en/latest/).
 
+### Prerequisites
+
+- [Yosys](https://yosyshq.net/yosys/)
+- [SymbiYosys (`sby`)](https://symbiyosys.readthedocs.io/en/latest/)
+- [boolector](https://boolector.github.io/) or another SMT solver supported by SymbiYosys
+- Python 3.8+
+
+Verify that the tools are in your `PATH`:
+
+```bash
+yosys -V
+sby --version
+python3 --version
+```
+
+### Running the Suite
+
+The top-level driver lives in `formal/run_verification_suite.py` and automatically runs every integration, system, and per-instruction SymbiYosys job:
+
+```bash
+cd formal
+python3 run_verification_suite.py
+```
+
+Useful options:
+
+- `--workers N` limits the number of parallel jobs (defaults to the number of CPU cores, capped at 8).
+- `--timeout SECONDS` overrides the per-test timeout (default 300 s).
+- `--categories ...` narrows the run to any subset of `instructions`, `system`, `integration`.
+
+While the suite runs, live progress is printed, and a machine-readable summary is written to `formal/verification_report.json`. Individual job directories (e.g. `formal/instructions/verify_instructions_add/`) contain the SBY logs and traces for debugging failing proofs.
+
+### Cleaning Generated Artifacts
+
+The suite leaves only transient artifacts—handled by `.gitignore`—but you can wipe them manually when needed:
+
+```bash
+find formal/instructions -maxdepth 1 -type d -name 'verify_instructions*' -exec rm -rf {} +
+find formal -maxdepth 2 -type d -name 'verify_*' -exec rm -rf {} +
+rm -f formal/verification_report.json
+```
+
 ### Verification Flow
 
 - The verification environment is set up in the `formal/` directory, with integration tests and instruction-specific checks in subfolders.
