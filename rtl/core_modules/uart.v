@@ -39,6 +39,8 @@ module uart (
 
     assign tx = tx_out;
 
+    // Ensure the baud counter never reaches zero, which would stall transmission or
+    // produce an undefined baud period. Divisors of 0 or 1 are coerced to 1.
     function [15:0] baud_reload_value;
         input [15:0] raw_value;
         begin

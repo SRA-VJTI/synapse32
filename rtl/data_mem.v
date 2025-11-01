@@ -3,7 +3,7 @@
 
 // data_mem.v - byte-addressable data memory for RISC-V CPU
 
-module data_mem #(parameter DATA_WIDTH = 32, ADDR_WIDTH = 32, MEM_SIZE = 64 /*1048576*/) ( // 64 bytes (was 1MB = 1024*1024 bytes)
+module data_mem #(parameter DATA_WIDTH = 32, ADDR_WIDTH = 32, MEM_SIZE = 64) ( // default 64 bytes for formal build; functional size set by top-level
     input wire clk,
     input wire wr_en,
     input wire rd_en,

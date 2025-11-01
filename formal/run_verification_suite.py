@@ -30,6 +30,8 @@ class VerificationSuiteRunner:
     """Main class for running the verification suite."""
 
     def __init__(self, max_workers: int = None, timeout: int = 300):
+        # Cap parallelism to 8 to avoid overwhelming solvers/CPU memory usage on
+        # larger SBY jobs; this proved a stable default for typical workstation setups.
         self.max_workers = max_workers or min(multiprocessing.cpu_count(), 8)
         self.timeout = timeout
         self.results: List[TestResult] = []
