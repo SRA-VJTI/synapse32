@@ -131,14 +131,15 @@ Formal verification of the Synapse-32 CPU is performed using [Yosys's riscv-form
 
 - [Yosys](https://yosyshq.net/yosys/)
 - [SymbiYosys (`sby`)](https://symbiyosys.readthedocs.io/en/latest/)
-- [boolector](https://boolector.github.io/) or another SMT solver supported by SymbiYosys
+- [Boolector](https://boolector.github.io/) (the `.sby` files are configured for `smtbmc boolector` by default) or another SMT solver supported by SymbiYosys
 - Python 3.8+
 
-Verify that the tools are in your `PATH`:
+Verify that these tools are in your `PATH`:
 
 ```bash
 yosys -V
 sby --version
+boolector --version
 python3 --version
 ```
 
@@ -171,8 +172,12 @@ rm -f formal/verification_report.json
 
 ### Verification Flow
 
+- Initialize the riscv-formal submodule (once per clone):
+  ```bash
+  git submodule update --init --recursive
+  ```
 - The verification environment is set up in the `formal/` directory, with integration tests and instruction-specific checks in subfolders.
-- SBY configuration files (e.g., `formal/integration/verify_rv32i.sby`) define the verification tasks, including the modules to check, properties to prove, and the engines to use.
+- SBY configuration files (e.g., `formal/integration/verify_rv32i.sby`) define the verification tasks, including the modules to check, properties to prove, and the engines to use. By default they use `smtbmc boolector`; to use another solver, edit the `[engines]` section accordingly.
 - The [riscv-formal](https://github.com/YosysHQ/riscv-formal) framework provides a set of formal properties for RISC-V cores, which are instantiated and checked against the Synapse-32 design.
 - To run a verification task, use:
    ```bash
