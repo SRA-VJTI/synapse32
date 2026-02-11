@@ -9,6 +9,7 @@ import sys
 import time
 import subprocess
 import multiprocessing
+import shutil
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -331,6 +332,39 @@ class VerificationSuiteRunner:
         passed_tests = len([r for r in self.results if r.status == "PASS"])
         return passed_tests == len(self.results)
 
+
+def validate_prerequisites(formal_dir: Path) -> bool:
+    """Validate external tools and riscv-formal assets before running tests."""
+    errors: List[str] = []
+
+    if shutil.which("sby") is None:
+        errors.append("Missing 'sby' executable in PATH.")
+
+    repo_root = formal_dir.parent
+    required_riscv_formal_files = [
+        repo_root / "riscv-formal" / "checks" / "rvfi_macros.vh",
+        repo_root / "riscv-formal" / "checks" / "rvfi_insn_check.sv",
+        repo_root / "riscv-formal" / "checks" / "rvfi_reg_check.sv",
+        repo_root / "riscv-formal" / "checks" / "rvfi_pc_fwd_check.sv",
+        repo_root / "riscv-formal" / "checks" / "rvfi_pc_bwd_check.sv",
+        repo_root / "riscv-formal" / "insns" / "isa_rv32i.v",
+        repo_root / "riscv-formal" / "insns" / "isa_rv32im.v",
+    ]
+
+    missing_files = [path for path in required_riscv_formal_files if not path.exists()]
+    if missing_files:
+        errors.append("Missing riscv-formal assets:")
+        errors.extend([f"  - {path}" for path in missing_files])
+        errors.append("Hint: run `git submodule update --init --recursive` from repository root.")
+
+    if errors:
+        print("[ERROR] Formal verification prerequisites are not satisfied.")
+        for err in errors:
+            print(err)
+        return False
+
+    return True
+
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(description="Run RISC-V CPU formal verification suite")
@@ -365,6 +399,9 @@ def main():
         print("[ERROR] Instruction verification assets are missing.")
         print(f"  Expected: {list_file}")
         print(f"  Expected: {sby_file}")
+        return 1
+
+    if not validate_prerequisites(formal_dir):
         return 1
 
     # Run verification suite

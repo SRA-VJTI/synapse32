@@ -9,24 +9,7 @@ module alu (
     output reg [31:0] ALUoutput
 );
 
-`ifdef FORMAL
-    // Simplified ALU for formal verification - only basic operations
-    always @(*) begin
-        case (instr_id)
-            INSTR_ADD:   ALUoutput = rs1 + rs2;   // Simple addition
-            INSTR_SUB:   ALUoutput = rs1 - rs2;   // Simple subtraction
-            INSTR_XOR:   ALUoutput = rs1 ^ rs2;   // Bitwise XOR
-            INSTR_OR:    ALUoutput = rs1 | rs2;   // Bitwise OR
-            INSTR_AND:   ALUoutput = rs1 & rs2;   // Bitwise AND
-            INSTR_ADDI:  ALUoutput = rs1 + imm;  // Add immediate
-            INSTR_XORI:  ALUoutput = rs1 ^ imm;  // Bitwise XOR with immediate
-            INSTR_ORI:   ALUoutput = rs1 | imm;  // Bitwise OR with immediate
-            INSTR_ANDI:  ALUoutput = rs1 & imm;  // Bitwise AND with immediate
-            default:     ALUoutput = 32'h0;  // Default case: output zero
-        endcase
-    end
-`else
-    // Full ALU implementation for synthesis
+    // Keep ALU semantics identical across simulation, synthesis, and formal
     always @(*) begin
         case (instr_id)
             INSTR_ADD:   ALUoutput = $signed(rs1) + $signed(rs2);   // Addition
@@ -51,5 +34,4 @@ module alu (
             default:     ALUoutput = 0;  // Default case: output zero
         endcase
     end
-`endif
 endmodule
