@@ -32,7 +32,8 @@ jobs:
           runCmd: |
             verilator --version
             verilator --version | grep -E '^Verilator 5\.'
-            python3 -m venv tests/.venv
-            tests/.venv/bin/pip install --upgrade pip
-            tests/.venv/bin/pip install -r tests/requirements.txt
-            tests/.venv/bin/pytest -v tests/
+            python3 -m venv .venv
+            .venv/bin/pip install --upgrade pip
+            .venv/bin/pip install -r tests/requirements.txt
+            cd tests
+            ../.venv/bin/pytest -v
