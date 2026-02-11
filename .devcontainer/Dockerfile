@@ -17,7 +17,7 @@ RUN apt-get update && \
         python3-venv \
         verilator && \
     verilator --version && \
-    verilator --version | grep -Eq '^Verilator 5\\.' && \
+    verilator --version | grep -Eq '^Verilator 5\.' && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
