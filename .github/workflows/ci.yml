@@ -13,6 +13,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Prepare devcontainer mount paths for CI
+        run: |
+          mkdir -p /tmp/.X11-unix
+          touch "$HOME/.Xauthority"
+
       - name: Cache Docker layers
         uses: actions/cache@v4
         with:
@@ -25,6 +30,8 @@ jobs:
         uses: devcontainers/ci@v0.3
         with:
           runCmd: |
+            verilator --version
+            verilator --version | grep -E '^Verilator 5\.'
             python3 -m venv tests/.venv
             tests/.venv/bin/pip install --upgrade pip
             tests/.venv/bin/pip install -r tests/requirements.txt
