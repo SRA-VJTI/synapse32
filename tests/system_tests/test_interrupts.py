@@ -424,11 +424,13 @@ def runCocotbTests():
                 sources.append(os.path.join(root, file))
     incl_dir = os.path.join(rtl_dir, "include")
     
-    # Create waveforms directory
     curr_dir = os.getcwd()
-    waveform_dir = os.path.join(curr_dir, "waveforms")
-    if not os.path.exists(waveform_dir):
-        os.makedirs(waveform_dir)
+    enable_waves = os.getenv("WAVES", "0") == "1"
+    waveform_dir = None
+    if enable_waves:
+        waveform_dir = os.path.join(curr_dir, "waveforms")
+        if not os.path.exists(waveform_dir):
+            os.makedirs(waveform_dir)
     
     # Test configurations
     tests_config = [
@@ -444,7 +446,10 @@ def runCocotbTests():
         print(f"\n=== Generating and running {test_name} ===")
         _, hex_file = test_func()
         print(f"Generated hex file: {hex_file}")
-        waveform_path = os.path.join(waveform_dir, f"{test_name}.vcd")
+        plus_args = []
+        if enable_waves:
+            waveform_path = os.path.join(waveform_dir, f"{test_name}.vcd")
+            plus_args = [f"+dumpfile={waveform_path}"]
         
         # Create unique sim_build directory for each test to force recompilation
         #make dir sim_build
@@ -462,10 +467,10 @@ def runCocotbTests():
             module="test_interrupts",
             testcase=f"test_{test_name}",
             includes=[str(incl_dir)],
-            simulator="icarus",
+            simulator="verilator",
             timescale="1ns/1ps",
             defines=[f"INSTR_HEX_FILE=\"{hex_file}\""],
-            plus_args=[f"+dumpfile={waveform_path}"],
+            plus_args=plus_args,
             sim_build=sim_build_dir,
             force_compile=True,
         )

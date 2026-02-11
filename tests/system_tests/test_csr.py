@@ -307,29 +307,32 @@ def runCocotbTests():
         "test_csr_invalid_access",
     ]
     
-    # Create waveforms directory in the current working directory if it doesn't exist
-    curr_dir = os.getcwd()
-    waveform_dir = os.path.join(curr_dir, "waveforms")
-    if not os.path.exists(waveform_dir):
-        os.makedirs(waveform_dir)
-    # Query full path of the directory
-    waveform_dir = os.path.abspath("waveforms")
+    enable_waves = os.getenv("WAVES", "0") == "1"
+    waveform_dir = None
+    if enable_waves:
+        curr_dir = os.getcwd()
+        waveform_dir = os.path.join(curr_dir, "waveforms")
+        if not os.path.exists(waveform_dir):
+            os.makedirs(waveform_dir)
+        waveform_dir = os.path.abspath("waveforms")
     
     # Run each test with its own waveform file
     for test_name in tests:
         print(f"\n=== Running {test_name} ===")
-        waveform_path = os.path.join(waveform_dir, f"{test_name}.vcd")
+        plus_args = []
+        if enable_waves:
+            waveform_path = os.path.join(waveform_dir, f"{test_name}.vcd")
+            plus_args = [f"+dumpfile={waveform_path}"]
         
-        # Use +dumpfile argument to pass the filename to the simulator
         run(
             verilog_sources=sources,
             toplevel="riscv_cpu",
             module="test_csr",
             testcase=test_name,
             includes=[str(incl_dir)],
-            simulator="icarus",
+            simulator="verilator",
             timescale="1ns/1ps",
-            plus_args=[f"+dumpfile={waveform_path}"]
+            plus_args=plus_args,
         )
 
 if __name__ == "__main__":

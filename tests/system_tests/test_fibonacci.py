@@ -244,11 +244,14 @@ def runCocotbTests():
     for file in rtl_dir.glob("**/*.v"):
         sources.append(str(file))
     
-    # Create waveforms directory
-    curr_dir = Path(curr_dir)
-    waveform_dir = curr_dir / "waveforms"
-    waveform_dir.mkdir(exist_ok=True)
-    waveform_path = waveform_dir / "fibonacci_test.vcd"
+    enable_waves = os.getenv("WAVES", "0") == "1"
+    plus_args = []
+    if enable_waves:
+        curr_dir = Path(curr_dir)
+        waveform_dir = curr_dir / "waveforms"
+        waveform_dir.mkdir(exist_ok=True)
+        waveform_path = waveform_dir / "fibonacci_test.vcd"
+        plus_args = [f"+dumpfile={waveform_path}"]
     
     # Run the test - pass hex file as a define instead of a parameter
     run(
@@ -257,9 +260,9 @@ def runCocotbTests():
         module="test_fibonacci",
         testcase="test_fibonacci_program",
         includes=[str(incl_dir)],
-        simulator="icarus",
+        simulator="verilator",
         timescale="1ns/1ps",
-        plus_args=[f"+dumpfile={waveform_path}"],
+        plus_args=plus_args,
         defines=[f"INSTR_HEX_FILE=\"{hex_file}\""]  # Pass as Verilog define
     )
 
