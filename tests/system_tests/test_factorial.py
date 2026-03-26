@@ -86,7 +86,7 @@ def compile_factorial():
         log.info("Converted ELF binary to raw binary format.")
         subprocess.run([
             "truncate",
-            "-s", "2048",
+            "-s", "16384",
             str(bin_file)
         ], check=True)
         subprocess.run([

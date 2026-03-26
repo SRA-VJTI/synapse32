@@ -30,8 +30,8 @@ int main() {
     }
 
     // MULH: high 32 bits of signed * signed
-    int32_t mulh_a = (int32_t)0x80000000;
-    int32_t mulh_b = -2;
+    volatile int32_t mulh_a = (int32_t)0x80000000;
+    volatile int32_t mulh_b = -2;
     int32_t mulh_res = ((int64_t)mulh_a * (int64_t)mulh_b) >> 32;
 #ifdef HOST
     printf("MULH: high(0x%08x * %d) = %d\n", (uint32_t)mulh_a, mulh_b, mulh_res);
@@ -47,8 +47,8 @@ int main() {
     sink32 = mulh_res;
 
     // MULHSU: high 32 bits of signed * unsigned
-    int32_t mulhsu_a = -1;
-    uint32_t mulhsu_b = 2;
+    volatile int32_t mulhsu_a = -1;
+    volatile uint32_t mulhsu_b = 2;
     int32_t mulhsu_res = ((int64_t)mulhsu_a * (uint64_t)mulhsu_b) >> 32;
 #ifdef HOST
     printf("MULHSU: high(%d * %u) = %d\n", mulhsu_a, mulhsu_b, mulhsu_res);
@@ -64,8 +64,8 @@ int main() {
     sink32 = mulhsu_res;
 
     // MULHU: high 32 bits of unsigned * unsigned
-    uint32_t mulhu_a = 0xFFFFFFFF;
-    uint32_t mulhu_b = 0xFFFFFFFF;
+    volatile uint32_t mulhu_a = 0xFFFFFFFF;
+    volatile uint32_t mulhu_b = 0xFFFFFFFF;
     uint32_t mulhu_res = ((uint64_t)mulhu_a * (uint64_t)mulhu_b) >> 32;
 #ifdef HOST
     printf("MULHU: high(%u * %u) = %u\n", mulhu_a, mulhu_b, mulhu_res);
@@ -81,8 +81,8 @@ int main() {
     sinku32 = mulhu_res;
 
     // DIV: signed division
-    int32_t div_a = -2;
-    int32_t div_b = 2;
+    volatile int32_t div_a = -2;
+    volatile int32_t div_b = 2;
     int32_t div_res = div_a / div_b;
 #ifdef HOST
     printf("DIV: %d / %d = %d\n", div_a, div_b, div_res);
@@ -98,8 +98,8 @@ int main() {
     sink32 = div_res;
 
     // DIVU: unsigned division
-    uint32_t divu_a = 10;
-    uint32_t divu_b = 2;
+    volatile uint32_t divu_a = 10;
+    volatile uint32_t divu_b = 2;
     uint32_t divu_res = divu_a / divu_b;
 #ifdef HOST
     printf("DIVU: %u / %u = %u\n", divu_a, divu_b, divu_res);
@@ -115,8 +115,8 @@ int main() {
     sinku32 = divu_res;
 
     // REM: signed remainder
-    int32_t rem_a = -2;
-    int32_t rem_b = 3;
+    volatile int32_t rem_a = -2;
+    volatile int32_t rem_b = 3;
     int32_t rem_res = rem_a % rem_b;
 #ifdef HOST
     printf("REM: %d %% %d = %d\n", rem_a, rem_b, rem_res);
@@ -132,8 +132,8 @@ int main() {
     sink32 = rem_res;
 
     // REMU: unsigned remainder
-    uint32_t remu_a = 10;
-    uint32_t remu_b = 3;
+    volatile uint32_t remu_a = 10;
+    volatile uint32_t remu_b = 3;
     uint32_t remu_res = remu_a % remu_b;
 #ifdef HOST
     printf("REMU: %u %% %u = %u\n", remu_a, remu_b, remu_res);
