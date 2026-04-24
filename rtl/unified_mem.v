@@ -1,7 +1,7 @@
 `default_nettype none
-// instr_mem.v - instruction memory for single-cycle RISC-V CPU with byte/halfword/word access
+// unified_mem.v - unified instruction/data memory backing RAM
 
-module instr_mem #(
+module unified_mem #(
     parameter DATA_WIDTH = 32, 
     parameter ADDR_WIDTH = 32, 
     parameter MEM_SIZE = 512

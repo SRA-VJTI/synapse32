@@ -499,9 +499,7 @@ def runCocotbTests():
             plus_args = [f"+dumpfile={waveform_path}"]
         
         # Create unique sim_build directory for each test
-        if not os.path.exists(os.path.join(curr_dir, "sim_build")):
-            os.makedirs(os.path.join(curr_dir, "sim_build"))
-        sim_build_dir = os.path.join(curr_dir, "sim_build", f"sim_build_{test_name}")
+        sim_build_dir = os.path.join(curr_dir, f"sim_build_{test_name}")
         
         # Clean up previous sim_build for this test
         if os.path.exists(sim_build_dir):
@@ -519,6 +517,12 @@ def runCocotbTests():
             plus_args=plus_args,
             sim_build=sim_build_dir,
             force_compile=True,
+            extra_env={
+                "TOPLEVEL": "top",
+                "MODULE": "test_uart_cpu",
+                "COCOTB_TOPLEVEL": "top",
+                "COCOTB_TEST_MODULES": "test_uart_cpu",
+            },
         )
 
 if __name__ == "__main__":

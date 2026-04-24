@@ -3,6 +3,9 @@ from cocotb.triggers import RisingEdge, Timer
 from cocotb.clock import Clock
 import pytest
 
+RESET_PC_BASE = 0x80000000
+
+
 async def run_csr_test_program(dut, instr_mem):
     """Helper function to run a CSR test program"""
     # Dictionary to track register values
@@ -10,7 +13,10 @@ async def run_csr_test_program(dut, instr_mem):
     
     # Simulate instruction memory fetch
     def get_instr(pc):
-        idx = pc // 4
+        if pc >= RESET_PC_BASE:
+            idx = (pc - RESET_PC_BASE) // 4
+        else:
+            idx = pc // 4
         if 0 <= idx < len(instr_mem):
             return instr_mem[idx]
         return 0

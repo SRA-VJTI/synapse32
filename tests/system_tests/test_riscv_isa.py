@@ -10,6 +10,7 @@ import shutil
 from pathlib import Path
 
 import cocotb
+import pytest
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge
 from cocotb_test.simulator import run
@@ -52,6 +53,11 @@ async def test_riscv_isa_image(dut):
 
 
 def runCocotbTests():
+    required_env = ("ISA_HEX_FILE", "ISA_TOHOST_ADDR")
+    missing = [name for name in required_env if name not in os.environ]
+    if missing:
+        pytest.skip(f"Skipping ISA harness in full pytest run (missing env: {', '.join(missing)})")
+
     repo_root = _find_repo_root()
     rtl_dir = repo_root / "rtl"
     incl_dir = rtl_dir / "include"
