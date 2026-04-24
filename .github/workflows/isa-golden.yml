@@ -5,11 +5,13 @@ on:
     paths:
       - "rtl/**"
       - "tests/**"
+      - ".github/scripts/**"
       - ".github/workflows/isa-golden.yml"
   pull_request:
     paths:
       - "rtl/**"
       - "tests/**"
+      - ".github/scripts/**"
       - ".github/workflows/isa-golden.yml"
   workflow_dispatch:
     inputs:
@@ -95,7 +97,7 @@ jobs:
               echo "${d}-p-${b}"
             done
           )
-          make -j"$(nproc)" "${p_targets[@]}"
+          make -j"$(nproc)" XLEN=32 "${p_targets[@]}"
 
       - name: Verify tools
         run: |

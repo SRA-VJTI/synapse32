@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 
-TEST_NAME_RE = re.compile(r"^rv32(ui|um|ua)-p-")
+TEST_NAME_RE = re.compile(r"^rv32(ui|um|ua)-p-[A-Za-z0-9_]+$")
 
 
 def run(cmd: list[str], env: dict[str, str] | None = None, cwd: Path | None = None) -> subprocess.CompletedProcess:
