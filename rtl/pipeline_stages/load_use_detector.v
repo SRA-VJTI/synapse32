@@ -34,7 +34,9 @@ module load_use_detector (
                            (instr_id_ex == INSTR_AMOOR_W) ||
                            (instr_id_ex == INSTR_AMOXOR_W) ||
                            (instr_id_ex == INSTR_AMOMAX_W) ||
-                           (instr_id_ex == INSTR_AMOMIN_W);
+                           (instr_id_ex == INSTR_AMOMIN_W) ||
+                           (instr_id_ex == INSTR_AMOMAXU_W) ||
+                           (instr_id_ex == INSTR_AMOMINU_W);
     
     // Detect if current instruction depends on loaded value
     always @(*) begin

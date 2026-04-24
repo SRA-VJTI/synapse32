@@ -24,7 +24,9 @@ module writeback (
                            (instr_id_in == INSTR_AMOOR_W) ||
                            (instr_id_in == INSTR_AMOXOR_W) ||
                            (instr_id_in == INSTR_AMOMAX_W) ||
-                           (instr_id_in == INSTR_AMOMIN_W);
+                           (instr_id_in == INSTR_AMOMIN_W) ||
+                           (instr_id_in == INSTR_AMOMAXU_W) ||
+                           (instr_id_in == INSTR_AMOMINU_W);
     
     // Select appropriate data to write back
     assign rd_addr_out = rd_addr_in;

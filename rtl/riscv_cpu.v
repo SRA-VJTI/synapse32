@@ -233,11 +233,12 @@ module riscv_cpu (
     wire is_amo_xor= (ex_mem_inst0_instr_id_out == INSTR_AMOXOR_W);
     wire is_amo_max= (ex_mem_inst0_instr_id_out == INSTR_AMOMAX_W);
     wire is_amo_min= (ex_mem_inst0_instr_id_out == INSTR_AMOMIN_W);
+    wire is_amo_maxu=(ex_mem_inst0_instr_id_out == INSTR_AMOMAXU_W);
+    wire is_amo_minu=(ex_mem_inst0_instr_id_out == INSTR_AMOMINU_W);
     wire is_amo_w = is_amo_sw || is_amo_add || is_amo_and || is_amo_or ||
-                    is_amo_xor || is_amo_max || is_amo_min;
-    // Atomics are serialized by stalling fetch/decode while the op is in MEM.
-    wire atomic_stall = is_lr_w || is_sc_w || is_amo_w;
-    assign pipeline_stall = hazard_stall || wfi_stall || atomic_stall;
+                    is_amo_xor || is_amo_max || is_amo_min ||
+                    is_amo_maxu || is_amo_minu;
+    assign pipeline_stall = hazard_stall || wfi_stall;
 
     wire atomic_word_aligned = (ex_mem_inst0_mem_addr_out[1:0] == 2'b00);
     wire sc_success = is_sc_w && atomic_word_aligned && lr_valid &&
@@ -265,6 +266,12 @@ module riscv_cpu (
                               atomic_old_word : ex_mem_inst0_rs2_value_out;
         end else if (is_amo_min) begin
             atomic_new_word = ($signed(atomic_old_word_signed) <= $signed(atomic_rs2_signed)) ?
+                              atomic_old_word : ex_mem_inst0_rs2_value_out;
+        end else if (is_amo_maxu) begin
+            atomic_new_word = (atomic_old_word >= ex_mem_inst0_rs2_value_out) ?
+                              atomic_old_word : ex_mem_inst0_rs2_value_out;
+        end else if (is_amo_minu) begin
+            atomic_new_word = (atomic_old_word <= ex_mem_inst0_rs2_value_out) ?
                               atomic_old_word : ex_mem_inst0_rs2_value_out;
         end else begin
             atomic_new_word = 32'h0;

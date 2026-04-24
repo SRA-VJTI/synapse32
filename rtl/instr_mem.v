@@ -6,8 +6,12 @@ module instr_mem #(
     parameter ADDR_WIDTH = 32, 
     parameter MEM_SIZE = 512
 ) (
+    input wire clk,
     input wire [ADDR_WIDTH-1:0] instr_addr,      // Instruction fetch address (word-aligned)
     input wire [ADDR_WIDTH-1:0] instr_addr_p2,   // Data access address (byte-aligned)
+    input wire wr_en,                            // Data write enable for unified-memory accesses
+    input wire [3:0] write_byte_enable,          // Data write byte enables
+    input wire [DATA_WIDTH-1:0] wr_data,         // Data write payload
     input wire [2:0] load_type,                  // Load type for data access
     output reg [DATA_WIDTH-1:0] instr,           // Instruction output (always word)
     output reg [DATA_WIDTH-1:0] instr_p2         // Data read output (byte/halfword/word)
@@ -121,6 +125,32 @@ always @(*) begin
         3'b010: instr_p2 = word_data;                           // LW - Load Word
         default: instr_p2 = 32'h0;                              // Invalid load type
     endcase
+end
+
+// Port 2 write path for unified memory behavior (used by riscv-tests env/p).
+always @(posedge clk) begin
+    reg [ADDR_WIDTH-3:0] word_addr;
+    reg [1:0] byte_offset;
+    reg [ADDR_WIDTH-1:0] byte_addr;
+    integer i;
+    if (wr_en) begin
+        for (i = 0; i < 4; i = i + 1) begin
+            if (write_byte_enable[i]) begin
+                byte_addr = instr_addr_p2 + i;
+                word_addr = byte_addr[ADDR_WIDTH-1:2];
+                byte_offset = byte_addr[1:0];
+                if (word_addr < MEM_SIZE) begin
+                    case (byte_offset)
+                        2'b00: instr_ram[word_addr][7:0]   <= wr_data[(i*8) +: 8];
+                        2'b01: instr_ram[word_addr][15:8]  <= wr_data[(i*8) +: 8];
+                        2'b10: instr_ram[word_addr][23:16] <= wr_data[(i*8) +: 8];
+                        2'b11: instr_ram[word_addr][31:24] <= wr_data[(i*8) +: 8];
+                        default: begin end
+                    endcase
+                end
+            end
+        end
+    end
 end
 
 endmodule

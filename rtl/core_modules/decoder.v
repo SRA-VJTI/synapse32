@@ -145,6 +145,8 @@ module decoder (
                         5'b00100: instr_id = INSTR_AMOXOR_W;
                         5'b10100: instr_id = INSTR_AMOMAX_W;
                         5'b10000: instr_id = INSTR_AMOMIN_W;
+                        5'b11100: instr_id = INSTR_AMOMAXU_W;
+                        5'b11000: instr_id = INSTR_AMOMINU_W;
                         default:            instr_id = INSTR_INVALID;
                     endcase
                 end

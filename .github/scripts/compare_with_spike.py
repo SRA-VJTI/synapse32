@@ -141,8 +141,8 @@ def main() -> int:
                 mismatches.append(
                     {
                         **rec,
-                        "spike_log_tail": spike_log[-1200:],
-                        "verilator_log_tail": verilator_log[-1200:],
+                        "spike_log_tail": spike_log[-8000:],
+                        "verilator_log_tail": verilator_log[-8000:],
                     }
                 )
             print(f"[{elf.name}] spike={spike_ok} verilator={verilator_ok} match={same}")

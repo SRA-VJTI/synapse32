@@ -99,8 +99,12 @@ module top (
         .ADDR_WIDTH(32),
         .MEM_SIZE(131072)  // 512KB / 4 bytes = 128K words
     ) instr_mem_inst (
+        .clk(clk),
         .instr_addr(instr_fetch_addr_local),
         .instr_addr_p2(instr_data_addr_local),
+        .wr_en(cpu_mem_write_en && instr_mem_access),
+        .write_byte_enable(cpu_write_byte_enable),
+        .wr_data(cpu_mem_write_data),
         .load_type(cpu_load_type),
         .instr(instr_to_cpu),
         .instr_p2(instr_read_data)

@@ -91,6 +91,8 @@ localparam [6:0] INSTR_AMOOR_W    = 7'h45;
 localparam [6:0] INSTR_AMOXOR_W   = 7'h46;
 localparam [6:0] INSTR_AMOMAX_W   = 7'h47;
 localparam [6:0] INSTR_AMOMIN_W   = 7'h48;
+localparam [6:0] INSTR_AMOMAXU_W  = 7'h49;
+localparam [6:0] INSTR_AMOMINU_W  = 7'h4A;
 
 // Unknown or NOP
 localparam [6:0] INSTR_INVALID = 7'h00;

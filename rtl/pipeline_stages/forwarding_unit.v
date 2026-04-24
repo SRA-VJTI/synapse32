@@ -41,7 +41,9 @@ module forwarding_unit (
                          (instr_id_mem == INSTR_AMOOR_W) ||
                          (instr_id_mem == INSTR_AMOXOR_W) ||
                          (instr_id_mem == INSTR_AMOMAX_W) ||
-                         (instr_id_mem == INSTR_AMOMIN_W);
+                         (instr_id_mem == INSTR_AMOMIN_W) ||
+                         (instr_id_mem == INSTR_AMOMAXU_W) ||
+                         (instr_id_mem == INSTR_AMOMINU_W);
     
     always @(*) begin
         // Default: no forwarding
