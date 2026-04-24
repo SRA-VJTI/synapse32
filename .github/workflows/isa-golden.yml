@@ -64,6 +64,7 @@ jobs:
             libtool \
             ninja-build \
             patchutils \
+            picolibc-riscv64-unknown-elf \
             python3 \
             python3-venv \
             texinfo \
