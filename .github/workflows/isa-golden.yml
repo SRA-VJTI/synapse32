@@ -87,7 +87,15 @@ jobs:
           cd "$RISCV_TESTS_DIR"
           autoconf
           ./configure --prefix="$RISCV_TESTS_DIR/install"
-          make -j"$(nproc)" isa
+          cd isa
+          mapfile -t p_targets < <(
+            for f in rv32ui/*.S rv32um/*.S rv32ua/*.S; do
+              d="$(dirname "$f")"
+              b="$(basename "$f" .S)"
+              echo "${d}-p-${b}"
+            done
+          )
+          make -j"$(nproc)" "${p_targets[@]}"
 
       - name: Verify tools
         run: |
