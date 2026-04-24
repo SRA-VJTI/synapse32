@@ -2,7 +2,6 @@ name: ISA Golden (Spike vs Verilator)
 
 on:
   push:
-    branches: ["main"]
     paths:
       - "rtl/**"
       - "tests/**"
