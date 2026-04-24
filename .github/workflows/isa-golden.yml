@@ -103,7 +103,7 @@ jobs:
         run: |
           verilator --version
           riscv64-unknown-elf-gcc --version | head -n 1
-          spike --version
+          spike --help | head -n 5
 
       - name: Set up Python
         run: |
