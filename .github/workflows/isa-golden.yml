@@ -82,11 +82,11 @@ jobs:
 
       - name: Build riscv-tests
         run: |
-          git clone --depth 1 https://github.com/riscv-software-src/riscv-tests.git "$RISCV_TESTS_DIR"
+          git clone --depth 1 --recurse-submodules https://github.com/riscv-software-src/riscv-tests.git "$RISCV_TESTS_DIR"
           cd "$RISCV_TESTS_DIR"
           autoconf
           ./configure --prefix="$RISCV_TESTS_DIR/install"
-          make -j"$(nproc)"
+          make -j"$(nproc)" isa
 
       - name: Verify tools
         run: |
