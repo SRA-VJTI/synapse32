@@ -63,10 +63,6 @@ def elf_to_hex(elf: Path, out_hex: Path) -> None:
     rc = run(["riscv64-unknown-elf-objcopy", "-O", "binary", str(elf), str(bin_file)])
     if rc.returncode != 0:
         raise RuntimeError(f"objcopy binary failed for {elf}:\n{rc.stderr}")
-    # Match existing test image sizing strategy.
-    rc = run(["truncate", "-s", "2048", str(bin_file)])
-    if rc.returncode != 0:
-        raise RuntimeError(f"truncate failed for {bin_file}:\n{rc.stderr}")
     rc = run(
         [
             "riscv64-unknown-elf-objcopy",
@@ -138,6 +134,7 @@ def main() -> int:
                 "spike_pass": spike_ok,
                 "verilator_pass": verilator_ok,
                 "match": same,
+                "tohost": f"0x{th:x}",
             }
             results.append(rec)
             if not same:

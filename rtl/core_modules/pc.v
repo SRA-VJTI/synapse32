@@ -1,3 +1,4 @@
+`include "memory_map.vh"
 module pc(
    input clk,
    input rst,
@@ -6,11 +7,11 @@ module pc(
    input [31:0] jump,
    output[31:0] out
 );
-   reg [31:0] next_pc = 32'd0;
+   reg [31:0] next_pc = `INSTR_MEM_BASE;
 
     always @ (posedge clk) begin
         if(rst)
-            next_pc <= 32'b0;
+            next_pc <= `INSTR_MEM_BASE;
         else if(j_signal) begin
             next_pc <= jump;
         end
