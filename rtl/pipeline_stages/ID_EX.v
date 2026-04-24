@@ -9,7 +9,7 @@ module ID_EX(
     input wire [4:0] rs2_addr_in,
     input wire [4:0] rd_addr_in,
     input wire [6:0] opcode_in,
-    input wire [5:0] instr_id_in,
+    input wire [6:0] instr_id_in,
     input wire [31:0] pc_in,
     input wire [31:0] rs1_value_in,
     input wire [31:0] rs2_value_in,
@@ -22,7 +22,7 @@ module ID_EX(
     output reg [4:0] rs2_addr_out,
     output reg [4:0] rd_addr_out,
     output reg [6:0] opcode_out,
-    output reg [5:0] instr_id_out,
+    output reg [6:0] instr_id_out,
     output reg [31:0] pc_out,
     output reg [31:0] rs1_value_out,
     output reg [31:0] rs2_value_out
@@ -37,7 +37,7 @@ module ID_EX(
             rs2_addr_out <= 5'b0;
             rd_addr_out <= 5'b0;
             opcode_out <= 7'b0;
-            instr_id_out <= 6'b0;
+            instr_id_out <= 7'b0;
             pc_out <= 32'b0;
             rs1_value_out <= 32'b0;
             rs2_value_out <= 32'b0;
@@ -51,7 +51,7 @@ module ID_EX(
             rs2_addr_out <= 5'b0;
             rd_addr_out <= 5'b0;
             opcode_out <= 7'b0;
-            instr_id_out <= 6'b0;
+            instr_id_out <= 7'b0;
             pc_out <= pc_in;        // Keep PC for correct program flow
             rs1_value_out <= 32'b0;
             rs2_value_out <= 32'b0;

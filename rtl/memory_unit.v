@@ -1,7 +1,7 @@
 `default_nettype none
 `include "instr_defines.vh"
 module memory_unit (
-    input wire [5:0] instr_id,
+    input wire [6:0] instr_id,
     input wire [31:0] rs2_value,
     input wire [31:0] mem_addr,
     output wire wr_enable,

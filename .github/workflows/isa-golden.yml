@@ -1,0 +1,117 @@
+name: ISA Golden (Spike vs Verilator)
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "rtl/**"
+      - "tests/**"
+      - ".github/workflows/isa-golden.yml"
+  pull_request:
+    paths:
+      - "rtl/**"
+      - "tests/**"
+      - ".github/workflows/isa-golden.yml"
+  workflow_dispatch:
+    inputs:
+      test_limit:
+        description: "Limit number of riscv-tests to run (0 = all)"
+        required: false
+        default: "0"
+      max_cycles:
+        description: "Max Verilator cycles per ISA test"
+        required: false
+        default: "200000"
+
+jobs:
+  spike-golden:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      RISCV: /usr
+      SPIKE_PREFIX: ${{ github.workspace }}/.cache/spike-install
+      RISCV_TESTS_DIR: ${{ github.workspace }}/.cache/riscv-tests
+      TEST_LIMIT: ${{ github.event.inputs.test_limit || '0' }}
+      MAX_CYCLES: ${{ github.event.inputs.max_cycles || '200000' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf \
+            automake \
+            autotools-dev \
+            bc \
+            binutils-riscv64-unknown-elf \
+            bison \
+            build-essential \
+            cmake \
+            device-tree-compiler \
+            flex \
+            gawk \
+            gcc-riscv64-unknown-elf \
+            gperf \
+            libboost-filesystem-dev \
+            libboost-regex-dev \
+            libboost-system-dev \
+            libexpat1-dev \
+            libgmp-dev \
+            libmpc-dev \
+            libmpfr-dev \
+            libtool \
+            ninja-build \
+            patchutils \
+            python3 \
+            python3-venv \
+            texinfo \
+            verilator \
+            zlib1g-dev
+
+      - name: Build and install Spike
+        run: |
+          git clone --depth 1 https://github.com/riscv-software-src/riscv-isa-sim.git /tmp/riscv-isa-sim
+          mkdir -p /tmp/riscv-isa-sim/build
+          cd /tmp/riscv-isa-sim/build
+          ../configure --prefix="$SPIKE_PREFIX"
+          make -j"$(nproc)"
+          make install
+          echo "$SPIKE_PREFIX/bin" >> "$GITHUB_PATH"
+
+      - name: Build riscv-tests
+        run: |
+          git clone --depth 1 https://github.com/riscv-software-src/riscv-tests.git "$RISCV_TESTS_DIR"
+          cd "$RISCV_TESTS_DIR"
+          autoconf
+          ./configure --prefix="$RISCV_TESTS_DIR/install"
+          make -j"$(nproc)"
+
+      - name: Verify tools
+        run: |
+          verilator --version
+          riscv64-unknown-elf-gcc --version | head -n 1
+          spike --version
+
+      - name: Set up Python
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r tests/requirements.txt
+
+      - name: Compare Spike vs Verilator on riscv-tests
+        run: |
+          .venv/bin/python .github/scripts/compare_with_spike.py \
+            --riscv-tests "$RISCV_TESTS_DIR" \
+            --limit "$TEST_LIMIT" \
+            --max-cycles "$MAX_CYCLES"
+
+      - name: Upload compare report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: isa-golden-report
+          path: .github/artifacts/isa/compare_report.json
+          if-no-files-found: error
