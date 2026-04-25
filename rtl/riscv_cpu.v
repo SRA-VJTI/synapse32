@@ -237,6 +237,8 @@ module riscv_cpu (
     wire ex_mem_read_req;
     wire [31:0] ex_mem_read_addr;
     wire [2:0] ex_mem_read_type;
+    wire non_atomic_store_write_enable;
+    wire [31:0] non_atomic_store_write_addr;
     reg [31:0] mem_read_data_effective;
     wire load_all_bytes_covered;
     wire read_needs_memory;
@@ -443,8 +445,8 @@ module riscv_cpu (
         .mem_addr_mem(ex_mem_inst0_mem_addr_out),
         .rs2_value_mem(ex_mem_inst0_rs2_value_out),
         .mem_read_data(mem_read_data_effective),
-        .std_store_write_enable(mem_unit_inst0_wr_enable_out),
-        .std_store_write_addr(mem_unit_inst0_wr_addr_out),
+        .non_atomic_store_write_enable(non_atomic_store_write_enable),
+        .non_atomic_store_write_addr(non_atomic_store_write_addr),
         .is_lr_w(is_lr_w),
         .is_sc_w(is_sc_w),
         .is_amo_w(is_amo_w),
@@ -581,6 +583,8 @@ module riscv_cpu (
     // Commit buffered store only when memory read/write port is free this cycle.
     assign store_buf_commit_fire = store_buf_valid && !read_needs_memory &&
                                    !atomic_write_enable && !ex_mem_std_store_direct_req;
+    assign non_atomic_store_write_enable = ex_mem_std_store_direct_req || store_buf_commit_fire;
+    assign non_atomic_store_write_addr = ex_mem_std_store_direct_req ? ex_mem_store_addr : store_buf_addr;
     assign atomic_clobbers_store_buf = store_buf_valid && atomic_write_enable &&
                                        (store_buf_addr[31:2] == ex_mem_inst0_mem_addr_out[31:2]);
 

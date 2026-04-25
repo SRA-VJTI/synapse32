@@ -64,6 +64,19 @@ main:
         sw t4, 0x20c(t0)      # expected 1 (failure)
         sw t5, 0x210(t0)      # expected 0x44
 
+        # LR/SC failure after subword store to same reserved word
+        addi t6, t0, 0x14
+        li t1, 0x55667788
+        sw t1, 0(t6)
+        lr.w t2, (t6)
+        li t3, 0xaa
+        sb t3, 1(t6)          # same word, different byte
+        li t1, 0x12345678
+        sc.w t4, t1, (t6)
+        lw t5, 0(t6)
+        sw t4, 0x25c(t0)      # expected 1 (failure)
+        sw t5, 0x260(t0)      # expected 0x5566aa88
+
         # AMOSWAP.W
         addi t6, t0, 0x20
         li t1, 0x11111111
@@ -287,6 +300,8 @@ async def test_atomic_smoke(dut):
         BASE + 0x250: 0xFFFFFFFF,  # amomaxu new
         BASE + 0x254: 0xFFFFFFFE,  # amominu old
         BASE + 0x258: 0x00000002,  # amominu new
+        BASE + 0x25C: 0x00000001,  # sc.w fails after sb to same word
+        BASE + 0x260: 0x5566AA88,  # subword store effect is preserved
     }
 
     for addr, exp in expected.items():

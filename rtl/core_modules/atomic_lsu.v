@@ -8,8 +8,8 @@ module atomic_lsu (
     input wire [31:0] mem_addr_mem,
     input wire [31:0] rs2_value_mem,
     input wire [31:0] mem_read_data,
-    input wire std_store_write_enable,
-    input wire [31:0] std_store_write_addr,
+    input wire non_atomic_store_write_enable,
+    input wire [31:0] non_atomic_store_write_addr,
 
     output wire is_lr_w,
     output wire is_sc_w,
@@ -99,8 +99,8 @@ module atomic_lsu (
                 lr_valid <= 1'b1;
                 lr_addr <= mem_addr_mem;
             end else if (is_sc_w || is_amo_w ||
-                         (std_store_write_enable &&
-                          (std_store_write_addr[31:2] == lr_addr[31:2]))) begin
+                         (non_atomic_store_write_enable &&
+                          (non_atomic_store_write_addr[31:2] == lr_addr[31:2]))) begin
                 lr_valid <= 1'b0;
             end
         end

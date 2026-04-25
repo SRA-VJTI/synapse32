@@ -255,6 +255,10 @@ always @(*) begin
             end
             7'b0001111: begin // MISC-MEM (fence instructions)
             if (instr_id == INSTR_FENCE_I) begin
+                // Serialize instruction stream: squash younger instructions and
+                // refetch from the next sequential PC.
+                jump_signal = 1;
+                jump_addr = pc_input + 4;
                 flush_pipeline = 1;
             end
             end
