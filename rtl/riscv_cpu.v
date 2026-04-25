@@ -327,6 +327,11 @@ module riscv_cpu (
         .external_interrupt(external_interrupt)
     );
 
+    // Value available for EX-stage forwarding from MEM stage.
+    // SC computes its architectural result in MEM, so forward that instead of
+    // the raw EX result for dependent instructions.
+    wire [31:0] ex_mem_forward_result = is_sc_w ? sc_result : ex_mem_inst0_exec_output_out;
+
     execution_unit ex_unit_inst0 (
         .rs1(id_ex_inst0_rs1_value_out),
         .rs2(id_ex_inst0_rs2_value_out),
@@ -340,7 +345,7 @@ module riscv_cpu (
         .pc_input(id_ex_inst0_pc_out),
         .forward_a(forward_a),
         .forward_b(forward_b),
-        .ex_mem_result(ex_mem_inst0_exec_output_out),
+        .ex_mem_result(ex_mem_forward_result),
         .mem_wb_result(wb_inst0_rd_value_out),
         
         // CSR interface connections
