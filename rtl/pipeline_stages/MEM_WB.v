@@ -18,10 +18,6 @@ module MEM_WB (
     input wire rd_valid_in,
     input wire [31:0] mem_data_in,  // Data from memory
     
-    // Store-load forwarding inputs
-    input wire store_load_hazard,    // Signal indicating a store-load hazard
-    input wire [31:0] store_data,    // Data from the previous store instruction
-    
     // Standard pipeline register outputs
     output reg [4:0] rs1_addr_out,
     output reg [4:0] rs2_addr_out,
@@ -69,9 +65,7 @@ module MEM_WB (
             jump_addr_out <= jump_addr_in;
             instr_id_out <= instr_id_in;
             rd_valid_out <= rd_valid_in;
-            
-            // If there's a store-load hazard, forward store data instead of memory data
-            mem_data_out <= store_load_hazard ? store_data : mem_data_in;
+            mem_data_out <= mem_data_in;
         end
     end
 endmodule
