@@ -1,5 +1,9 @@
-"""Compile and run a small RV32A program, validate LR/SC+AMO behavior,
-and verify that atomic instructions introduce observable pipeline stalling.
+"""Compile and run an RV32A program that exercises all atomic ops.
+
+Coverage:
+- LR/SC success path
+- LR/SC failure path
+- AMOSWAP/AMOADD/AMOAND/AMOOR/AMOXOR/AMOMAX/AMOMIN/AMOMAXU/AMOMINU
 """
 import os
 import shutil
@@ -36,26 +40,119 @@ def compile_atomic_asm(build_dir: Path, sim_dir: Path) -> Path:
         .type main, @function
 main:
         li t0, 0x10000000
+        # LR/SC success
         li t1, 5
         sw t1, 0(t0)
-
         lr.w t2, (t0)
         li t3, 9
         sc.w t4, t3, (t0)
         lr.w t5, (t0)
+        sw t2, 0x200(t0)      # expected 5
+        sw t4, 0x204(t0)      # expected 0 (success)
+        sw t5, 0x208(t0)      # expected 9
 
-        li t6, 3
-        amoadd.w s0, t6, (t0)
-        amoxor.w s1, t6, (t0)
+        # LR/SC failure after reservation invalidation by normal store
+        addi t6, t0, 0x10
+        li t1, 0x33
+        sw t1, 0(t6)
+        lr.w t2, (t6)
+        li t3, 0x44
+        sw t3, 0(t6)          # should clear reservation
+        li t1, 0x55
+        sc.w t4, t1, (t6)
+        lw t5, 0(t6)
+        sw t4, 0x20c(t0)      # expected 1 (failure)
+        sw t5, 0x210(t0)      # expected 0x44
 
-        sw t2, 0x20(t0)
-        sw t4, 0x24(t0)
-        sw t5, 0x28(t0)
-        sw s0, 0x2c(t0)
-        sw s1, 0x30(t0)
+        # AMOSWAP.W
+        addi t6, t0, 0x20
+        li t1, 0x11111111
+        sw t1, 0(t6)
+        li t2, 0x22222222
+        amoswap.w t3, t2, (t6)
+        lw t4, 0(t6)
+        sw t3, 0x214(t0)      # old
+        sw t4, 0x218(t0)      # new
 
-        lw a0, 0(t0)
-        sw a0, 0x34(t0)
+        # AMOADD.W
+        addi t6, t0, 0x24
+        li t1, 10
+        sw t1, 0(t6)
+        li t2, 7
+        amoadd.w t3, t2, (t6)
+        lw t4, 0(t6)
+        sw t3, 0x21c(t0)
+        sw t4, 0x220(t0)
+
+        # AMOAND.W
+        addi t6, t0, 0x28
+        li t1, 0xf0f0aa55
+        sw t1, 0(t6)
+        li t2, 0x0ff00f0f
+        amoand.w t3, t2, (t6)
+        lw t4, 0(t6)
+        sw t3, 0x224(t0)
+        sw t4, 0x228(t0)
+
+        # AMOOR.W
+        addi t6, t0, 0x2c
+        li t1, 0x12340000
+        sw t1, 0(t6)
+        li t2, 0x0000abcd
+        amoor.w t3, t2, (t6)
+        lw t4, 0(t6)
+        sw t3, 0x22c(t0)
+        sw t4, 0x230(t0)
+
+        # AMOXOR.W
+        addi t6, t0, 0x30
+        li t1, 0xffff0000
+        sw t1, 0(t6)
+        li t2, 0x00ff00ff
+        amoxor.w t3, t2, (t6)
+        lw t4, 0(t6)
+        sw t3, 0x234(t0)
+        sw t4, 0x238(t0)
+
+        # AMOMAX.W (signed): max(-5, 3) -> 3
+        addi t6, t0, 0x34
+        li t1, -5
+        sw t1, 0(t6)
+        li t2, 3
+        amomax.w t3, t2, (t6)
+        lw t4, 0(t6)
+        sw t3, 0x23c(t0)
+        sw t4, 0x240(t0)
+
+        # AMOMIN.W (signed): min(5, -3) -> -3
+        addi t6, t0, 0x38
+        li t1, 5
+        sw t1, 0(t6)
+        li t2, -3
+        amomin.w t3, t2, (t6)
+        lw t4, 0(t6)
+        sw t3, 0x244(t0)
+        sw t4, 0x248(t0)
+
+        # AMOMAXU.W (unsigned): max(1, 0xffffffff) -> 0xffffffff
+        addi t6, t0, 0x3c
+        li t1, 1
+        sw t1, 0(t6)
+        li t2, -1
+        amomaxu.w t3, t2, (t6)
+        lw t4, 0(t6)
+        sw t3, 0x24c(t0)
+        sw t4, 0x250(t0)
+
+        # AMOMINU.W (unsigned): min(0xfffffffe, 2) -> 2
+        addi t6, t0, 0x40
+        li t1, -2
+        sw t1, 0(t6)
+        li t2, 2
+        amominu.w t3, t2, (t6)
+        lw t4, 0(t6)
+        sw t3, 0x254(t0)
+        sw t4, 0x258(t0)
 
         li a1, 1
         sb a1, 0xff(t0)
@@ -167,12 +264,29 @@ async def test_atomic_smoke(dut):
     assert done_seen, "Atomic test program did not finish"
 
     expected = {
-        BASE + 0x20: 5,   # lr.w old value
-        BASE + 0x24: 0,   # sc.w success code
-        BASE + 0x28: 9,   # second lr.w sees new value
-        BASE + 0x2C: 9,   # amoadd.w returns old value
-        BASE + 0x30: 12,  # amoxor.w returns old value
-        BASE + 0x34: 15,  # final memory word
+        BASE + 0x200: 0x00000005,  # lr.w old value
+        BASE + 0x204: 0x00000000,  # sc.w success code
+        BASE + 0x208: 0x00000009,  # second lr.w sees new value
+        BASE + 0x20C: 0x00000001,  # sc.w failure code
+        BASE + 0x210: 0x00000044,  # failed sc must not update memory
+        BASE + 0x214: 0x11111111,  # amoswap old
+        BASE + 0x218: 0x22222222,  # amoswap new
+        BASE + 0x21C: 0x0000000A,  # amoadd old
+        BASE + 0x220: 0x00000011,  # amoadd new
+        BASE + 0x224: 0xF0F0AA55,  # amoand old
+        BASE + 0x228: 0x00F00A05,  # amoand new
+        BASE + 0x22C: 0x12340000,  # amoor old
+        BASE + 0x230: 0x1234ABCD,  # amoor new
+        BASE + 0x234: 0xFFFF0000,  # amoxor old
+        BASE + 0x238: 0xFF0000FF,  # amoxor new
+        BASE + 0x23C: 0xFFFFFFFB,  # amomax old
+        BASE + 0x240: 0x00000003,  # amomax new
+        BASE + 0x244: 0x00000005,  # amomin old
+        BASE + 0x248: 0xFFFFFFFD,  # amomin new
+        BASE + 0x24C: 0x00000001,  # amomaxu old
+        BASE + 0x250: 0xFFFFFFFF,  # amomaxu new
+        BASE + 0x254: 0xFFFFFFFE,  # amominu old
+        BASE + 0x258: 0x00000002,  # amominu new
     }
 
     for addr, exp in expected.items():

@@ -241,6 +241,7 @@ module riscv_cpu (
     wire load_all_bytes_covered;
     wire read_needs_memory;
     wire store_buf_commit_fire;
+    wire atomic_clobbers_store_buf;
 
     // Atomic LSU signals (produced by atomic_lsu module in MEM stage).
     wire is_lr_w;
@@ -270,13 +271,17 @@ module riscv_cpu (
             // One-entry store buffer update.
             // If a store is committed and no new store is entering, clear valid.
             // If a new store enters, capture it (and replace any just-committed entry).
-            if (store_buf_commit_fire && !ex_mem_std_store_req) begin
-                store_buf_valid <= 1'b0;
-            end else if (ex_mem_std_store_req) begin
+            if (ex_mem_std_store_req) begin
                 store_buf_valid <= 1'b1;
                 store_buf_addr <= ex_mem_store_addr;
                 store_buf_data <= ex_mem_store_data;
                 store_buf_be <= ex_mem_store_be;
+            end else if (atomic_clobbers_store_buf) begin
+                // Older store to the same word is architecturally consumed by the
+                // AMO/SC full-word write and must not commit afterward.
+                store_buf_valid <= 1'b0;
+            end else if (store_buf_commit_fire) begin
+                store_buf_valid <= 1'b0;
             end
         end
     end
@@ -575,6 +580,8 @@ module riscv_cpu (
     // Commit buffered store only when memory read/write port is free this cycle.
     assign store_buf_commit_fire = store_buf_valid && !read_needs_memory &&
                                    !atomic_write_enable && !ex_mem_std_store_direct_req;
+    assign atomic_clobbers_store_buf = store_buf_valid && atomic_write_enable &&
+                                       (store_buf_addr[31:2] == ex_mem_inst0_mem_addr_out[31:2]);
 
     // External memory interface arbitration:
     // - Standard stores are buffered then committed from store_buf.
