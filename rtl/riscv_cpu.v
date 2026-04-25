@@ -456,14 +456,15 @@ module riscv_cpu (
     );
 
     // Store request generated in EX/MEM for SB/SH/SW.
-    // Only RAM-addressed stores are buffered. MMIO stores stay direct.
+    // Only data-memory stores are buffered. Instruction-memory stores stay
+    // direct so self-modifying code + fence.i sees promptly visible writes.
     assign ex_mem_std_store_raw_req = mem_unit_inst0_wr_enable_out &&
                                       (mem_unit_inst0_write_byte_enable_out != 4'b0000);
     assign ex_mem_store_addr = mem_unit_inst0_wr_addr_out;
     assign ex_mem_store_data = mem_unit_inst0_wr_data_out;
     assign ex_mem_store_be = mem_unit_inst0_write_byte_enable_out;
     assign ex_mem_std_store_req = ex_mem_std_store_raw_req &&
-                                  (`IS_DATA_MEM(ex_mem_store_addr) || `IS_INSTR_MEM(ex_mem_store_addr));
+                                  `IS_DATA_MEM(ex_mem_store_addr);
     assign ex_mem_std_store_direct_req = ex_mem_std_store_raw_req && !ex_mem_std_store_req;
 
     // Read request for loads/LR/AMO.

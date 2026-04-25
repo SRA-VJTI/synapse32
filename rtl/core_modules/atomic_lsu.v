@@ -100,7 +100,7 @@ module atomic_lsu (
                 lr_addr <= mem_addr_mem;
             end else if (is_sc_w || is_amo_w ||
                          (std_store_write_enable &&
-                          (std_store_write_addr == lr_addr))) begin
+                          (std_store_write_addr[31:2] == lr_addr[31:2]))) begin
                 lr_valid <= 1'b0;
             end
         end
