@@ -26,6 +26,7 @@ module csr_file (
     input wire load_address_misaligned_exception,
     input wire store_address_misaligned_exception,
     input wire [31:0] exception_tval_in,
+    input wire instret_increment,
     
     // Timer interrupt input
     input wire timer_interrupt,
@@ -45,6 +46,7 @@ module csr_file (
     localparam CSR_MCAUSE    = 12'h342;
     localparam CSR_MTVAL     = 12'h343;
     localparam CSR_MIP       = 12'h344;
+    localparam CSR_MCOUNTINHIBIT = 12'h320;
     localparam CSR_SSTATUS   = 12'h100;
     localparam CSR_SIE       = 12'h104;
     localparam CSR_STVEC     = 12'h105;
@@ -53,6 +55,15 @@ module csr_file (
     localparam CSR_SCAUSE    = 12'h142;
     localparam CSR_STVAL     = 12'h143;
     localparam CSR_SIP       = 12'h144;
+    localparam CSR_SATP      = 12'h180;
+    localparam CSR_PMPCFG0   = 12'h3A0;
+    localparam CSR_PMPADDR0  = 12'h3B0;
+    // Machine-mode writable counter CSRs
+    localparam CSR_MCYCLE    = 12'hB00;
+    localparam CSR_MINSTRET  = 12'hB02;
+    localparam CSR_MCYCLEH   = 12'hB80;
+    localparam CSR_MINSTRETH = 12'hB82;
+    // Unprivileged read-only counter mirrors
     localparam CSR_CYCLE     = 12'hC00;
     localparam CSR_TIME      = 12'hC01;
     localparam CSR_INSTRET   = 12'hC02;
@@ -75,6 +86,9 @@ module csr_file (
     localparam PRIV_M = 2'b11;
     localparam SSTATUS_MASK = 32'h00000122;
     localparam S_INTERRUPT_MASK = 32'h00000222;
+    localparam MSTATUS_WRITABLE_MASK = 32'h004619AA;
+    localparam SUPPORTED_MISA = 32'h40141101;  // RV32IMASU
+    localparam MCOUNTINHIBIT_MASK = 32'h00000005;
 
     // CSR registers
     reg [31:0] mstatus;
@@ -88,17 +102,26 @@ module csr_file (
     reg [31:0] mcause;
     reg [31:0] mtval;
     reg [31:0] mip;
+    reg [31:0] mcountinhibit;
     reg [63:0] cycle_counter;
+    reg [63:0] instret_counter;
     reg [1:0] privilege_mode;
     reg [31:0] stvec;
     reg [31:0] sscratch;
     reg [31:0] sepc;
     reg [31:0] scause;
     reg [31:0] stval;
+    reg [31:0] satp;
+    reg [31:0] pmpcfg0;
+    reg [31:0] pmpaddr0;
 
     wire [31:0] sstatus = mstatus & SSTATUS_MASK;
     wire [31:0] sie = mie & S_INTERRUPT_MASK;
     wire [31:0] sip = mip & S_INTERRUPT_MASK;
+    wire cycle_enabled = !mcountinhibit[0];
+    wire instret_enabled = !mcountinhibit[2];
+    wire writes_mcycle = write_enable && ((csr_addr == CSR_MCYCLE) || (csr_addr == CSR_MCYCLEH));
+    wire writes_minstret = write_enable && ((csr_addr == CSR_MINSTRET) || (csr_addr == CSR_MINSTRETH));
     wire synchronous_exception = ecall_exception || ebreak_exception ||
                                  illegal_instruction_exception ||
                                  instruction_address_misaligned_exception ||
@@ -121,12 +144,17 @@ module csr_file (
                        (csr_addr == CSR_MIE) || (csr_addr == CSR_MTVEC) ||
                        (csr_addr == CSR_MSCRATCH) || (csr_addr == CSR_MEPC) ||
                        (csr_addr == CSR_MCAUSE) || (csr_addr == CSR_MTVAL) ||
+                       (csr_addr == CSR_MCOUNTINHIBIT) ||
                        (csr_addr == CSR_SSTATUS) || (csr_addr == CSR_SIE) ||
                        (csr_addr == CSR_STVEC) ||
                        (csr_addr == CSR_SSCRATCH) || (csr_addr == CSR_SEPC) ||
                        (csr_addr == CSR_SCAUSE) || (csr_addr == CSR_STVAL) ||
-                       (csr_addr == CSR_SIP) ||
-                       (csr_addr == CSR_MIP) || (csr_addr == CSR_CYCLE) ||
+                       (csr_addr == CSR_SIP) || (csr_addr == CSR_SATP) ||
+                       (csr_addr == CSR_MIP) ||
+                       (csr_addr == CSR_PMPCFG0) || (csr_addr == CSR_PMPADDR0) ||
+                       (csr_addr == CSR_MCYCLE) || (csr_addr == CSR_MINSTRET) ||
+                       (csr_addr == CSR_MCYCLEH) || (csr_addr == CSR_MINSTRETH) ||
+                       (csr_addr == CSR_CYCLE) ||
                        (csr_addr == CSR_TIME) || (csr_addr == CSR_INSTRET) ||
                        (csr_addr == CSR_CYCLEH) || (csr_addr == CSR_TIMEH) ||
                        (csr_addr == CSR_INSTRETH) ||
@@ -139,7 +167,7 @@ module csr_file (
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             mstatus <= 32'h00001800;  // MPP=11 (machine mode)
-            misa <= 32'h40000100;     // RV32I base
+            misa <= SUPPORTED_MISA;
             medeleg <= 32'h0;
             mideleg <= 32'h0;
             mie <= 32'h0;
@@ -149,15 +177,26 @@ module csr_file (
             mcause <= 32'h0;
             mtval <= 32'h0;
             mip <= 32'h0;
+            mcountinhibit <= 32'h0;
             cycle_counter <= 64'h0;
+            instret_counter <= 64'h0;
             privilege_mode <= PRIV_M;
             stvec <= 32'h0;
             sscratch <= 32'h0;
             sepc <= 32'h0;
             scause <= 32'h0;
             stval <= 32'h0;
+            satp <= 32'h0;
+            pmpcfg0 <= 32'h0;
+            pmpaddr0 <= 32'h0;
         end else begin
-            cycle_counter <= cycle_counter + 1;
+            if (cycle_enabled && !writes_mcycle) begin
+                cycle_counter <= cycle_counter + 64'h1;
+            end
+
+            if (instret_increment && instret_enabled && !writes_minstret) begin
+                instret_counter <= instret_counter + 64'h1;
+            end
             
             // Update MIP based on interrupt inputs
             mip[3] <= software_interrupt;  // MSIP
@@ -223,25 +262,34 @@ module csr_file (
             // Normal CSR writes
             else if (write_enable && csr_valid) begin
                 case (csr_addr)
-                    CSR_MSTATUS:  mstatus <= write_data;
+                    CSR_MSTATUS:  mstatus <= write_data & MSTATUS_WRITABLE_MASK;
                     CSR_SSTATUS:  mstatus <= (mstatus & ~SSTATUS_MASK) | (write_data & SSTATUS_MASK);
+                    CSR_MISA:     misa <= (write_data & SUPPORTED_MISA) | 32'h40000000;
                     CSR_MEDELEG:  medeleg <= write_data;
                     CSR_MIDELEG:  mideleg <= write_data;
                     CSR_MIE:      mie <= write_data;
                     CSR_SIE:      mie <= (mie & ~S_INTERRUPT_MASK) | (write_data & S_INTERRUPT_MASK);
-                    CSR_MTVEC:    mtvec <= write_data;
+                    CSR_MTVEC:    mtvec <= {write_data[31:2], 2'b00};
                     CSR_MSCRATCH: mscratch <= write_data;
                     CSR_MEPC:     mepc <= write_data;
                     CSR_MCAUSE:   mcause <= write_data;
                     CSR_MTVAL:    mtval <= write_data;
-                    CSR_STVEC:    stvec <= write_data;
+                    CSR_MCOUNTINHIBIT: mcountinhibit <= write_data & MCOUNTINHIBIT_MASK;
+                    CSR_STVEC:    stvec <= {write_data[31:2], 2'b00};
                     CSR_SSCRATCH: sscratch <= write_data;
                     CSR_SEPC:     sepc <= write_data;
                     CSR_SCAUSE:   scause <= write_data;
                     CSR_STVAL:    stval <= write_data;
+                    CSR_SATP:     satp <= write_data;
                     CSR_SIP:      mip <= (mip & ~S_INTERRUPT_MASK) | (write_data & S_INTERRUPT_MASK);
                     // MIP is updated by hardware, only software bits writable
                     CSR_MIP:      mip <= (mip & 32'h888) | (write_data & 32'h777);
+                    CSR_PMPCFG0:  pmpcfg0 <= write_data;
+                    CSR_PMPADDR0: pmpaddr0 <= write_data;
+                    CSR_MCYCLE:   cycle_counter[31:0] <= write_data;
+                    CSR_MCYCLEH:  cycle_counter[63:32] <= write_data;
+                    CSR_MINSTRET: instret_counter[31:0] <= write_data;
+                    CSR_MINSTRETH: instret_counter[63:32] <= write_data;
                     default: ;
                 endcase
             end
@@ -265,18 +313,26 @@ module csr_file (
                 CSR_MCAUSE:   read_data = mcause;
                 CSR_MTVAL:    read_data = mtval;
                 CSR_MIP:      read_data = mip;
+                CSR_MCOUNTINHIBIT: read_data = mcountinhibit;
                 CSR_STVEC:    read_data = stvec;
                 CSR_SSCRATCH: read_data = sscratch;
                 CSR_SEPC:     read_data = sepc;
                 CSR_SCAUSE:   read_data = scause;
                 CSR_STVAL:    read_data = stval;
+                CSR_SATP:     read_data = satp;
                 CSR_SIP:      read_data = sip;
+                CSR_MCYCLE:   read_data = cycle_counter[31:0];
+                CSR_MINSTRET: read_data = instret_counter[31:0];
+                CSR_MCYCLEH:  read_data = cycle_counter[63:32];
+                CSR_MINSTRETH: read_data = instret_counter[63:32];
                 CSR_CYCLE:    read_data = cycle_counter[31:0];
                 CSR_TIME:     read_data = 32'h0;
-                CSR_INSTRET:  read_data = 32'h0;
+                CSR_INSTRET:  read_data = instret_counter[31:0];
                 CSR_CYCLEH:   read_data = cycle_counter[63:32];
                 CSR_TIMEH:    read_data = 32'h0;
-                CSR_INSTRETH: read_data = 32'h0;
+                CSR_INSTRETH: read_data = instret_counter[63:32];
+                CSR_PMPCFG0:  read_data = pmpcfg0;
+                CSR_PMPADDR0: read_data = pmpaddr0;
                 CSR_TSELECT:  read_data = 32'h0;
                 CSR_TDATA1:   read_data = 32'h0;
                 CSR_TDATA2:   read_data = 32'h0;

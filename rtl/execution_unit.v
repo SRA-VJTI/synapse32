@@ -47,6 +47,7 @@ module execution_unit(
     input wire [31:0] sepc,
     input wire [31:0] medeleg,
     input wire [1:0] privilege_mode,
+    input wire [31:0] mstatus,
     
     // Add interrupt/exception outputs
     output reg interrupt_taken,
@@ -76,6 +77,9 @@ assign rs2_value_out = rs2_value;
 localparam NO_FORWARDING = 2'b00;
 localparam FORWARD_FROM_MEM = 2'b01;
 localparam FORWARD_FROM_WB = 2'b10;
+localparam PRIV_S = 2'b01;
+localparam PRIV_M = 2'b11;
+localparam CSR_SATP = 12'h180;
 
 function load_address_misaligned;
     input [6:0] load_instr_id;
@@ -123,6 +127,12 @@ csr_exec csr_exec_inst (
     .csr_write_enable(csr_write_enable),
     .rd_value(csr_rd_value)
 );
+
+wire csr_read_only_violation = (csr_addr[11:10] == 2'b11) && csr_write_enable;
+wire csr_privilege_violation = (privilege_mode < csr_addr[9:8]);
+wire csr_satp_tvm_violation = (csr_addr == CSR_SATP) && (privilege_mode == PRIV_S) && mstatus[20];
+wire sret_tsr_violation = (privilege_mode == PRIV_S) && mstatus[22];
+wire wfi_tw_violation = (privilege_mode != PRIV_M) && mstatus[21];
 
 // Select forwarded values if needed
 always @(*) begin
@@ -371,16 +381,32 @@ always @(*) begin
             7'b1110011: begin // System instructions
             case (instr_id)
                 INSTR_MRET: begin
-                    jump_signal = 1;
-                    jump_addr = mepc;  // Return from interrupt
-                    flush_pipeline = 1;
-                    mret_instruction = 1;
+                    if (privilege_mode != PRIV_M) begin
+                        jump_signal = 1;
+                        trap_to_supervisor = (privilege_mode == PRIV_S) && medeleg[2];
+                        jump_addr = trap_to_supervisor ? stvec : mtvec;
+                        flush_pipeline = 1;
+                        illegal_instruction_exception = 1;
+                    end else begin
+                        jump_signal = 1;
+                        jump_addr = mepc;  // Return from interrupt
+                        flush_pipeline = 1;
+                        mret_instruction = 1;
+                    end
                 end
                 INSTR_SRET: begin
-                    jump_signal = 1;
-                    jump_addr = sepc;  // Return from supervisor trap
-                    flush_pipeline = 1;
-                    sret_instruction = 1;
+                    if ((privilege_mode != PRIV_S) || sret_tsr_violation) begin
+                        jump_signal = 1;
+                        trap_to_supervisor = (privilege_mode == PRIV_S) && medeleg[2];
+                        jump_addr = trap_to_supervisor ? stvec : mtvec;
+                        flush_pipeline = 1;
+                        illegal_instruction_exception = 1;
+                    end else begin
+                        jump_signal = 1;
+                        jump_addr = sepc;  // Return from supervisor trap
+                        flush_pipeline = 1;
+                        sret_instruction = 1;
+                    end
                 end
                 INSTR_ECALL: begin
                     jump_signal = 1;
@@ -397,18 +423,27 @@ always @(*) begin
                     ebreak_exception = 1;
                 end
                 INSTR_WFI: begin
-                    // WFI may resume for any reason. The CPU models it as a
-                    // short sleep so pending interrupts still win over the
-                    // post-WFI path without risking an indefinite ISA-test hang.
-                    jump_signal = 1;
-                    jump_addr = pc_input + 4;
-                    flush_pipeline = 1;
-                    wfi_instruction = 1;
+                    if (wfi_tw_violation) begin
+                        jump_signal = 1;
+                        trap_to_supervisor = (privilege_mode == PRIV_S) && medeleg[2];
+                        jump_addr = trap_to_supervisor ? stvec : mtvec;
+                        flush_pipeline = 1;
+                        illegal_instruction_exception = 1;
+                    end else begin
+                        // WFI may resume for any reason. The CPU models it as a
+                        // short sleep so pending interrupts still win over the
+                        // post-WFI path without risking an indefinite ISA-test hang.
+                        jump_signal = 1;
+                        jump_addr = pc_input + 4;
+                        flush_pipeline = 1;
+                        wfi_instruction = 1;
+                    end
                 end
                 default: begin
-                    if (!csr_valid || (csr_addr[11:10] == 2'b11 && csr_write_enable)) begin
+                    if (!csr_valid || csr_read_only_violation ||
+                        csr_privilege_violation || csr_satp_tvm_violation) begin
                         jump_signal = 1;
-                        trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[2];
+                        trap_to_supervisor = (privilege_mode == PRIV_S) && medeleg[2];
                         jump_addr = trap_to_supervisor ? stvec : mtvec;
                         flush_pipeline = 1;
                         illegal_instruction_exception = 1;

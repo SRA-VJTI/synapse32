@@ -52,12 +52,12 @@ module riscv_cpu (
     wire if_id_flush;
     assign branch_flush = ex_inst0_jump_signal_out; // Flush IF/ID if branch taken
     assign if_id_flush = branch_flush || execution_flush;
-    // If branch taken, flush IF/ID by setting instruction to 0 (NOP)
     IF_ID if_id_inst0 (
         .clk(clk),
         .rst(rst),
         .pc_in(pc_inst0_out),
-        .instruction_in(if_id_flush ? 32'h13 : module_instr_in),
+        .instruction_in(module_instr_in),
+        .flush(if_id_flush),
         // Flush must win over stall, otherwise a stale IF/ID instruction can
         // survive an interrupt/branch redirect and execute one cycle later.
         .stall(pipeline_stall && !if_id_flush),
@@ -232,6 +232,7 @@ module riscv_cpu (
     wire [31:0] exception_tval;
     wire synchronous_exception_taken;
     wire wfi_instruction;
+    wire instret_increment;
     wire [31:0] exception_pc;
     assign exception_pc = id_ex_inst0_pc_out;
     assign synchronous_exception_taken = ecall_exception || ebreak_exception ||
@@ -239,6 +240,10 @@ module riscv_cpu (
                                          instruction_address_misaligned_exception ||
                                          load_address_misaligned_exception ||
                                          store_address_misaligned_exception;
+    assign instret_increment = id_ex_inst0_instr_valid_out &&
+                               (id_ex_inst0_instr_id_out != INSTR_INVALID) &&
+                               !interrupt_taken &&
+                               !synchronous_exception_taken;
 
     // WFI sleep state: stall fetch/decode until an interrupt becomes pending.
     reg wfi_active;
@@ -360,6 +365,7 @@ module riscv_cpu (
         .load_address_misaligned_exception(load_address_misaligned_exception),
         .store_address_misaligned_exception(store_address_misaligned_exception),
         .exception_tval_in(exception_tval),
+        .instret_increment(instret_increment),
         .timer_interrupt(timer_interrupt),
         .software_interrupt(software_interrupt),
         .external_interrupt(external_interrupt)
@@ -413,6 +419,7 @@ module riscv_cpu (
         .sepc(csr_file_inst.sepc),
         .medeleg(csr_file_inst.medeleg),
         .privilege_mode(csr_file_inst.privilege_mode),
+        .mstatus(csr_file_inst.mstatus),
         .interrupt_taken(interrupt_taken),
         .mret_instruction(mret_instruction),
         .sret_instruction(sret_instruction),

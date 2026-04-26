@@ -1,7 +1,8 @@
 import cocotb
-from cocotb.triggers import RisingEdge, Timer
+from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge, Timer
 from cocotb.clock import Clock
 import pytest
+import os
 
 RESET_PC_BASE = 0x80000000
 NOP = 0x00000013
@@ -11,6 +12,7 @@ async def run_csr_test_program(dut, instr_mem):
     """Helper function to run a CSR test program"""
     # Dictionary to track register values
     reg_values = {i: 0 for i in range(32)}
+    trace_pipeline = os.getenv("TRACE_PIPELINE", "0") == "1"
     
     # Simulate instruction memory fetch
     def get_instr(pc):
@@ -21,13 +23,19 @@ async def run_csr_test_program(dut, instr_mem):
         if 0 <= idx < len(instr_mem):
             return instr_mem[idx]
         return NOP
+
+    async def drive_instruction_memory():
+        while True:
+            pc = int(dut.module_pc_out.value)
+            dut.module_instr_in.value = get_instr(pc)
+            await FallingEdge(dut.clk)
+
+    cocotb.start_soon(drive_instruction_memory())
     
     # Feed instructions and track CSR operations
     for cycle in range(len(instr_mem) + 10):  # Run for enough cycles
-        # Feed instruction based on PC
-        pc = int(dut.module_pc_out.value)
-        current_instr = get_instr(pc)
-        dut.module_instr_in.value = current_instr
+        await RisingEdge(dut.clk)
+        await ReadOnly()
         
         # Track register writes
         try:
@@ -61,10 +69,32 @@ async def run_csr_test_program(dut, instr_mem):
         except Exception as e:
             # CSR signals might not be ready yet
             pass
+
+        if trace_pipeline:
+            try:
+                print(
+                    "Cycle {}: fetch_pc={} if_id_pc={} if_id_instr={} if_id_valid={} "
+                    "module_instr={} id_ex_pc={} id_ex_id={} id_ex_valid={} jump={} jump_addr={} "
+                    "flush={} mepc={} priv={}".format(
+                        cycle,
+                        int(dut.module_pc_out.value),
+                        int(dut.if_id_pc_out.value),
+                        int(dut.if_id_instr_out.value),
+                        int(dut.if_id_instr_valid_out.value),
+                        int(dut.module_instr_in.value),
+                        int(dut.id_ex_inst0_pc_out.value),
+                        int(dut.id_ex_inst0_instr_id_out.value),
+                        int(dut.id_ex_inst0_instr_valid_out.value),
+                        int(dut.ex_inst0_jump_signal_out.value),
+                        int(dut.ex_inst0_jump_addr_out.value),
+                        int(dut.execution_flush.value),
+                        int(dut.csr_file_inst.mepc.value),
+                        int(dut.csr_file_inst.privilege_mode.value),
+                    )
+                )
+            except Exception:
+                pass
             
-        # Advance simulation
-        await RisingEdge(dut.clk)
-        
     # Print final register values
     print("\nFinal register values:")
     for reg, value in reg_values.items():
@@ -758,7 +788,6 @@ async def test_csr_mret(dut):
     print("mret test passed!")
 
 from cocotb_test.simulator import run
-import os
 
 def runCocotbTests():
     # All Verilog sources under rtl directory and subdirectories
@@ -804,8 +833,9 @@ def runCocotbTests():
         print(f"\n=== Running {test_name} ===")
         plus_args = []
         if enable_waves:
-            waveform_path = os.path.join(waveform_dir, f"{test_name}.vcd")
-            plus_args = [f"+dumpfile={waveform_path}"]
+            waveform_path = os.path.join(waveform_dir, f"{test_name}.fst")
+            plus_args = ["--trace", "--trace-file", waveform_path,
+                         f"+dumpfile={waveform_path}"]
         
         run(
             verilog_sources=sources,
@@ -815,6 +845,7 @@ def runCocotbTests():
             includes=[str(incl_dir)],
             simulator="verilator",
             timescale="1ns/1ps",
+            waves=enable_waves,
             plus_args=plus_args,
         )
 
