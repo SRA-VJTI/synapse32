@@ -249,6 +249,395 @@ async def test_csr_cycle_counter(dut):
     print("Cycle counter CSR test passed!")
 
 @cocotb.test()
+async def test_mret_enters_supervisor_mode(dut):
+    """Test that MRET can drop from M-mode into S-mode."""
+    print("Starting MRET-to-S-mode test...")
+
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+
+    dut.module_instr_in.value = 0
+    dut.module_read_data_in.value = 0
+    dut.rst.value = 1
+    await Timer(20, units="ns")
+    dut.rst.value = 0
+    await RisingEdge(dut.clk)
+
+    NOP = 0x00000013
+    instr_mem = [NOP] * 16
+
+    # 0x00: lui x1, 0x1                  # x1 = 0x1000 (MPP bit 12)
+    instr_mem[0] = 0x000010B7
+    # 0x04: csrrc x0, mstatus, x1        # clear MPP[1], leaving MPP=S (01)
+    instr_mem[1] = 0x3000B073
+    # 0x08: addi x2, x0, 0x20            # S payload address
+    instr_mem[2] = 0x02000113
+    # 0x0C: csrrw x0, mepc, x2           # mepc = 0x20
+    instr_mem[3] = 0x34111073
+    # 0x10: mret                         # enter S-mode at mepc
+    instr_mem[4] = 0x30200073
+    # 0x14: addi x6, x0, 0x66            # must be skipped by mret redirect
+    instr_mem[5] = 0x06600313
+
+    # S-mode payload at 0x20 (word index 8).
+    # 0x20: addi x5, x0, 0x5A            # S-mode sentinel
+    instr_mem[8] = 0x05A00293
+    # 0x24: jal x0, 0                    # hold PC here
+    instr_mem[9] = 0x0000006F
+
+    await run_csr_test_program(dut, instr_mem)
+
+    x5 = int(dut.rf_inst0.register_file[5].value)
+    x6 = int(dut.rf_inst0.register_file[6].value)
+    privilege_mode = int(dut.csr_file_inst.privilege_mode.value)
+    mstatus = int(dut.csr_file_inst.mstatus.value)
+    mpp = (mstatus >> 11) & 0x3
+
+    print(f"x5 (S-mode sentinel): {x5:#x}")
+    print(f"x6 (skipped M-mode sentinel): {x6:#x}")
+    print(f"privilege_mode={privilege_mode:#x}, mstatus={mstatus:#x}, MPP={mpp:#x}")
+
+    assert x5 == 0x5A, f"S-mode payload did not execute: x5={x5:#x}"
+    assert x6 == 0x0, f"MRET did not redirect to mepc: x6={x6:#x}"
+    assert privilege_mode == 0x1, f"Expected S-mode after mret, got {privilege_mode:#x}"
+    assert mpp == 0x0, f"MRET should clear MPP after return, got {mpp:#x}"
+
+    print("MRET-to-S-mode test passed!")
+
+@cocotb.test()
+async def test_supervisor_ecall_traps_to_machine_mode(dut):
+    """Test that an ECALL from S-mode traps to M-mode with cause 9."""
+    print("Starting S-mode ECALL-to-M-mode test...")
+
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+
+    dut.module_instr_in.value = 0
+    dut.module_read_data_in.value = 0
+    dut.rst.value = 1
+    await Timer(20, units="ns")
+    dut.rst.value = 0
+    await RisingEdge(dut.clk)
+
+    NOP = 0x00000013
+    instr_mem = [NOP] * 40
+
+    # 0x00: lui x1, 0x1                  # x1 = 0x1000 (MPP bit 12)
+    instr_mem[0] = 0x000010B7
+    # 0x04: csrrc x0, mstatus, x1        # clear MPP[1], leaving MPP=S (01)
+    instr_mem[1] = 0x3000B073
+    # 0x08: addi x2, x0, 0x60            # S payload address
+    instr_mem[2] = 0x06000113
+    # 0x0C: csrrw x0, mepc, x2           # mepc = 0x60
+    instr_mem[3] = 0x34111073
+    # 0x10: addi x3, x0, 0x80            # M-mode trap handler address
+    instr_mem[4] = 0x08000193
+    # 0x14: csrrw x0, mtvec, x3          # mtvec = 0x80
+    instr_mem[5] = 0x30519073
+    # 0x18: mret                         # enter S-mode at mepc
+    instr_mem[6] = 0x30200073
+
+    # S-mode payload at 0x60 (word index 24).
+    # 0x60: addi x5, x0, 0x5A            # S-mode sentinel before ecall
+    instr_mem[24] = 0x05A00293
+    # 0x64: ecall                        # trap to M-mode mtvec
+    instr_mem[25] = 0x00000073
+    # 0x68: addi x6, x0, 0x66            # skipped by trap redirect
+    instr_mem[26] = 0x06600313
+
+    # M-mode handler at 0x80 (word index 32).
+    # 0x80: addi x7, x0, 0x77            # handler sentinel
+    instr_mem[32] = 0x07700393
+    # 0x84: jal x0, 0                    # hold PC here
+    instr_mem[33] = 0x0000006F
+
+    await run_csr_test_program(dut, instr_mem)
+
+    x5 = int(dut.rf_inst0.register_file[5].value)
+    x6 = int(dut.rf_inst0.register_file[6].value)
+    x7 = int(dut.rf_inst0.register_file[7].value)
+    privilege_mode = int(dut.csr_file_inst.privilege_mode.value)
+    mcause = int(dut.csr_file_inst.mcause.value)
+    mstatus = int(dut.csr_file_inst.mstatus.value)
+    mpp = (mstatus >> 11) & 0x3
+
+    print(f"x5 (S-mode pre-ecall sentinel): {x5:#x}")
+    print(f"x6 (skipped S-mode post-ecall sentinel): {x6:#x}")
+    print(f"x7 (M-mode handler sentinel): {x7:#x}")
+    print(f"privilege_mode={privilege_mode:#x}, mcause={mcause:#x}, mstatus={mstatus:#x}, MPP={mpp:#x}")
+
+    assert x5 == 0x5A, f"S-mode payload did not execute before ecall: x5={x5:#x}"
+    assert x6 == 0x0, f"Trap did not redirect away from S-mode fallthrough: x6={x6:#x}"
+    assert x7 == 0x77, f"M-mode trap handler did not execute: x7={x7:#x}"
+    assert privilege_mode == 0x3, f"Expected M-mode after S-mode ecall, got {privilege_mode:#x}"
+    assert mcause == 0x9, f"Expected S-mode ecall mcause=9, got {mcause:#x}"
+    assert mpp == 0x1, f"Expected MPP=S after S-mode ecall trap, got {mpp:#x}"
+
+    print("S-mode ECALL-to-M-mode test passed!")
+
+@cocotb.test()
+async def test_supervisor_ecall_machine_mret_returns_to_supervisor(dut):
+    """Test S-mode ECALL handled in M-mode can return to S-mode with MRET."""
+    print("Starting S-mode ECALL/M-mode MRET return test...")
+
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+
+    dut.module_instr_in.value = 0
+    dut.module_read_data_in.value = 0
+    dut.rst.value = 1
+    await Timer(20, units="ns")
+    dut.rst.value = 0
+    await RisingEdge(dut.clk)
+
+    NOP = 0x00000013
+    instr_mem = [NOP] * 56
+
+    # M-mode setup.
+    # 0x00: lui x1, 0x1                  # x1 = 0x1000 (MPP bit 12)
+    instr_mem[0] = 0x000010B7
+    # 0x04: csrrc x0, mstatus, x1        # clear MPP[1], leaving MPP=S (01)
+    instr_mem[1] = 0x3000B073
+    # 0x08: addi x2, x0, 0x60            # S payload address
+    instr_mem[2] = 0x06000113
+    # 0x0C: csrrw x0, mepc, x2           # mepc = 0x60
+    instr_mem[3] = 0x34111073
+    # 0x10: addi x3, x0, 0xA0            # M-mode trap handler address
+    instr_mem[4] = 0x0A000193
+    # 0x14: csrrw x0, mtvec, x3          # mtvec = 0xA0
+    instr_mem[5] = 0x30519073
+    # 0x18: mret                         # enter S-mode at mepc
+    instr_mem[6] = 0x30200073
+
+    # S-mode payload at 0x60 (word index 24).
+    # 0x60: addi x5, x0, 0x5A            # S-mode pre-ecall sentinel
+    instr_mem[24] = 0x05A00293
+    # 0x64: ecall                        # SBI-shaped trap to M-mode
+    instr_mem[25] = 0x00000073
+    # 0x68: addi x6, x0, 0x66            # executes after MRET resumes
+    instr_mem[26] = 0x06600313
+    # 0x6C: jal x0, -4                   # hold PC here
+    instr_mem[27] = 0xFFDFF06F
+
+    # M-mode handler at 0xA0 (word index 40).
+    # 0xA0: addi x7, x0, 0x77            # M-mode handler sentinel
+    instr_mem[40] = 0x07700393
+    # 0xA4: csrrs x8, mepc, x0           # x8 = trapped ecall PC
+    instr_mem[41] = 0x34102473
+    # 0xA8: addi x8, x8, 4               # skip ecall on return
+    instr_mem[42] = 0x00440413
+    # 0xAC: csrrw x0, mepc, x8           # mepc = ecall PC + 4
+    instr_mem[43] = 0x34141073
+    # 0xB0: mret                         # return to S payload after ecall
+    instr_mem[44] = 0x30200073
+
+    await run_csr_test_program(dut, instr_mem)
+
+    x5 = int(dut.rf_inst0.register_file[5].value)
+    x6 = int(dut.rf_inst0.register_file[6].value)
+    x7 = int(dut.rf_inst0.register_file[7].value)
+    x8 = int(dut.rf_inst0.register_file[8].value)
+    privilege_mode = int(dut.csr_file_inst.privilege_mode.value)
+    mcause = int(dut.csr_file_inst.mcause.value)
+    mepc = int(dut.csr_file_inst.mepc.value)
+    mstatus = int(dut.csr_file_inst.mstatus.value)
+    mpp = (mstatus >> 11) & 0x3
+
+    print(f"x5 (S pre-ecall): {x5:#x}")
+    print(f"x6 (S post-mret): {x6:#x}")
+    print(f"x7 (M handler): {x7:#x}")
+    print(f"x8 (handler-adjusted mepc): {x8:#x}")
+    print(f"privilege_mode={privilege_mode:#x}, mcause={mcause:#x}, mepc={mepc:#x}, MPP={mpp:#x}")
+
+    assert x5 == 0x5A, f"S-mode payload did not execute before ecall: x5={x5:#x}"
+    assert x7 == 0x77, f"M-mode ecall handler did not execute: x7={x7:#x}"
+    assert x8 == 0x68, f"Handler did not observe/advance mepc correctly: x8={x8:#x}"
+    assert x6 == 0x66, f"MRET did not resume S-mode after ecall: x6={x6:#x}"
+    assert privilege_mode == 0x1, f"Expected S-mode after MRET, got {privilege_mode:#x}"
+    assert mcause == 0x9, f"Expected S-mode ecall mcause=9, got {mcause:#x}"
+    assert mepc == 0x68, f"Expected final mepc=0x68, got {mepc:#x}"
+    assert mpp == 0x0, f"MRET should clear MPP after return, got {mpp:#x}"
+
+    print("S-mode ECALL/M-mode MRET return test passed!")
+
+@cocotb.test()
+async def test_delegated_supervisor_timer_interrupt_sret(dut):
+    """Test delegated supervisor timer interrupt traps to stvec and resumes."""
+    print("Starting delegated S-mode timer interrupt/SRET test...")
+
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+
+    dut.module_instr_in.value = 0
+    dut.module_read_data_in.value = 0
+    dut.rst.value = 1
+    await Timer(20, units="ns")
+    dut.rst.value = 0
+    await RisingEdge(dut.clk)
+
+    NOP = 0x00000013
+    instr_mem = [NOP] * 56
+
+    # M-mode setup.
+    # 0x00: lui x1, 0x1                  # x1 = 0x1000 (MPP bit 12)
+    instr_mem[0] = 0x000010B7
+    # 0x04: csrrc x0, mstatus, x1        # clear MPP[1], leaving MPP=S (01)
+    instr_mem[1] = 0x3000B073
+    # 0x08: addi x2, x0, 0x60            # S payload address
+    instr_mem[2] = 0x06000113
+    # 0x0C: csrrw x0, mepc, x2           # mepc = 0x60
+    instr_mem[3] = 0x34111073
+    # 0x10: addi x3, x0, 0xA0            # S trap handler address
+    instr_mem[4] = 0x0A000193
+    # 0x14: csrrw x0, stvec, x3          # stvec = 0xA0
+    instr_mem[5] = 0x10519073
+    # 0x18: addi x4, x0, 0x20            # supervisor timer bit
+    instr_mem[6] = 0x02000213
+    # 0x1C: csrrw x0, mideleg, x4        # mideleg[5] = 1
+    instr_mem[7] = 0x30321073
+    # 0x20: csrrw x0, sie, x4            # sie.STIE = 1
+    instr_mem[8] = 0x10421073
+    # 0x24: csrrw x0, sip, x4            # sip.STIP = 1
+    instr_mem[9] = 0x14421073
+    # 0x28: csrrsi x0, sstatus, 2        # sstatus.SIE = 1
+    instr_mem[10] = 0x10016073
+    # 0x2C: mret                         # enter S-mode at mepc
+    instr_mem[11] = 0x30200073
+
+    # S-mode payload at 0x60 (word index 24).
+    # 0x60: addi x5, x0, 0x5A            # runs after interrupt handler returns
+    instr_mem[24] = 0x05A00293
+    # 0x64: jal x0, -4                   # hold PC here
+    instr_mem[25] = 0xFFDFF06F
+
+    # S-mode interrupt handler at 0xA0 (word index 40).
+    # 0xA0: addi x7, x0, 0x77            # handler sentinel
+    instr_mem[40] = 0x07700393
+    # 0xA4: csrrs x8, sepc, x0           # capture interrupted PC
+    instr_mem[41] = 0x14102473
+    # 0xA8: csrrc x0, sip, x4            # clear STIP
+    instr_mem[42] = 0x14423073
+    # 0xAC: sret                         # return to interrupted S-mode code
+    instr_mem[43] = 0x10200073
+
+    await run_csr_test_program(dut, instr_mem)
+
+    x5 = int(dut.rf_inst0.register_file[5].value)
+    x7 = int(dut.rf_inst0.register_file[7].value)
+    x8 = int(dut.rf_inst0.register_file[8].value)
+    privilege_mode = int(dut.csr_file_inst.privilege_mode.value)
+    scause = int(dut.csr_file_inst.scause.value)
+    sip = int(dut.csr_file_inst.sip.value)
+    mstatus = int(dut.csr_file_inst.mstatus.value)
+    spp = (mstatus >> 8) & 0x1
+
+    print(f"x5 (S payload): {x5:#x}")
+    print(f"x7 (S timer handler): {x7:#x}")
+    print(f"x8 (captured sepc): {x8:#x}")
+    print(f"privilege_mode={privilege_mode:#x}, scause={scause:#x}, sip={sip:#x}, SPP={spp:#x}")
+
+    assert x7 == 0x77, f"S-mode timer handler did not execute: x7={x7:#x}"
+    assert x5 == 0x5A, f"SRET did not resume S-mode payload: x5={x5:#x}"
+    assert x8 in (0x60, 0x64), f"Unexpected interrupted S-mode PC in sepc: x8={x8:#x}"
+    assert privilege_mode == 0x1, f"Expected S-mode after timer sret, got {privilege_mode:#x}"
+    assert scause == 0x80000005, f"Expected supervisor timer interrupt scause, got {scause:#x}"
+    assert (sip & 0x20) == 0, f"Handler should clear STIP, sip={sip:#x}"
+    assert spp == 0x0, f"SRET should clear SPP, got {spp:#x}"
+
+    print("Delegated S-mode timer interrupt/SRET test passed!")
+
+@cocotb.test()
+async def test_delegated_supervisor_ebreak_sret(dut):
+    """Test delegated S-mode EBREAK traps to stvec and resumes with SRET."""
+    print("Starting delegated S-mode EBREAK/SRET test...")
+
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+
+    dut.module_instr_in.value = 0
+    dut.module_read_data_in.value = 0
+    dut.rst.value = 1
+    await Timer(20, units="ns")
+    dut.rst.value = 0
+    await RisingEdge(dut.clk)
+
+    NOP = 0x00000013
+    instr_mem = [NOP] * 56
+
+    # M-mode setup.
+    # 0x00: lui x1, 0x1                  # x1 = 0x1000 (MPP bit 12)
+    instr_mem[0] = 0x000010B7
+    # 0x04: csrrc x0, mstatus, x1        # clear MPP[1], leaving MPP=S (01)
+    instr_mem[1] = 0x3000B073
+    # 0x08: addi x2, x0, 0x60            # S payload address
+    instr_mem[2] = 0x06000113
+    # 0x0C: csrrw x0, mepc, x2           # mepc = 0x60
+    instr_mem[3] = 0x34111073
+    # 0x10: addi x3, x0, 0xA0            # S trap handler address
+    instr_mem[4] = 0x0A000193
+    # 0x14: csrrw x0, stvec, x3          # stvec = 0xA0
+    instr_mem[5] = 0x10519073
+    # 0x18: addi x4, x0, 0x8             # delegate exception cause 3
+    instr_mem[6] = 0x00800213
+    # 0x1C: csrrw x0, medeleg, x4        # medeleg[3] = 1
+    instr_mem[7] = 0x30221073
+    # 0x20: mret                         # enter S-mode at mepc
+    instr_mem[8] = 0x30200073
+
+    # S-mode payload at 0x60 (word index 24).
+    # 0x60: addi x5, x0, 0x5A            # S-mode pre-ebreak sentinel
+    instr_mem[24] = 0x05A00293
+    # 0x64: ebreak                       # delegated to S-mode stvec
+    instr_mem[25] = 0x00100073
+    # 0x68: addi x6, x0, 0x66            # executes after SRET resumes
+    instr_mem[26] = 0x06600313
+    # 0x6C: jal x0, -4                   # hold PC here
+    instr_mem[27] = 0xFFDFF06F
+
+    # S-mode handler at 0xA0 (word index 40).
+    # 0xA0: addi x7, x0, 0x77            # handler sentinel
+    instr_mem[40] = 0x07700393
+    # 0xA4: csrrs x8, sepc, x0           # x8 = trapped ebreak PC
+    instr_mem[41] = 0x14102473
+    # 0xA8: addi x8, x8, 4               # skip ecall on return
+    instr_mem[42] = 0x00440413
+    # 0xAC: csrrw x0, sepc, x8           # sepc = ecall PC + 4
+    instr_mem[43] = 0x14141073
+    # 0xB0: sret                         # return to S payload after ecall
+    instr_mem[44] = 0x10200073
+
+    await run_csr_test_program(dut, instr_mem)
+
+    x5 = int(dut.rf_inst0.register_file[5].value)
+    x6 = int(dut.rf_inst0.register_file[6].value)
+    x7 = int(dut.rf_inst0.register_file[7].value)
+    x8 = int(dut.rf_inst0.register_file[8].value)
+    privilege_mode = int(dut.csr_file_inst.privilege_mode.value)
+    scause = int(dut.csr_file_inst.scause.value)
+    sepc = int(dut.csr_file_inst.sepc.value)
+    mcause = int(dut.csr_file_inst.mcause.value)
+    mstatus = int(dut.csr_file_inst.mstatus.value)
+    spp = (mstatus >> 8) & 0x1
+
+    print(f"x5 (S pre-ebreak): {x5:#x}")
+    print(f"x6 (S post-sret): {x6:#x}")
+    print(f"x7 (S handler): {x7:#x}")
+    print(f"x8 (handler-adjusted sepc): {x8:#x}")
+    print(f"privilege_mode={privilege_mode:#x}, scause={scause:#x}, sepc={sepc:#x}, mcause={mcause:#x}, SPP={spp:#x}")
+
+    assert x5 == 0x5A, f"S-mode payload did not execute before ebreak: x5={x5:#x}"
+    assert x7 == 0x77, f"S-mode trap handler did not execute: x7={x7:#x}"
+    assert x8 == 0x68, f"Handler did not observe/advance sepc correctly: x8={x8:#x}"
+    assert x6 == 0x66, f"SRET did not resume after ebreak: x6={x6:#x}"
+    assert privilege_mode == 0x1, f"Expected S-mode after sret, got {privilege_mode:#x}"
+    assert scause == 0x3, f"Expected delegated S-mode ebreak scause=3, got {scause:#x}"
+    assert sepc == 0x68, f"Expected final sepc=0x68, got {sepc:#x}"
+    assert mcause == 0x0, f"Delegated S-mode ebreak should not update mcause, got {mcause:#x}"
+    assert spp == 0x0, f"SRET should clear SPP, got {spp:#x}"
+
+    print("Delegated S-mode EBREAK/SRET test passed!")
+
+@cocotb.test()
 async def test_csr_invalid_access(dut):
     """Test access to invalid CSR addresses"""
     print("Starting invalid CSR access test...")
@@ -383,6 +772,11 @@ def runCocotbTests():
         "test_csr_basic_operations",
         "test_csr_mstatus_operations",
         "test_csr_cycle_counter",
+        "test_mret_enters_supervisor_mode",
+        "test_supervisor_ecall_traps_to_machine_mode",
+        "test_supervisor_ecall_machine_mret_returns_to_supervisor",
+        "test_delegated_supervisor_timer_interrupt_sret",
+        "test_delegated_supervisor_ebreak_sret",
         "test_csr_invalid_access",
         "test_csr_mret",
     ]
