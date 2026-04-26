@@ -160,6 +160,8 @@ module decoder (
             7'b1110011: begin  // System instructions
                 if (instr == 32'h30200073) begin      // MRET
                     instr_id = INSTR_MRET;
+                end else if (instr == 32'h10200073) begin  // SRET
+                    instr_id = INSTR_SRET;
                 end else if (instr == 32'h10500073) begin  // WFI
                     instr_id = INSTR_WFI;
                 end else if (instr == 32'h00000073) begin  // ECALL

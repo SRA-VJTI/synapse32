@@ -18,7 +18,12 @@ import sys
 from pathlib import Path
 
 
-TEST_NAME_RE = re.compile(r"^rv32(ui|um|ua)-p-[A-Za-z0-9_]+$")
+DEFAULT_SUITES = "rv32ui,rv32um,rv32ua,rv32mi,rv32si"
+TEST_NAME_RE = re.compile(r"^(rv32(ui|um|ua|mi|si))-p-[A-Za-z0-9_-]+$")
+
+
+def parse_suites(suites: str) -> set[str]:
+    return {suite.strip() for suite in suites.split(",") if suite.strip()}
 
 
 def run(cmd: list[str], env: dict[str, str] | None = None, cwd: Path | None = None) -> subprocess.CompletedProcess:
@@ -34,16 +39,32 @@ def find_repo_root() -> Path:
     return cur
 
 
-def discover_tests(isa_dir: Path, limit: int) -> list[Path]:
+def discover_tests(isa_dir: Path, suites: set[str], limit: int) -> list[Path]:
     tests = []
     for p in sorted(isa_dir.iterdir()):
         if not p.is_file():
             continue
-        if TEST_NAME_RE.match(p.name):
+        match = TEST_NAME_RE.match(p.name)
+        if match and match.group(1) in suites:
             tests.append(p)
     if limit > 0:
         tests = tests[:limit]
     return tests
+
+
+def require_suites(tests: list[Path], required: set[str]) -> None:
+    discovered = {
+        match.group(1)
+        for test in tests
+        if (match := TEST_NAME_RE.match(test.name))
+    }
+    missing = sorted(required - discovered)
+    if missing:
+        found = ", ".join(sorted(discovered)) or "<none>"
+        raise RuntimeError(
+            "Missing required riscv-tests suites: "
+            f"{', '.join(missing)}. Discovered suites: {found}"
+        )
 
 
 def tohost_addr(elf: Path) -> int:
@@ -104,6 +125,11 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=0, help="Limit number of ISA tests (0 = all)")
     ap.add_argument("--max-cycles", type=int, default=200000, help="Max cycles per Verilator ISA test")
     ap.add_argument("--report", type=Path, default=Path(".github/artifacts/isa/compare_report.json"))
+    ap.add_argument(
+        "--suites",
+        default=DEFAULT_SUITES,
+        help="Comma-separated riscv-tests suite prefixes to compare",
+    )
     args = ap.parse_args()
 
     repo_root = find_repo_root()
@@ -112,7 +138,10 @@ def main() -> int:
         print(f"Missing isa dir: {isa_dir}", file=sys.stderr)
         return 2
 
-    tests = discover_tests(isa_dir, args.limit)
+    suites = parse_suites(args.suites)
+    all_tests = discover_tests(isa_dir, suites, 0)
+    require_suites(all_tests, suites)
+    tests = all_tests[: args.limit] if args.limit > 0 else all_tests
     if not tests:
         print("No rv32*-p-* test binaries found. Did riscv-tests build succeed?", file=sys.stderr)
         return 2

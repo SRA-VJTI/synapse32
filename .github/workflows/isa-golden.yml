@@ -32,6 +32,7 @@ jobs:
       RISCV: /usr
       SPIKE_PREFIX: ${{ github.workspace }}/.cache/spike-install
       RISCV_TESTS_DIR: ${{ github.workspace }}/.cache/riscv-tests
+      RISCV_TEST_SUITES: rv32ui rv32um rv32ua rv32mi rv32si
       TEST_LIMIT: ${{ github.event.inputs.test_limit || '0' }}
       MAX_CYCLES: ${{ github.event.inputs.max_cycles || '200000' }}
 
@@ -91,13 +92,18 @@ jobs:
           ./configure --prefix="$RISCV_TESTS_DIR/install"
           cd isa
           mapfile -t p_targets < <(
-            for f in rv32ui/*.S rv32um/*.S rv32ua/*.S; do
-              d="$(dirname "$f")"
-              b="$(basename "$f" .S)"
-              echo "${d}-p-${b}"
+            for suite in $RISCV_TEST_SUITES; do
+              for f in "$suite"/*.S; do
+                d="$(dirname "$f")"
+                b="$(basename "$f" .S)"
+                echo "${d}-p-${b}"
+              done
             done
           )
+          printf 'Building %d riscv-tests targets:\n' "${#p_targets[@]}"
+          printf '  %s\n' "${p_targets[@]}" | sort
           make -j"$(nproc)" XLEN=32 "${p_targets[@]}"
+          ls -1 rv32mi-p-* rv32si-p-*
 
       - name: Verify tools
         run: |
@@ -116,7 +122,8 @@ jobs:
           .venv/bin/python .github/scripts/compare_with_spike.py \
             --riscv-tests "$RISCV_TESTS_DIR" \
             --limit "$TEST_LIMIT" \
-            --max-cycles "$MAX_CYCLES"
+            --max-cycles "$MAX_CYCLES" \
+            --suites "${RISCV_TEST_SUITES// /,}"
 
       - name: Upload compare report
         if: always()

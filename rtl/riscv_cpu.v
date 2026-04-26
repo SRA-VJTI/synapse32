@@ -213,10 +213,15 @@ module riscv_cpu (
     wire [31:0] interrupt_cause;
     wire [31:0] interrupt_pc;
     wire interrupt_taken;
+    wire interrupt_to_supervisor;
     wire mret_instruction;
+    wire sret_instruction;
+    wire trap_to_supervisor;
     wire ecall_exception;
     wire ebreak_exception;
     wire wfi_instruction;
+    wire [31:0] exception_pc;
+    assign exception_pc = id_ex_inst0_pc_out - 32'd4;
 
     // WFI sleep state: stall fetch/decode until an interrupt becomes pending.
     reg wfi_active;
@@ -298,8 +303,11 @@ module riscv_cpu (
         .mstatus(csr_file_inst.mstatus),
         .mie(csr_file_inst.mie),
         .mip(csr_file_inst.mip),
+        .mideleg(csr_file_inst.mideleg),
+        .privilege_mode(csr_file_inst.privilege_mode),
         .interrupt_pending(interrupt_pending),
         .interrupt_cause(interrupt_cause),
+        .interrupt_to_supervisor(interrupt_to_supervisor),
         .interrupt_taken(interrupt_taken),
         .current_pc(pc_inst0_out),
         .interrupt_pc(interrupt_pc)
@@ -318,8 +326,12 @@ module riscv_cpu (
         .interrupt_pending(interrupt_pending),
         .interrupt_cause_in(interrupt_cause),
         .interrupt_pc_in(interrupt_pc),
+        .exception_pc_in(exception_pc),
         .interrupt_taken(interrupt_taken),
         .mret_instruction(mret_instruction),
+        .sret_instruction(sret_instruction),
+        .interrupt_to_supervisor(interrupt_to_supervisor),
+        .trap_to_supervisor(trap_to_supervisor),
         .ecall_exception(ecall_exception),
         .ebreak_exception(ebreak_exception),
         .timer_interrupt(timer_interrupt),
@@ -367,10 +379,17 @@ module riscv_cpu (
         // Interrupt connections
         .interrupt_pending(interrupt_pending),
         .interrupt_cause(interrupt_cause),
+        .interrupt_to_supervisor(interrupt_to_supervisor),
         .mtvec(csr_file_inst.mtvec),
         .mepc(csr_file_inst.mepc),
+        .stvec(csr_file_inst.stvec),
+        .sepc(csr_file_inst.sepc),
+        .medeleg(csr_file_inst.medeleg),
+        .privilege_mode(csr_file_inst.privilege_mode),
         .interrupt_taken(interrupt_taken),
         .mret_instruction(mret_instruction),
+        .sret_instruction(sret_instruction),
+        .trap_to_supervisor(trap_to_supervisor),
         .ecall_exception(ecall_exception),
         .ebreak_exception(ebreak_exception),
         .wfi_instruction(wfi_instruction)

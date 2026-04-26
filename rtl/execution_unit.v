@@ -39,12 +39,19 @@ module execution_unit(
     // Add interrupt/exception inputs
     input wire interrupt_pending,
     input wire [31:0] interrupt_cause,
+    input wire interrupt_to_supervisor,
     input wire [31:0] mtvec,
     input wire [31:0] mepc,
+    input wire [31:0] stvec,
+    input wire [31:0] sepc,
+    input wire [31:0] medeleg,
+    input wire [1:0] privilege_mode,
     
     // Add interrupt/exception outputs
     output reg interrupt_taken,
     output reg mret_instruction,
+    output reg sret_instruction,
+    output reg trap_to_supervisor,
     output reg ecall_exception,
     output reg ebreak_exception,
     output reg wfi_instruction
@@ -127,6 +134,8 @@ always @(*) begin
     flush_pipeline = 0;
     interrupt_taken = 0;
     mret_instruction = 0;
+    sret_instruction = 0;
+    trap_to_supervisor = 0;
     ecall_exception = 0;
     ebreak_exception = 0;
     wfi_instruction = 0;
@@ -134,7 +143,8 @@ always @(*) begin
     // Handle interrupts first (highest priority)
     if (interrupt_pending) begin
         jump_signal = 1;
-        jump_addr = mtvec;  // Jump to interrupt handler
+        trap_to_supervisor = interrupt_to_supervisor;
+        jump_addr = interrupt_to_supervisor ? stvec : mtvec;  // Jump to interrupt handler
         flush_pipeline = 1;
         interrupt_taken = 1;
     end else begin
@@ -228,15 +238,23 @@ always @(*) begin
                     flush_pipeline = 1;
                     mret_instruction = 1;
                 end
+                INSTR_SRET: begin
+                    jump_signal = 1;
+                    jump_addr = sepc;  // Return from supervisor trap
+                    flush_pipeline = 1;
+                    sret_instruction = 1;
+                end
                 INSTR_ECALL: begin
                     jump_signal = 1;
-                    jump_addr = mtvec;  // Jump to trap handler
+                    trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[9];
+                    jump_addr = trap_to_supervisor ? stvec : mtvec;  // Jump to trap handler
                     flush_pipeline = 1;
                     ecall_exception = 1;
                 end
                 INSTR_EBREAK: begin
                     jump_signal = 1;
-                    jump_addr = mtvec;  // Jump to trap handler
+                    trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[3];
+                    jump_addr = trap_to_supervisor ? stvec : mtvec;  // Jump to trap handler
                     flush_pipeline = 1;
                     ebreak_exception = 1;
                 end
