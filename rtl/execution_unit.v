@@ -10,6 +10,7 @@ module execution_unit(
     input wire [6:0] instr_id,
     input wire rs1_valid,
     input wire rs2_valid,
+    input wire instr_valid,
     input wire [31:0] pc_input,
     
     // Data forwarding inputs
@@ -54,12 +55,19 @@ module execution_unit(
     output reg trap_to_supervisor,
     output reg ecall_exception,
     output reg ebreak_exception,
+    output reg illegal_instruction_exception,
+    output reg instruction_address_misaligned_exception,
+    output reg load_address_misaligned_exception,
+    output reg store_address_misaligned_exception,
+    output reg [31:0] exception_tval,
     output reg wfi_instruction
 );
 
 // Internal signals for forwarded values
 reg [31:0] rs1_value;
 reg [31:0] rs2_value;
+reg [31:0] effective_addr;
+reg [31:0] target_addr;
 
 assign rs1_value_out = rs1_value;
 assign rs2_value_out = rs2_value;
@@ -68,6 +76,33 @@ assign rs2_value_out = rs2_value;
 localparam NO_FORWARDING = 2'b00;
 localparam FORWARD_FROM_MEM = 2'b01;
 localparam FORWARD_FROM_WB = 2'b10;
+
+function load_address_misaligned;
+    input [6:0] load_instr_id;
+    input [31:0] addr;
+    begin
+        case (load_instr_id)
+            INSTR_LH, INSTR_LHU: load_address_misaligned = addr[0];
+            INSTR_LW, INSTR_LR_W: load_address_misaligned = (addr[1:0] != 2'b00);
+            default: load_address_misaligned = 1'b0;
+        endcase
+    end
+endfunction
+
+function store_address_misaligned;
+    input [6:0] store_instr_id;
+    input [31:0] addr;
+    begin
+        case (store_instr_id)
+            INSTR_SH: store_address_misaligned = addr[0];
+            INSTR_SW, INSTR_SC_W, INSTR_AMOSWAP_W, INSTR_AMOADD_W,
+            INSTR_AMOAND_W, INSTR_AMOOR_W, INSTR_AMOXOR_W,
+            INSTR_AMOMAX_W, INSTR_AMOMIN_W, INSTR_AMOMAXU_W,
+            INSTR_AMOMINU_W: store_address_misaligned = (addr[1:0] != 2'b00);
+            default: store_address_misaligned = 1'b0;
+        endcase
+    end
+endfunction
 
 // CSR-related signals
 assign csr_addr = imm[11:0];  // Extract CSR address from immediate field
@@ -138,7 +173,14 @@ always @(*) begin
     trap_to_supervisor = 0;
     ecall_exception = 0;
     ebreak_exception = 0;
+    illegal_instruction_exception = 0;
+    instruction_address_misaligned_exception = 0;
+    load_address_misaligned_exception = 0;
+    store_address_misaligned_exception = 0;
+    exception_tval = 0;
     wfi_instruction = 0;
+    effective_addr = 0;
+    target_addr = 0;
     
     // Handle interrupts first (highest priority)
     if (interrupt_pending) begin
@@ -147,6 +189,12 @@ always @(*) begin
         jump_addr = interrupt_to_supervisor ? stvec : mtvec;  // Jump to interrupt handler
         flush_pipeline = 1;
         interrupt_taken = 1;
+    end else if (instr_valid && instr_id == INSTR_INVALID) begin
+        jump_signal = 1;
+        trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[2];
+        jump_addr = trap_to_supervisor ? stvec : mtvec;
+        flush_pipeline = 1;
+        illegal_instruction_exception = 1;
     end else begin
         case (opcode)
             7'b0110011: begin // R-type instructions
@@ -156,56 +204,132 @@ always @(*) begin
             exec_output = alu_inst.ALUoutput;
             end
             7'b0000011: begin // Load instructions
-            mem_addr = rs1_value + imm;
+            effective_addr = rs1_value + imm;
+            mem_addr = effective_addr;
+            if (load_address_misaligned(instr_id, effective_addr)) begin
+                jump_signal = 1;
+                trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[4];
+                jump_addr = trap_to_supervisor ? stvec : mtvec;
+                flush_pipeline = 1;
+                load_address_misaligned_exception = 1;
+                exception_tval = effective_addr;
+            end
             end
             7'b0100011: begin // Store instructions
-            mem_addr = rs1_value + imm;
+            effective_addr = rs1_value + imm;
+            mem_addr = effective_addr;
+            if (store_address_misaligned(instr_id, effective_addr)) begin
+                jump_signal = 1;
+                trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[6];
+                jump_addr = trap_to_supervisor ? stvec : mtvec;
+                flush_pipeline = 1;
+                store_address_misaligned_exception = 1;
+                exception_tval = effective_addr;
+            end
             end
             7'b0101111: begin // AMO/LR/SC instructions
-            mem_addr = rs1_value;
+            effective_addr = rs1_value;
+            mem_addr = effective_addr;
+            if (load_address_misaligned(instr_id, effective_addr)) begin
+                jump_signal = 1;
+                trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[4];
+                jump_addr = trap_to_supervisor ? stvec : mtvec;
+                flush_pipeline = 1;
+                load_address_misaligned_exception = 1;
+                exception_tval = effective_addr;
+            end else if (store_address_misaligned(instr_id, effective_addr)) begin
+                jump_signal = 1;
+                trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[6];
+                jump_addr = trap_to_supervisor ? stvec : mtvec;
+                flush_pipeline = 1;
+                store_address_misaligned_exception = 1;
+                exception_tval = effective_addr;
+            end
             end
             7'b1100011: begin // Branch instructions
             case (instr_id)
                 INSTR_BEQ: begin
                     if (rs1_value == rs2_value) begin
+                        target_addr = pc_input + imm;
                         jump_signal = 1;
-                        jump_addr = pc_input + imm;
+                        jump_addr = (target_addr[1:0] != 2'b00) ? mtvec : target_addr;
                         flush_pipeline = 1;
+                        if (target_addr[1:0] != 2'b00) begin
+                            trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[0];
+                            jump_addr = trap_to_supervisor ? stvec : mtvec;
+                            instruction_address_misaligned_exception = 1;
+                            exception_tval = target_addr;
+                        end
                     end
                 end
                 INSTR_BNE: begin
                     if (rs1_value != rs2_value) begin
+                        target_addr = pc_input + imm;
                         jump_signal = 1;
-                        jump_addr = pc_input + imm;
+                        jump_addr = target_addr;
                         flush_pipeline = 1;
+                        if (target_addr[1:0] != 2'b00) begin
+                            trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[0];
+                            jump_addr = trap_to_supervisor ? stvec : mtvec;
+                            instruction_address_misaligned_exception = 1;
+                            exception_tval = target_addr;
+                        end
                     end
                 end
                 INSTR_BLT: begin
                     if ($signed(rs1_value) < $signed(rs2_value)) begin
+                        target_addr = pc_input + imm;
                         jump_signal = 1;
-                        jump_addr = pc_input + imm;
+                        jump_addr = target_addr;
                         flush_pipeline = 1;
+                        if (target_addr[1:0] != 2'b00) begin
+                            trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[0];
+                            jump_addr = trap_to_supervisor ? stvec : mtvec;
+                            instruction_address_misaligned_exception = 1;
+                            exception_tval = target_addr;
+                        end
                     end
                 end
                 INSTR_BGE: begin
                     if ($signed(rs1_value) >= $signed(rs2_value)) begin
+                        target_addr = pc_input + imm;
                         jump_signal = 1;
-                        jump_addr = pc_input + imm;
+                        jump_addr = target_addr;
                         flush_pipeline = 1;
+                        if (target_addr[1:0] != 2'b00) begin
+                            trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[0];
+                            jump_addr = trap_to_supervisor ? stvec : mtvec;
+                            instruction_address_misaligned_exception = 1;
+                            exception_tval = target_addr;
+                        end
                     end
                 end
                 INSTR_BLTU: begin
                     if (rs1_value < rs2_value) begin
+                        target_addr = pc_input + imm;
                         jump_signal = 1;
-                        jump_addr = pc_input + imm;
+                        jump_addr = target_addr;
                         flush_pipeline = 1;
+                        if (target_addr[1:0] != 2'b00) begin
+                            trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[0];
+                            jump_addr = trap_to_supervisor ? stvec : mtvec;
+                            instruction_address_misaligned_exception = 1;
+                            exception_tval = target_addr;
+                        end
                     end
                 end
                 INSTR_BGEU: begin
                     if (rs1_value >= rs2_value) begin
+                        target_addr = pc_input + imm;
                         jump_signal = 1;
-                        jump_addr = pc_input + imm;
+                        jump_addr = target_addr;
                         flush_pipeline = 1;
+                        if (target_addr[1:0] != 2'b00) begin
+                            trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[0];
+                            jump_addr = trap_to_supervisor ? stvec : mtvec;
+                            instruction_address_misaligned_exception = 1;
+                            exception_tval = target_addr;
+                        end
                     end
                 end
                 default: begin
@@ -213,16 +337,30 @@ always @(*) begin
             endcase
             end
             7'b1101111: begin // JAL
+            target_addr = pc_input + imm;
             jump_signal = 1;
-            jump_addr = pc_input + imm;
+            jump_addr = target_addr;
             exec_output = pc_input + 4;
             flush_pipeline = 1;
+            if (target_addr[1:0] != 2'b00) begin
+                trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[0];
+                jump_addr = trap_to_supervisor ? stvec : mtvec;
+                instruction_address_misaligned_exception = 1;
+                exception_tval = target_addr;
+            end
             end
             7'b1100111: begin // JALR
+            target_addr = (rs1_value + imm) & 32'hFFFFFFFE;
             jump_signal = 1;
-            jump_addr = (rs1_value + imm) & 32'hFFFFFFFE;
+            jump_addr = target_addr;
             exec_output = pc_input + 4;
             flush_pipeline = 1;
+            if (target_addr[1:0] != 2'b00) begin
+                trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[0];
+                jump_addr = trap_to_supervisor ? stvec : mtvec;
+                instruction_address_misaligned_exception = 1;
+                exception_tval = target_addr;
+            end
             end
             7'b0110111: begin // LUI
             exec_output = imm;
@@ -259,8 +397,9 @@ always @(*) begin
                     ebreak_exception = 1;
                 end
                 INSTR_WFI: begin
-                    // Enter sleep after retiring WFI and stay stalled in CPU
-                    // until an interrupt becomes pending.
+                    // WFI may resume for any reason. The CPU models it as a
+                    // short sleep so pending interrupts still win over the
+                    // post-WFI path without risking an indefinite ISA-test hang.
                     jump_signal = 1;
                     jump_addr = pc_input + 4;
                     flush_pipeline = 1;

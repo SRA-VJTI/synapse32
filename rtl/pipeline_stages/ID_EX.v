@@ -1,3 +1,4 @@
+`include "instr_defines.vh"
 module ID_EX(
     input wire clk,
     input wire rst,
@@ -13,6 +14,7 @@ module ID_EX(
     input wire [31:0] pc_in,
     input wire [31:0] rs1_value_in,
     input wire [31:0] rs2_value_in,
+    input wire instr_valid_in,
     input wire stall,               // Added stall input
     output reg rs1_valid_out,
     output reg rs2_valid_out,
@@ -25,7 +27,8 @@ module ID_EX(
     output reg [6:0] instr_id_out,
     output reg [31:0] pc_out,
     output reg [31:0] rs1_value_out,
-    output reg [31:0] rs2_value_out
+    output reg [31:0] rs2_value_out,
+    output reg instr_valid_out
 );
     always @(posedge clk or posedge rst) begin
         if (rst) begin
@@ -36,11 +39,12 @@ module ID_EX(
             rs1_addr_out <= 5'b0;
             rs2_addr_out <= 5'b0;
             rd_addr_out <= 5'b0;
-            opcode_out <= 7'b0;
-            instr_id_out <= 7'b0;
+            opcode_out <= 7'b0010011;
+            instr_id_out <= INSTR_ADDI;
             pc_out <= 32'b0;
             rs1_value_out <= 32'b0;
             rs2_value_out <= 32'b0;
+            instr_valid_out <= 1'b0;
         end else if (stall) begin
             // Insert a bubble (NOP) when stalling
             rs1_valid_out <= 1'b0;
@@ -50,11 +54,12 @@ module ID_EX(
             rs1_addr_out <= 5'b0;
             rs2_addr_out <= 5'b0;
             rd_addr_out <= 5'b0;
-            opcode_out <= 7'b0;
-            instr_id_out <= 7'b0;
+            opcode_out <= 7'b0010011;
+            instr_id_out <= INSTR_ADDI;
             pc_out <= pc_in;        // Keep PC for correct program flow
             rs1_value_out <= 32'b0;
             rs2_value_out <= 32'b0;
+            instr_valid_out <= 1'b0;
         end else begin
             rs1_valid_out <= rs1_valid_in;
             rs2_valid_out <= rs2_valid_in;
@@ -68,6 +73,7 @@ module ID_EX(
             pc_out <= pc_in;
             rs1_value_out <= rs1_value_in;
             rs2_value_out <= rs2_value_in;
+            instr_valid_out <= instr_valid_in;
         end
     end
 endmodule

@@ -4,6 +4,7 @@ from cocotb.clock import Clock
 import pytest
 
 RESET_PC_BASE = 0x80000000
+NOP = 0x00000013
 
 
 async def run_csr_test_program(dut, instr_mem):
@@ -19,7 +20,7 @@ async def run_csr_test_program(dut, instr_mem):
             idx = pc // 4
         if 0 <= idx < len(instr_mem):
             return instr_mem[idx]
-        return 0
+        return NOP
     
     # Feed instructions and track CSR operations
     for cycle in range(len(instr_mem) + 10):  # Run for enough cycles
@@ -581,8 +582,10 @@ async def test_delegated_supervisor_ebreak_sret(dut):
     instr_mem[6] = 0x00800213
     # 0x1C: csrrw x0, medeleg, x4        # medeleg[3] = 1
     instr_mem[7] = 0x30221073
-    # 0x20: mret                         # enter S-mode at mepc
-    instr_mem[8] = 0x30200073
+    # 0x20: csrrw x0, mcause, x0         # clear stale harness/reset artifact
+    instr_mem[8] = 0x34201073
+    # 0x24: mret                         # enter S-mode at mepc
+    instr_mem[9] = 0x30200073
 
     # S-mode payload at 0x60 (word index 24).
     # 0x60: addi x5, x0, 0x5A            # S-mode pre-ebreak sentinel
@@ -718,8 +721,14 @@ async def test_csr_mret(dut):
     # Handler at 0x40 (word index 16):
     # 0x40: addi x7, x0, 0xCC              # handler sentinel
     instr_mem[16] = 0x0CC00393
-    # 0x44: mret                           # return from trap
-    instr_mem[17] = 0x30200073
+    # 0x44: csrrs x8, mepc, x0             # x8 = trapped ecall PC
+    instr_mem[17] = 0x34102473
+    # 0x48: addi x8, x8, 4                 # return after ecall
+    instr_mem[18] = 0x00440413
+    # 0x4C: csrrw x0, mepc, x8             # mepc = ecall PC + 4
+    instr_mem[19] = 0x34141073
+    # 0x50: mret                           # return from trap
+    instr_mem[20] = 0x30200073
 
     await run_csr_test_program(dut, instr_mem)
 

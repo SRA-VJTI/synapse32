@@ -45,6 +45,7 @@ module riscv_cpu (
     // Instantiate IF_ID pipeline register
     wire [31:0] if_id_pc_out;
     wire [31:0] if_id_instr_out;
+    wire if_id_instr_valid_out;
     wire execution_flush;
     wire branch_flush;
     wire if_id_flush;
@@ -60,7 +61,8 @@ module riscv_cpu (
         // survive an interrupt/branch redirect and execute one cycle later.
         .stall(pipeline_stall && !if_id_flush),
         .pc_out(if_id_pc_out),
-        .instruction_out(if_id_instr_out)
+        .instruction_out(if_id_instr_out),
+        .instruction_valid_out(if_id_instr_valid_out)
     );
 
     // Instantiate Decoder
@@ -135,6 +137,7 @@ module riscv_cpu (
     wire [31:0] id_ex_inst0_pc_out;
     wire [31:0] id_ex_inst0_rs1_value_out;
     wire [31:0] id_ex_inst0_rs2_value_out;
+    wire id_ex_inst0_instr_valid_out;
 
     // Pipeline flush signals
     wire pipeline_flush;
@@ -157,6 +160,7 @@ module riscv_cpu (
         .pc_in(if_id_pc_out),
         .rs1_value_in(rf_inst0_rs1_value_out),
         .rs2_value_in(rf_inst0_rs2_value_out),
+        .instr_valid_in(if_id_instr_valid_out),
         .stall(pipeline_flush || pipeline_stall), // Use combined flush and stalls
         .rs1_valid_out(id_ex_inst0_rs1_valid_out),
         .rs2_valid_out(id_ex_inst0_rs2_valid_out),
@@ -169,7 +173,8 @@ module riscv_cpu (
         .instr_id_out(id_ex_inst0_instr_id_out),
         .pc_out(id_ex_inst0_pc_out),
         .rs1_value_out(id_ex_inst0_rs1_value_out),
-        .rs2_value_out(id_ex_inst0_rs2_value_out)
+        .rs2_value_out(id_ex_inst0_rs2_value_out),
+        .instr_valid_out(id_ex_inst0_instr_valid_out)
     );
 
     // Instantiate Execution Unit
@@ -219,9 +224,20 @@ module riscv_cpu (
     wire trap_to_supervisor;
     wire ecall_exception;
     wire ebreak_exception;
+    wire illegal_instruction_exception;
+    wire instruction_address_misaligned_exception;
+    wire load_address_misaligned_exception;
+    wire store_address_misaligned_exception;
+    wire [31:0] exception_tval;
+    wire synchronous_exception_taken;
     wire wfi_instruction;
     wire [31:0] exception_pc;
     assign exception_pc = id_ex_inst0_pc_out - 32'd4;
+    assign synchronous_exception_taken = ecall_exception || ebreak_exception ||
+                                         illegal_instruction_exception ||
+                                         instruction_address_misaligned_exception ||
+                                         load_address_misaligned_exception ||
+                                         store_address_misaligned_exception;
 
     // WFI sleep state: stall fetch/decode until an interrupt becomes pending.
     reg wfi_active;
@@ -270,6 +286,8 @@ module riscv_cpu (
             store_buf_be <= 4'b0;
         end else begin
             if (interrupt_pending) begin
+                wfi_active <= 1'b0;
+            end else if (wfi_active) begin
                 wfi_active <= 1'b0;
             end else if (wfi_instruction) begin
                 wfi_active <= 1'b1;
@@ -334,6 +352,11 @@ module riscv_cpu (
         .trap_to_supervisor(trap_to_supervisor),
         .ecall_exception(ecall_exception),
         .ebreak_exception(ebreak_exception),
+        .illegal_instruction_exception(illegal_instruction_exception),
+        .instruction_address_misaligned_exception(instruction_address_misaligned_exception),
+        .load_address_misaligned_exception(load_address_misaligned_exception),
+        .store_address_misaligned_exception(store_address_misaligned_exception),
+        .exception_tval_in(exception_tval),
         .timer_interrupt(timer_interrupt),
         .software_interrupt(software_interrupt),
         .external_interrupt(external_interrupt)
@@ -354,6 +377,7 @@ module riscv_cpu (
         .instr_id(id_ex_inst0_instr_id_out),
         .rs1_valid(id_ex_inst0_rs1_valid_out),
         .rs2_valid(id_ex_inst0_rs2_valid_out),
+        .instr_valid(id_ex_inst0_instr_valid_out),
         .pc_input(id_ex_inst0_pc_out),
         .forward_a(forward_a),
         .forward_b(forward_b),
@@ -392,6 +416,11 @@ module riscv_cpu (
         .trap_to_supervisor(trap_to_supervisor),
         .ecall_exception(ecall_exception),
         .ebreak_exception(ebreak_exception),
+        .illegal_instruction_exception(illegal_instruction_exception),
+        .instruction_address_misaligned_exception(instruction_address_misaligned_exception),
+        .load_address_misaligned_exception(load_address_misaligned_exception),
+        .store_address_misaligned_exception(store_address_misaligned_exception),
+        .exception_tval(exception_tval),
         .wfi_instruction(wfi_instruction)
     );
 
@@ -424,8 +453,8 @@ module riscv_cpu (
         .exec_output_in(ex_inst0_exec_output_out),
         .jump_signal_in(ex_inst0_jump_signal_out),
         .jump_addr_in(ex_inst0_jump_addr_out),
-        .instr_id_in(id_ex_inst0_instr_id_out),
-        .rd_valid_in(id_ex_inst0_rd_valid_out),
+        .instr_id_in(synchronous_exception_taken ? 7'b0000000 : id_ex_inst0_instr_id_out),
+        .rd_valid_in(synchronous_exception_taken ? 1'b0 : id_ex_inst0_rd_valid_out),
         .rs1_addr_out(ex_mem_inst0_rs1_addr_out),
         .rs2_addr_out(ex_mem_inst0_rs2_addr_out),
         .rd_addr_out(ex_mem_inst0_rd_addr_out),

@@ -186,7 +186,7 @@ async def run_test_program(dut, instr_mem):
             idx = pc // 4
         if 0 <= idx < len(instr_mem):
             return instr_mem[idx]
-        return 0
+        return 0x00000013
     
     # Pipeline stages tracker
     pipeline_tracker = []

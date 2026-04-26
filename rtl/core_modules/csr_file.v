@@ -21,6 +21,11 @@ module csr_file (
     input wire trap_to_supervisor,
     input wire ecall_exception,
     input wire ebreak_exception,
+    input wire illegal_instruction_exception,
+    input wire instruction_address_misaligned_exception,
+    input wire load_address_misaligned_exception,
+    input wire store_address_misaligned_exception,
+    input wire [31:0] exception_tval_in,
     
     // Timer interrupt input
     input wire timer_interrupt,
@@ -80,6 +85,21 @@ module csr_file (
     wire [31:0] sstatus = mstatus & SSTATUS_MASK;
     wire [31:0] sie = mie & S_INTERRUPT_MASK;
     wire [31:0] sip = mip & S_INTERRUPT_MASK;
+    wire synchronous_exception = ecall_exception || ebreak_exception ||
+                                 illegal_instruction_exception ||
+                                 instruction_address_misaligned_exception ||
+                                 load_address_misaligned_exception ||
+                                 store_address_misaligned_exception;
+    wire [31:0] exception_cause =
+        instruction_address_misaligned_exception ? 32'h00000000 :
+        illegal_instruction_exception             ? 32'h00000002 :
+        ebreak_exception                          ? 32'h00000003 :
+        load_address_misaligned_exception         ? 32'h00000004 :
+        store_address_misaligned_exception        ? 32'h00000006 :
+        (privilege_mode == PRIV_S)                ? 32'h00000009 :
+                                                    32'h0000000B;
+    wire [31:0] exception_tval = (ecall_exception || ebreak_exception) ?
+                                 32'h00000000 : exception_tval_in;
 
     // Check if CSR address is valid
     assign csr_valid = (csr_addr == CSR_MSTATUS) || (csr_addr == CSR_MISA) ||
@@ -159,38 +179,20 @@ module csr_file (
                 mstatus[8] <= 1'b0;              // Clear SPP after return
             end
             
-            // Handle ECALL exception
-            else if (ecall_exception) begin
+            // Handle synchronous exceptions
+            else if (synchronous_exception) begin
                 if (trap_to_supervisor) begin
                     sepc <= exception_pc_in;        // Save exception PC
-                    scause <= 32'h00000009;        // Environment call from S-mode
+                    scause <= exception_cause;
+                    stval <= exception_tval;
                     mstatus[5] <= mstatus[1];      // Save SIE to SPIE
                     mstatus[1] <= 1'b0;            // Disable supervisor interrupts
                     mstatus[8] <= (privilege_mode == PRIV_S);
                     privilege_mode <= PRIV_S;      // Trap to supervisor mode
                 end else begin
                     mepc <= exception_pc_in;        // Save exception PC
-                    mcause <= (privilege_mode == PRIV_S) ? 32'h00000009 :
-                              32'h0000000B;        // Environment call from S/M-mode
-                    mstatus[7] <= mstatus[3];      // Save MIE to MPIE
-                    mstatus[3] <= 1'b0;            // Disable interrupts
-                    mstatus[12:11] <= privilege_mode; // Save previous privilege in MPP
-                    privilege_mode <= PRIV_M;      // Trap to machine mode
-                end
-            end
-            
-            // Handle EBREAK exception
-            else if (ebreak_exception) begin
-                if (trap_to_supervisor) begin
-                    sepc <= exception_pc_in;        // Save exception PC
-                    scause <= 32'h00000003;        // Breakpoint
-                    mstatus[5] <= mstatus[1];      // Save SIE to SPIE
-                    mstatus[1] <= 1'b0;            // Disable supervisor interrupts
-                    mstatus[8] <= (privilege_mode == PRIV_S);
-                    privilege_mode <= PRIV_S;      // Trap to supervisor mode
-                end else begin
-                    mepc <= exception_pc_in;        // Save exception PC
-                    mcause <= 32'h00000003;        // Breakpoint
+                    mcause <= exception_cause;
+                    mtval <= exception_tval;
                     mstatus[7] <= mstatus[3];      // Save MIE to MPIE
                     mstatus[3] <= 1'b0;            // Disable interrupts
                     mstatus[12:11] <= privilege_mode; // Save previous privilege in MPP
