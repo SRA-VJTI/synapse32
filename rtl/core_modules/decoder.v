@@ -153,6 +153,7 @@ module decoder (
             end
             7'b0001111: begin
                 case (func3)
+                    3'h0: instr_id = INSTR_FENCE;
                     3'h1: instr_id = INSTR_FENCE_I;
                     default: instr_id = INSTR_INVALID;
                 endcase

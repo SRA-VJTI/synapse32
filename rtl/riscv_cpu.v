@@ -1,5 +1,6 @@
 `default_nettype none
 `include "memory_map.vh"
+`include "instr_defines.vh"
 module riscv_cpu (
     input wire clk,
     input wire rst,
@@ -232,7 +233,7 @@ module riscv_cpu (
     wire synchronous_exception_taken;
     wire wfi_instruction;
     wire [31:0] exception_pc;
-    assign exception_pc = id_ex_inst0_pc_out - 32'd4;
+    assign exception_pc = id_ex_inst0_pc_out;
     assign synchronous_exception_taken = ecall_exception || ebreak_exception ||
                                          illegal_instruction_exception ||
                                          instruction_address_misaligned_exception ||
@@ -275,7 +276,9 @@ module riscv_cpu (
     wire sc_success;
     wire [31:0] sc_result;
     wire [31:0] atomic_new_word;
-    assign pipeline_stall = hazard_stall || wfi_stall;
+    // FENCE must drain the store buffer before younger loads/stores proceed.
+    wire fence_drain_stall = (id_ex_inst0_instr_id_out == INSTR_FENCE) && store_buf_valid;
+    assign pipeline_stall = hazard_stall || wfi_stall || fence_drain_stall;
 
     always @(posedge clk or posedge rst) begin
         if (rst) begin
