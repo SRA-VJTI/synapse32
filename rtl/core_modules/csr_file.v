@@ -54,7 +54,16 @@ module csr_file (
     localparam CSR_STVAL     = 12'h143;
     localparam CSR_SIP       = 12'h144;
     localparam CSR_CYCLE     = 12'hC00;
+    localparam CSR_TIME      = 12'hC01;
+    localparam CSR_INSTRET   = 12'hC02;
     localparam CSR_CYCLEH    = 12'hC80;
+    localparam CSR_TIMEH     = 12'hC81;
+    localparam CSR_INSTRETH  = 12'hC82;
+    // Trigger module CSRs (optional, not implemented — return 0, writes ignored)
+    localparam CSR_TSELECT   = 12'h7A0;
+    localparam CSR_TDATA1    = 12'h7A1;
+    localparam CSR_TDATA2    = 12'h7A2;
+    localparam CSR_TDATA3    = 12'h7A3;
     // Read-only machine info CSRs (addr[11:10]=2'b11 → any write is illegal)
     localparam CSR_MVENDORID = 12'hF11;
     localparam CSR_MARCHID   = 12'hF12;
@@ -118,7 +127,11 @@ module csr_file (
                        (csr_addr == CSR_SCAUSE) || (csr_addr == CSR_STVAL) ||
                        (csr_addr == CSR_SIP) ||
                        (csr_addr == CSR_MIP) || (csr_addr == CSR_CYCLE) ||
-                       (csr_addr == CSR_CYCLEH) ||
+                       (csr_addr == CSR_TIME) || (csr_addr == CSR_INSTRET) ||
+                       (csr_addr == CSR_CYCLEH) || (csr_addr == CSR_TIMEH) ||
+                       (csr_addr == CSR_INSTRETH) ||
+                       (csr_addr == CSR_TSELECT) || (csr_addr == CSR_TDATA1) ||
+                       (csr_addr == CSR_TDATA2) || (csr_addr == CSR_TDATA3) ||
                        (csr_addr == CSR_MVENDORID) || (csr_addr == CSR_MARCHID) ||
                        (csr_addr == CSR_MIMPID) || (csr_addr == CSR_MHARTID);
 
@@ -259,7 +272,15 @@ module csr_file (
                 CSR_STVAL:    read_data = stval;
                 CSR_SIP:      read_data = sip;
                 CSR_CYCLE:    read_data = cycle_counter[31:0];
+                CSR_TIME:     read_data = 32'h0;
+                CSR_INSTRET:  read_data = 32'h0;
                 CSR_CYCLEH:   read_data = cycle_counter[63:32];
+                CSR_TIMEH:    read_data = 32'h0;
+                CSR_INSTRETH: read_data = 32'h0;
+                CSR_TSELECT:  read_data = 32'h0;
+                CSR_TDATA1:   read_data = 32'h0;
+                CSR_TDATA2:   read_data = 32'h0;
+                CSR_TDATA3:   read_data = 32'h0;
                 CSR_MVENDORID: read_data = 32'h0;
                 CSR_MARCHID:   read_data = 32'h0;
                 CSR_MIMPID:    read_data = 32'h0;
