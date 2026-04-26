@@ -55,6 +55,11 @@ module csr_file (
     localparam CSR_SIP       = 12'h144;
     localparam CSR_CYCLE     = 12'hC00;
     localparam CSR_CYCLEH    = 12'hC80;
+    // Read-only machine info CSRs (addr[11:10]=2'b11 → any write is illegal)
+    localparam CSR_MVENDORID = 12'hF11;
+    localparam CSR_MARCHID   = 12'hF12;
+    localparam CSR_MIMPID    = 12'hF13;
+    localparam CSR_MHARTID   = 12'hF14;
 
     localparam PRIV_U = 2'b00;
     localparam PRIV_S = 2'b01;
@@ -113,7 +118,9 @@ module csr_file (
                        (csr_addr == CSR_SCAUSE) || (csr_addr == CSR_STVAL) ||
                        (csr_addr == CSR_SIP) ||
                        (csr_addr == CSR_MIP) || (csr_addr == CSR_CYCLE) ||
-                       (csr_addr == CSR_CYCLEH);
+                       (csr_addr == CSR_CYCLEH) ||
+                       (csr_addr == CSR_MVENDORID) || (csr_addr == CSR_MARCHID) ||
+                       (csr_addr == CSR_MIMPID) || (csr_addr == CSR_MHARTID);
 
     // Initialize CSRs
     always @(posedge clk or posedge rst) begin
@@ -253,6 +260,10 @@ module csr_file (
                 CSR_SIP:      read_data = sip;
                 CSR_CYCLE:    read_data = cycle_counter[31:0];
                 CSR_CYCLEH:   read_data = cycle_counter[63:32];
+                CSR_MVENDORID: read_data = 32'h0;
+                CSR_MARCHID:   read_data = 32'h0;
+                CSR_MIMPID:    read_data = 32'h0;
+                CSR_MHARTID:   read_data = 32'h0;
                 default:      read_data = 32'h0;
             endcase
         end else begin

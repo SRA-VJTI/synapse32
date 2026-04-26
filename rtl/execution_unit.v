@@ -406,7 +406,15 @@ always @(*) begin
                     wfi_instruction = 1;
                 end
                 default: begin
-                    exec_output = csr_rd_value;  // CSR instructions
+                    if (!csr_valid || (csr_addr[11:10] == 2'b11 && csr_write_enable)) begin
+                        jump_signal = 1;
+                        trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[2];
+                        jump_addr = trap_to_supervisor ? stvec : mtvec;
+                        flush_pipeline = 1;
+                        illegal_instruction_exception = 1;
+                    end else begin
+                        exec_output = csr_rd_value;
+                    end
                 end
             endcase
             end
