@@ -82,6 +82,7 @@ localparam [6:0] INSTR_ECALL   = 7'h2E;
 localparam [6:0] INSTR_EBREAK  = 7'h2F;
 localparam [6:0] INSTR_WFI     = 7'h38;
 localparam [6:0] INSTR_SRET    = 7'h39;
+localparam [6:0] INSTR_SFENCE_VMA = 7'h3B;
 
 // RV32A instruction IDs
 localparam [6:0] INSTR_LR_W       = 7'h40;

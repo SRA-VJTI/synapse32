@@ -169,6 +169,8 @@ module decoder (
                     instr_id = INSTR_ECALL;
                 end else if (instr == 32'h00100073) begin  // EBREAK
                     instr_id = INSTR_EBREAK;
+                end else if ((instr[31:25] == 7'b0001001) && (func3 == 3'b000) && (instr[11:7] == 5'b00000)) begin
+                    instr_id = INSTR_SFENCE_VMA;
                 end else begin
                     case (func3)
                         3'h1: instr_id = INSTR_CSRRW;

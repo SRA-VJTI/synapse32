@@ -41,6 +41,7 @@ module csr_file (
     localparam CSR_MIDELEG   = 12'h303;
     localparam CSR_MIE       = 12'h304;
     localparam CSR_MTVEC     = 12'h305;
+    localparam CSR_MCOUNTEREN = 12'h306;
     localparam CSR_MSCRATCH  = 12'h340;
     localparam CSR_MEPC      = 12'h341;
     localparam CSR_MCAUSE    = 12'h342;
@@ -50,6 +51,7 @@ module csr_file (
     localparam CSR_SSTATUS   = 12'h100;
     localparam CSR_SIE       = 12'h104;
     localparam CSR_STVEC     = 12'h105;
+    localparam CSR_SCOUNTEREN = 12'h106;
     localparam CSR_SSCRATCH  = 12'h140;
     localparam CSR_SEPC      = 12'h141;
     localparam CSR_SCAUSE    = 12'h142;
@@ -89,6 +91,7 @@ module csr_file (
     localparam MSTATUS_WRITABLE_MASK = 32'h004619AA;
     localparam SUPPORTED_MISA = 32'h40141101;  // RV32IMASU
     localparam MCOUNTINHIBIT_MASK = 32'h00000005;
+    localparam COUNTEREN_MASK = 32'h00000007;
 
     // CSR registers
     reg [31:0] mstatus;
@@ -97,6 +100,7 @@ module csr_file (
     reg [31:0] mideleg;
     reg [31:0] mie;
     reg [31:0] mtvec;
+    reg [31:0] mcounteren;
     reg [31:0] mscratch;
     reg [31:0] mepc;
     reg [31:0] mcause;
@@ -107,6 +111,7 @@ module csr_file (
     reg [63:0] instret_counter;
     reg [1:0] privilege_mode;
     reg [31:0] stvec;
+    reg [31:0] scounteren;
     reg [31:0] sscratch;
     reg [31:0] sepc;
     reg [31:0] scause;
@@ -127,14 +132,17 @@ module csr_file (
                                  instruction_address_misaligned_exception ||
                                  load_address_misaligned_exception ||
                                  store_address_misaligned_exception;
+    wire [31:0] ecall_cause =
+        (privilege_mode == PRIV_U) ? 32'h00000008 :
+        (privilege_mode == PRIV_S) ? 32'h00000009 :
+                                     32'h0000000B;
     wire [31:0] exception_cause =
         instruction_address_misaligned_exception ? 32'h00000000 :
         illegal_instruction_exception             ? 32'h00000002 :
         ebreak_exception                          ? 32'h00000003 :
         load_address_misaligned_exception         ? 32'h00000004 :
         store_address_misaligned_exception        ? 32'h00000006 :
-        (privilege_mode == PRIV_S)                ? 32'h00000009 :
-                                                    32'h0000000B;
+                                                    ecall_cause;
     wire [31:0] exception_tval = (ecall_exception || ebreak_exception) ?
                                  32'h00000000 : exception_tval_in;
 
@@ -142,11 +150,12 @@ module csr_file (
     assign csr_valid = (csr_addr == CSR_MSTATUS) || (csr_addr == CSR_MISA) ||
                        (csr_addr == CSR_MEDELEG) || (csr_addr == CSR_MIDELEG) ||
                        (csr_addr == CSR_MIE) || (csr_addr == CSR_MTVEC) ||
+                       (csr_addr == CSR_MCOUNTEREN) ||
                        (csr_addr == CSR_MSCRATCH) || (csr_addr == CSR_MEPC) ||
                        (csr_addr == CSR_MCAUSE) || (csr_addr == CSR_MTVAL) ||
                        (csr_addr == CSR_MCOUNTINHIBIT) ||
                        (csr_addr == CSR_SSTATUS) || (csr_addr == CSR_SIE) ||
-                       (csr_addr == CSR_STVEC) ||
+                       (csr_addr == CSR_STVEC) || (csr_addr == CSR_SCOUNTEREN) ||
                        (csr_addr == CSR_SSCRATCH) || (csr_addr == CSR_SEPC) ||
                        (csr_addr == CSR_SCAUSE) || (csr_addr == CSR_STVAL) ||
                        (csr_addr == CSR_SIP) || (csr_addr == CSR_SATP) ||
@@ -172,6 +181,7 @@ module csr_file (
             mideleg <= 32'h0;
             mie <= 32'h0;
             mtvec <= 32'h0;
+            mcounteren <= 32'h0;
             mscratch <= 32'h0;
             mepc <= 32'h0;
             mcause <= 32'h0;
@@ -182,6 +192,7 @@ module csr_file (
             instret_counter <= 64'h0;
             privilege_mode <= PRIV_M;
             stvec <= 32'h0;
+            scounteren <= 32'h0;
             sscratch <= 32'h0;
             sepc <= 32'h0;
             scause <= 32'h0;
@@ -270,12 +281,14 @@ module csr_file (
                     CSR_MIE:      mie <= write_data;
                     CSR_SIE:      mie <= (mie & ~S_INTERRUPT_MASK) | (write_data & S_INTERRUPT_MASK);
                     CSR_MTVEC:    mtvec <= {write_data[31:2], 2'b00};
+                    CSR_MCOUNTEREN: mcounteren <= write_data & COUNTEREN_MASK;
                     CSR_MSCRATCH: mscratch <= write_data;
                     CSR_MEPC:     mepc <= write_data;
                     CSR_MCAUSE:   mcause <= write_data;
                     CSR_MTVAL:    mtval <= write_data;
                     CSR_MCOUNTINHIBIT: mcountinhibit <= write_data & MCOUNTINHIBIT_MASK;
                     CSR_STVEC:    stvec <= {write_data[31:2], 2'b00};
+                    CSR_SCOUNTEREN: scounteren <= write_data & COUNTEREN_MASK;
                     CSR_SSCRATCH: sscratch <= write_data;
                     CSR_SEPC:     sepc <= write_data;
                     CSR_SCAUSE:   scause <= write_data;
@@ -308,6 +321,7 @@ module csr_file (
                 CSR_MIE:      read_data = mie;
                 CSR_SIE:      read_data = sie;
                 CSR_MTVEC:    read_data = mtvec;
+                CSR_MCOUNTEREN: read_data = mcounteren;
                 CSR_MSCRATCH: read_data = mscratch;
                 CSR_MEPC:     read_data = mepc;
                 CSR_MCAUSE:   read_data = mcause;
@@ -315,6 +329,7 @@ module csr_file (
                 CSR_MIP:      read_data = mip;
                 CSR_MCOUNTINHIBIT: read_data = mcountinhibit;
                 CSR_STVEC:    read_data = stvec;
+                CSR_SCOUNTEREN: read_data = scounteren;
                 CSR_SSCRATCH: read_data = sscratch;
                 CSR_SEPC:     read_data = sepc;
                 CSR_SCAUSE:   read_data = scause;

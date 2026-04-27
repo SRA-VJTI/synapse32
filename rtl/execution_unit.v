@@ -48,6 +48,8 @@ module execution_unit(
     input wire [31:0] medeleg,
     input wire [1:0] privilege_mode,
     input wire [31:0] mstatus,
+    input wire [31:0] mcounteren,
+    input wire [31:0] scounteren,
     
     // Add interrupt/exception outputs
     output reg interrupt_taken,
@@ -77,9 +79,28 @@ assign rs2_value_out = rs2_value;
 localparam NO_FORWARDING = 2'b00;
 localparam FORWARD_FROM_MEM = 2'b01;
 localparam FORWARD_FROM_WB = 2'b10;
+localparam PRIV_U = 2'b00;
 localparam PRIV_S = 2'b01;
 localparam PRIV_M = 2'b11;
 localparam CSR_SATP = 12'h180;
+localparam CSR_CYCLE = 12'hC00;
+localparam CSR_TIME = 12'hC01;
+localparam CSR_INSTRET = 12'hC02;
+localparam CSR_CYCLEH = 12'hC80;
+localparam CSR_TIMEH = 12'hC81;
+localparam CSR_INSTRETH = 12'hC82;
+
+function is_counter_shadow_csr;
+    input [11:0] csr_addr_in;
+    begin
+        is_counter_shadow_csr = (csr_addr_in == CSR_CYCLE) ||
+                                (csr_addr_in == CSR_TIME) ||
+                                (csr_addr_in == CSR_INSTRET) ||
+                                (csr_addr_in == CSR_CYCLEH) ||
+                                (csr_addr_in == CSR_TIMEH) ||
+                                (csr_addr_in == CSR_INSTRETH);
+    end
+endfunction
 
 function load_address_misaligned;
     input [6:0] load_instr_id;
@@ -133,6 +154,27 @@ wire csr_privilege_violation = (privilege_mode < csr_addr[9:8]);
 wire csr_satp_tvm_violation = (csr_addr == CSR_SATP) && (privilege_mode == PRIV_S) && mstatus[20];
 wire sret_tsr_violation = (privilege_mode == PRIV_S) && mstatus[22];
 wire wfi_tw_violation = (privilege_mode != PRIV_M) && mstatus[21];
+wire csr_is_counter_shadow = is_counter_shadow_csr(csr_addr);
+wire csr_is_cycle_shadow = (csr_addr == CSR_CYCLE) || (csr_addr == CSR_CYCLEH);
+wire csr_is_time_shadow = (csr_addr == CSR_TIME) || (csr_addr == CSR_TIMEH);
+wire mcounteren_allows_counter = csr_is_cycle_shadow ? mcounteren[0] :
+                                 csr_is_time_shadow ? mcounteren[1] :
+                                                      mcounteren[2];
+wire scounteren_allows_counter = csr_is_cycle_shadow ? scounteren[0] :
+                                 csr_is_time_shadow ? scounteren[1] :
+                                                      scounteren[2];
+wire csr_counter_access_violation =
+    csr_is_counter_shadow &&
+    ((privilege_mode == PRIV_S && !mcounteren_allows_counter) ||
+     (privilege_mode == PRIV_U &&
+      (!mcounteren_allows_counter || !scounteren_allows_counter)));
+wire delegate_instr_addr_misaligned = (privilege_mode != PRIV_M) && medeleg[0];
+wire delegate_illegal_instruction = (privilege_mode != PRIV_M) && medeleg[2];
+wire delegate_breakpoint = (privilege_mode != PRIV_M) && medeleg[3];
+wire delegate_load_addr_misaligned = (privilege_mode != PRIV_M) && medeleg[4];
+wire delegate_store_addr_misaligned = (privilege_mode != PRIV_M) && medeleg[6];
+wire delegate_ecall = ((privilege_mode == PRIV_U) && medeleg[8]) ||
+                      ((privilege_mode == PRIV_S) && medeleg[9]);
 
 // Select forwarded values if needed
 always @(*) begin
@@ -201,7 +243,7 @@ always @(*) begin
         interrupt_taken = 1;
     end else if (instr_valid && instr_id == INSTR_INVALID) begin
         jump_signal = 1;
-        trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[2];
+        trap_to_supervisor = delegate_illegal_instruction;
         jump_addr = trap_to_supervisor ? stvec : mtvec;
         flush_pipeline = 1;
         illegal_instruction_exception = 1;
@@ -218,7 +260,7 @@ always @(*) begin
             mem_addr = effective_addr;
             if (load_address_misaligned(instr_id, effective_addr)) begin
                 jump_signal = 1;
-                trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[4];
+                trap_to_supervisor = delegate_load_addr_misaligned;
                 jump_addr = trap_to_supervisor ? stvec : mtvec;
                 flush_pipeline = 1;
                 load_address_misaligned_exception = 1;
@@ -230,7 +272,7 @@ always @(*) begin
             mem_addr = effective_addr;
             if (store_address_misaligned(instr_id, effective_addr)) begin
                 jump_signal = 1;
-                trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[6];
+                trap_to_supervisor = delegate_store_addr_misaligned;
                 jump_addr = trap_to_supervisor ? stvec : mtvec;
                 flush_pipeline = 1;
                 store_address_misaligned_exception = 1;
@@ -242,14 +284,14 @@ always @(*) begin
             mem_addr = effective_addr;
             if (load_address_misaligned(instr_id, effective_addr)) begin
                 jump_signal = 1;
-                trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[4];
+                trap_to_supervisor = delegate_load_addr_misaligned;
                 jump_addr = trap_to_supervisor ? stvec : mtvec;
                 flush_pipeline = 1;
                 load_address_misaligned_exception = 1;
                 exception_tval = effective_addr;
             end else if (store_address_misaligned(instr_id, effective_addr)) begin
                 jump_signal = 1;
-                trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[6];
+                trap_to_supervisor = delegate_store_addr_misaligned;
                 jump_addr = trap_to_supervisor ? stvec : mtvec;
                 flush_pipeline = 1;
                 store_address_misaligned_exception = 1;
@@ -265,7 +307,7 @@ always @(*) begin
                         jump_addr = (target_addr[1:0] != 2'b00) ? mtvec : target_addr;
                         flush_pipeline = 1;
                         if (target_addr[1:0] != 2'b00) begin
-                            trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[0];
+                            trap_to_supervisor = delegate_instr_addr_misaligned;
                             jump_addr = trap_to_supervisor ? stvec : mtvec;
                             instruction_address_misaligned_exception = 1;
                             exception_tval = target_addr;
@@ -279,7 +321,7 @@ always @(*) begin
                         jump_addr = target_addr;
                         flush_pipeline = 1;
                         if (target_addr[1:0] != 2'b00) begin
-                            trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[0];
+                            trap_to_supervisor = delegate_instr_addr_misaligned;
                             jump_addr = trap_to_supervisor ? stvec : mtvec;
                             instruction_address_misaligned_exception = 1;
                             exception_tval = target_addr;
@@ -293,7 +335,7 @@ always @(*) begin
                         jump_addr = target_addr;
                         flush_pipeline = 1;
                         if (target_addr[1:0] != 2'b00) begin
-                            trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[0];
+                            trap_to_supervisor = delegate_instr_addr_misaligned;
                             jump_addr = trap_to_supervisor ? stvec : mtvec;
                             instruction_address_misaligned_exception = 1;
                             exception_tval = target_addr;
@@ -307,7 +349,7 @@ always @(*) begin
                         jump_addr = target_addr;
                         flush_pipeline = 1;
                         if (target_addr[1:0] != 2'b00) begin
-                            trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[0];
+                            trap_to_supervisor = delegate_instr_addr_misaligned;
                             jump_addr = trap_to_supervisor ? stvec : mtvec;
                             instruction_address_misaligned_exception = 1;
                             exception_tval = target_addr;
@@ -321,7 +363,7 @@ always @(*) begin
                         jump_addr = target_addr;
                         flush_pipeline = 1;
                         if (target_addr[1:0] != 2'b00) begin
-                            trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[0];
+                            trap_to_supervisor = delegate_instr_addr_misaligned;
                             jump_addr = trap_to_supervisor ? stvec : mtvec;
                             instruction_address_misaligned_exception = 1;
                             exception_tval = target_addr;
@@ -335,7 +377,7 @@ always @(*) begin
                         jump_addr = target_addr;
                         flush_pipeline = 1;
                         if (target_addr[1:0] != 2'b00) begin
-                            trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[0];
+                            trap_to_supervisor = delegate_instr_addr_misaligned;
                             jump_addr = trap_to_supervisor ? stvec : mtvec;
                             instruction_address_misaligned_exception = 1;
                             exception_tval = target_addr;
@@ -353,7 +395,7 @@ always @(*) begin
             exec_output = pc_input + 4;
             flush_pipeline = 1;
             if (target_addr[1:0] != 2'b00) begin
-                trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[0];
+                trap_to_supervisor = delegate_instr_addr_misaligned;
                 jump_addr = trap_to_supervisor ? stvec : mtvec;
                 instruction_address_misaligned_exception = 1;
                 exception_tval = target_addr;
@@ -366,7 +408,7 @@ always @(*) begin
             exec_output = pc_input + 4;
             flush_pipeline = 1;
             if (target_addr[1:0] != 2'b00) begin
-                trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[0];
+                trap_to_supervisor = delegate_instr_addr_misaligned;
                 jump_addr = trap_to_supervisor ? stvec : mtvec;
                 instruction_address_misaligned_exception = 1;
                 exception_tval = target_addr;
@@ -383,7 +425,7 @@ always @(*) begin
                 INSTR_MRET: begin
                     if (privilege_mode != PRIV_M) begin
                         jump_signal = 1;
-                        trap_to_supervisor = (privilege_mode == PRIV_S) && medeleg[2];
+                        trap_to_supervisor = delegate_illegal_instruction;
                         jump_addr = trap_to_supervisor ? stvec : mtvec;
                         flush_pipeline = 1;
                         illegal_instruction_exception = 1;
@@ -397,7 +439,7 @@ always @(*) begin
                 INSTR_SRET: begin
                     if ((privilege_mode != PRIV_S) || sret_tsr_violation) begin
                         jump_signal = 1;
-                        trap_to_supervisor = (privilege_mode == PRIV_S) && medeleg[2];
+                        trap_to_supervisor = delegate_illegal_instruction;
                         jump_addr = trap_to_supervisor ? stvec : mtvec;
                         flush_pipeline = 1;
                         illegal_instruction_exception = 1;
@@ -410,14 +452,14 @@ always @(*) begin
                 end
                 INSTR_ECALL: begin
                     jump_signal = 1;
-                    trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[9];
+                    trap_to_supervisor = delegate_ecall;
                     jump_addr = trap_to_supervisor ? stvec : mtvec;  // Jump to trap handler
                     flush_pipeline = 1;
                     ecall_exception = 1;
                 end
                 INSTR_EBREAK: begin
                     jump_signal = 1;
-                    trap_to_supervisor = (privilege_mode == 2'b01) && medeleg[3];
+                    trap_to_supervisor = delegate_breakpoint;
                     jump_addr = trap_to_supervisor ? stvec : mtvec;  // Jump to trap handler
                     flush_pipeline = 1;
                     ebreak_exception = 1;
@@ -425,7 +467,7 @@ always @(*) begin
                 INSTR_WFI: begin
                     if (wfi_tw_violation) begin
                         jump_signal = 1;
-                        trap_to_supervisor = (privilege_mode == PRIV_S) && medeleg[2];
+                        trap_to_supervisor = delegate_illegal_instruction;
                         jump_addr = trap_to_supervisor ? stvec : mtvec;
                         flush_pipeline = 1;
                         illegal_instruction_exception = 1;
@@ -439,11 +481,21 @@ always @(*) begin
                         wfi_instruction = 1;
                     end
                 end
+                INSTR_SFENCE_VMA: begin
+                    if ((privilege_mode == PRIV_U) || ((privilege_mode == PRIV_S) && mstatus[20])) begin
+                        jump_signal = 1;
+                        trap_to_supervisor = delegate_illegal_instruction;
+                        jump_addr = trap_to_supervisor ? stvec : mtvec;
+                        flush_pipeline = 1;
+                        illegal_instruction_exception = 1;
+                    end
+                end
                 default: begin
                     if (!csr_valid || csr_read_only_violation ||
-                        csr_privilege_violation || csr_satp_tvm_violation) begin
+                        csr_privilege_violation || csr_satp_tvm_violation ||
+                        csr_counter_access_violation) begin
                         jump_signal = 1;
-                        trap_to_supervisor = (privilege_mode == PRIV_S) && medeleg[2];
+                        trap_to_supervisor = delegate_illegal_instruction;
                         jump_addr = trap_to_supervisor ? stvec : mtvec;
                         flush_pipeline = 1;
                         illegal_instruction_exception = 1;

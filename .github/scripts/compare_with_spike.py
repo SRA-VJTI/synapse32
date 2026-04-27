@@ -20,6 +20,7 @@ from pathlib import Path
 
 DEFAULT_SUITES = "rv32ui,rv32um,rv32ua,rv32mi,rv32si"
 TEST_NAME_RE = re.compile(r"^(rv32(ui|um|ua|mi|si))-p-[A-Za-z0-9_-]+$")
+SPIKE_ISA = "rv32ima_zicsr_zicntr"
 
 
 def parse_suites(suites: str) -> set[str]:
@@ -102,7 +103,7 @@ def elf_to_hex(elf: Path, out_hex: Path) -> None:
 
 
 def run_spike(elf: Path) -> tuple[bool, str]:
-    rc = run(["spike", "--isa=rv32ima", str(elf)])
+    rc = run(["spike", "--isa=" + SPIKE_ISA, str(elf)])
     ok = rc.returncode == 0
     detail = (rc.stdout + "\n" + rc.stderr).strip()
     return ok, detail

@@ -1,0 +1,45 @@
+[*]
+[*] GTKWave Analyzer v3.3.120 (w)1999-2024 BSI
+[*]
+[dumpfile] "/Users/siriboi/github/synapse32/waveforms/test_supervisor_ecall_machine_mret_returns_to_supervisor.fst"
+[savefile] "/Users/siriboi/github/synapse32/waveforms/test_supervisor_ecall_machine_mret_returns_to_supervisor.gtkw"
+[timestart] 0
+[size] 1600 900
+[pos] -1 -1
+*-14.400000 0 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] riscv_cpu.
+[treeopen] riscv_cpu.csr_file_inst.
+[sst_width] 280
+[signals_width] 220
+[sst_expanded] 1
+[sst_vpaned_height] 280
+@28
+riscv_cpu.clk
+riscv_cpu.rst
+@1000200
+-fetch
+@22
+riscv_cpu.module_pc_out[31:0]
+riscv_cpu.module_instr_in[31:0]
+riscv_cpu.if_id_pc_out[31:0]
+riscv_cpu.if_id_instr_out[31:0]
+@28
+riscv_cpu.if_id_instr_valid_out
+@1000200
+-decode/execute
+@22
+riscv_cpu.id_ex_inst0_pc_out[31:0]
+riscv_cpu.id_ex_inst0_instr_id_out[6:0]
+@28
+riscv_cpu.id_ex_inst0_instr_valid_out
+riscv_cpu.ex_inst0_jump_signal_out
+riscv_cpu.execution_flush
+@22
+riscv_cpu.ex_inst0_jump_addr_out[31:0]
+@1000200
+-csr
+@22
+riscv_cpu.csr_file_inst.mepc[31:0]
+riscv_cpu.csr_file_inst.mcause[31:0]
+riscv_cpu.csr_file_inst.privilege_mode[1:0]
+riscv_cpu.csr_file_inst.mstatus[31:0]

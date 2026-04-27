@@ -420,6 +420,8 @@ module riscv_cpu (
         .medeleg(csr_file_inst.medeleg),
         .privilege_mode(csr_file_inst.privilege_mode),
         .mstatus(csr_file_inst.mstatus),
+        .mcounteren(csr_file_inst.mcounteren),
+        .scounteren(csr_file_inst.scounteren),
         .interrupt_taken(interrupt_taken),
         .mret_instruction(mret_instruction),
         .sret_instruction(sret_instruction),
