@@ -14,6 +14,14 @@ module riscv_cpu (
     output wire [31:0] module_write_addr,
     output wire [3:0] module_write_byte_enable,  // Write byte enables
     output wire [2:0] module_load_type,          // Load type
+    input wire module_load_page_fault_in,
+    input wire module_store_page_fault_in,
+    input wire [31:0] module_page_fault_addr_in,
+    output wire module_data_mmu_enable_out,
+    output wire [1:0] module_data_privilege_out,
+    output wire [31:0] module_satp_out,
+    output wire module_data_sum_out,
+    output wire module_data_mxr_out,
 
     // Interrupt inputs
     input wire timer_interrupt,
@@ -27,9 +35,14 @@ module riscv_cpu (
     wire [31:0] pc_inst0_jump;
     wire hazard_stall; // For load-use hazards
     wire pipeline_stall;
-    // Branch handling: use EX stage jump signal/address
-    assign pc_inst0_j_signal = ex_inst0_jump_signal_out;
-    assign pc_inst0_jump = ex_inst0_jump_addr_out;
+    wire mem_stage_page_fault_taken;
+    wire mem_stage_load_page_fault;
+    wire mem_stage_store_page_fault;
+    wire mem_stage_trap_to_supervisor;
+    wire [31:0] mem_stage_jump_addr;
+    // Branch handling: MEM-stage page faults redirect one cycle later than EX.
+    assign pc_inst0_j_signal = mem_stage_page_fault_taken || ex_inst0_jump_signal_out;
+    assign pc_inst0_jump = mem_stage_page_fault_taken ? mem_stage_jump_addr : ex_inst0_jump_addr_out;
     pc pc_inst0 (
         .clk(clk),
         .rst(rst),
@@ -51,7 +64,7 @@ module riscv_cpu (
     wire branch_flush;
     wire if_id_flush;
     assign branch_flush = ex_inst0_jump_signal_out; // Flush IF/ID if branch taken
-    assign if_id_flush = branch_flush || execution_flush;
+    assign if_id_flush = branch_flush || execution_flush || mem_stage_page_fault_taken;
     IF_ID if_id_inst0 (
         .clk(clk),
         .rst(rst),
@@ -144,7 +157,7 @@ module riscv_cpu (
     wire pipeline_flush;
     
     // Combine branch flush and execution unit flush
-    assign pipeline_flush = branch_flush || execution_flush;
+    assign pipeline_flush = branch_flush || execution_flush || mem_stage_page_fault_taken;
 
     ID_EX id_ex_inst0 (
         .clk(clk),
@@ -231,6 +244,9 @@ module riscv_cpu (
     wire store_address_misaligned_exception;
     wire [31:0] exception_tval;
     wire synchronous_exception_taken;
+    wire [31:0] csr_exception_pc;
+    wire csr_trap_to_supervisor;
+    wire [31:0] csr_exception_tval;
     wire wfi_instruction;
     wire instret_increment;
     wire [31:0] exception_pc;
@@ -243,7 +259,20 @@ module riscv_cpu (
     assign instret_increment = id_ex_inst0_instr_valid_out &&
                                (id_ex_inst0_instr_id_out != INSTR_INVALID) &&
                                !interrupt_taken &&
-                               !synchronous_exception_taken;
+                               !synchronous_exception_taken &&
+                               !mem_stage_page_fault_taken;
+
+    localparam PRIV_U = 2'b00;
+    localparam PRIV_S = 2'b01;
+    localparam PRIV_M = 2'b11;
+    wire data_use_mprv = (csr_file_inst.privilege_mode == PRIV_M) && csr_file_inst.mstatus[17];
+    wire [1:0] data_privilege_mode = data_use_mprv ? csr_file_inst.mstatus[12:11] : csr_file_inst.privilege_mode;
+    wire data_mmu_enable = (data_privilege_mode != PRIV_M) && csr_file_inst.satp[31];
+    assign module_data_mmu_enable_out = data_mmu_enable;
+    assign module_data_privilege_out = data_privilege_mode;
+    assign module_satp_out = csr_file_inst.satp;
+    assign module_data_sum_out = csr_file_inst.mstatus[18];
+    assign module_data_mxr_out = csr_file_inst.mstatus[19];
 
     // WFI sleep state: stall fetch/decode until an interrupt becomes pending.
     reg wfi_active;
@@ -352,19 +381,21 @@ module riscv_cpu (
         .interrupt_pending(interrupt_pending),
         .interrupt_cause_in(interrupt_cause),
         .interrupt_pc_in(interrupt_pc),
-        .exception_pc_in(exception_pc),
+        .exception_pc_in(csr_exception_pc),
         .interrupt_taken(interrupt_taken),
         .mret_instruction(mret_instruction),
         .sret_instruction(sret_instruction),
         .interrupt_to_supervisor(interrupt_to_supervisor),
-        .trap_to_supervisor(trap_to_supervisor),
+        .trap_to_supervisor(csr_trap_to_supervisor),
         .ecall_exception(ecall_exception),
         .ebreak_exception(ebreak_exception),
         .illegal_instruction_exception(illegal_instruction_exception),
         .instruction_address_misaligned_exception(instruction_address_misaligned_exception),
         .load_address_misaligned_exception(load_address_misaligned_exception),
         .store_address_misaligned_exception(store_address_misaligned_exception),
-        .exception_tval_in(exception_tval),
+        .load_page_fault_exception(mem_stage_load_page_fault),
+        .store_page_fault_exception(mem_stage_store_page_fault),
+        .exception_tval_in(csr_exception_tval),
         .instret_increment(instret_increment),
         .timer_interrupt(timer_interrupt),
         .software_interrupt(software_interrupt),
@@ -455,6 +486,7 @@ module riscv_cpu (
     EX_MEM ex_mem_inst0 (
         .clk(clk),
         .rst(rst),
+        .flush(mem_stage_page_fault_taken),
         .rs1_addr_in(id_ex_inst0_rs1_addr_out),
         .rs2_addr_in(id_ex_inst0_rs2_addr_out),
         .rd_addr_in(id_ex_inst0_rd_addr_out),
@@ -668,6 +700,17 @@ module riscv_cpu (
     assign module_write_byte_enable = atomic_write_enable ? 4'b1111 :
                                       (ex_mem_std_store_direct_req ? ex_mem_store_be : store_buf_be);
     assign module_load_type = ex_mem_read_type;
+    assign mem_stage_load_page_fault = module_load_page_fault_in && ex_mem_read_req;
+    assign mem_stage_store_page_fault = module_store_page_fault_in && module_mem_wr_en;
+    assign mem_stage_page_fault_taken = mem_stage_load_page_fault || mem_stage_store_page_fault;
+    assign mem_stage_trap_to_supervisor =
+        (csr_file_inst.privilege_mode != PRIV_M) &&
+        ((mem_stage_load_page_fault && csr_file_inst.medeleg[13]) ||
+         (mem_stage_store_page_fault && csr_file_inst.medeleg[15]));
+    assign mem_stage_jump_addr = mem_stage_trap_to_supervisor ? csr_file_inst.stvec : csr_file_inst.mtvec;
+    assign csr_exception_pc = mem_stage_page_fault_taken ? ex_mem_inst0_pc_out : exception_pc;
+    assign csr_trap_to_supervisor = mem_stage_page_fault_taken ? mem_stage_trap_to_supervisor : trap_to_supervisor;
+    assign csr_exception_tval = mem_stage_page_fault_taken ? module_page_fault_addr_in : exception_tval;
 
     // Instantiate MEM_WB pipeline register
     wire [4:0] mem_wb_inst0_rs1_addr_out;
@@ -699,8 +742,8 @@ module riscv_cpu (
         .exec_output_in(ex_mem_exec_output_to_mem_wb),
         .jump_signal_in(ex_mem_inst0_jump_signal_out),
         .jump_addr_in(ex_mem_inst0_jump_addr_out),
-        .instr_id_in(ex_mem_inst0_instr_id_out),
-        .rd_valid_in(ex_mem_inst0_rd_valid_out),
+        .instr_id_in(mem_stage_page_fault_taken ? 7'b0000000 : ex_mem_inst0_instr_id_out),
+        .rd_valid_in(mem_stage_page_fault_taken ? 1'b0 : ex_mem_inst0_rd_valid_out),
         .mem_data_in(mem_read_data_effective),  // Memory data with store-buffer merge
 
         // Outputs

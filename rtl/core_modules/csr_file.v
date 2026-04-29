@@ -25,6 +25,8 @@ module csr_file (
     input wire instruction_address_misaligned_exception,
     input wire load_address_misaligned_exception,
     input wire store_address_misaligned_exception,
+    input wire load_page_fault_exception,
+    input wire store_page_fault_exception,
     input wire [31:0] exception_tval_in,
     input wire instret_increment,
     
@@ -88,7 +90,7 @@ module csr_file (
     localparam PRIV_M = 2'b11;
     localparam SSTATUS_MASK = 32'h000C0122;
     localparam S_INTERRUPT_MASK = 32'h00000222;
-    localparam MSTATUS_WRITABLE_MASK = 32'h004619AA;
+    localparam MSTATUS_WRITABLE_MASK = 32'h007619AA;
     localparam SUPPORTED_MISA = 32'h40141101;  // RV32IMASU
     localparam MCOUNTINHIBIT_MASK = 32'h00000005;
     localparam COUNTEREN_MASK = 32'h00000007;
@@ -131,7 +133,9 @@ module csr_file (
                                  illegal_instruction_exception ||
                                  instruction_address_misaligned_exception ||
                                  load_address_misaligned_exception ||
-                                 store_address_misaligned_exception;
+                                 store_address_misaligned_exception ||
+                                 load_page_fault_exception ||
+                                 store_page_fault_exception;
     wire [31:0] ecall_cause =
         (privilege_mode == PRIV_U) ? 32'h00000008 :
         (privilege_mode == PRIV_S) ? 32'h00000009 :
@@ -142,6 +146,8 @@ module csr_file (
         ebreak_exception                          ? 32'h00000003 :
         load_address_misaligned_exception         ? 32'h00000004 :
         store_address_misaligned_exception        ? 32'h00000006 :
+        load_page_fault_exception                 ? 32'h0000000D :
+        store_page_fault_exception                ? 32'h0000000F :
                                                     ecall_cause;
     wire [31:0] exception_tval = (ecall_exception || ebreak_exception) ?
                                  32'h00000000 : exception_tval_in;

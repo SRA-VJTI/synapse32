@@ -29,6 +29,14 @@ module top (
     wire [31:0] data_mem_addr;
     wire [3:0] cpu_write_byte_enable;  // Write byte enables
     wire [2:0] cpu_load_type;          // Load type
+    wire cpu_load_page_fault;
+    wire cpu_store_page_fault;
+    wire [31:0] cpu_page_fault_addr;
+    wire cpu_data_mmu_enable;
+    wire [1:0] cpu_data_privilege;
+    wire [31:0] cpu_satp;
+    wire cpu_data_sum;
+    wire cpu_data_mxr;
     wire [31:0] instr_read_data;
     
     // Timer module wires
@@ -46,13 +54,15 @@ module top (
     wire timer_access;
     wire instr_mem_access;
     wire ram_access;
+    wire translated_data_access;
     
     // Use memory map macros for clean address decoding
-    assign data_mem_access = `IS_DATA_MEM(data_mem_addr);
-    assign timer_access = `IS_TIMER_MEM(data_mem_addr);
-    assign uart_access = `IS_UART_MEM(data_mem_addr);
-    assign instr_mem_access = `IS_INSTR_MEM(data_mem_addr);
-    assign ram_access = data_mem_access || instr_mem_access;
+    assign translated_data_access = cpu_data_mmu_enable && (cpu_mem_write_en || cpu_mem_read_en);
+    assign data_mem_access = !translated_data_access && `IS_DATA_MEM(data_mem_addr);
+    assign timer_access = !translated_data_access && `IS_TIMER_MEM(data_mem_addr);
+    assign uart_access = !translated_data_access && `IS_UART_MEM(data_mem_addr);
+    assign instr_mem_access = !translated_data_access && `IS_INSTR_MEM(data_mem_addr);
+    assign ram_access = translated_data_access || data_mem_access || instr_mem_access;
     
     // Select the appropriate address for memory access
     assign data_mem_addr = cpu_mem_write_en ? cpu_mem_write_addr : cpu_mem_read_addr;
@@ -82,18 +92,22 @@ module top (
         .module_read_addr(cpu_mem_read_addr),
         .module_write_addr(cpu_mem_write_addr),
         .module_write_byte_enable(cpu_write_byte_enable),
-        .module_load_type(cpu_load_type)
+        .module_load_type(cpu_load_type),
+        .module_load_page_fault_in(cpu_load_page_fault),
+        .module_store_page_fault_in(cpu_store_page_fault),
+        .module_page_fault_addr_in(cpu_page_fault_addr),
+        .module_data_mmu_enable_out(cpu_data_mmu_enable),
+        .module_data_privilege_out(cpu_data_privilege),
+        .module_satp_out(cpu_satp),
+        .module_data_sum_out(cpu_data_sum),
+        .module_data_mxr_out(cpu_data_mxr)
     );
 
     // Unified RAM local address mapping:
     // - Instruction region maps to [0 .. INSTR_MEM_SIZE-1]
     // - Data region maps to [INSTR_MEM_SIZE .. INSTR_MEM_SIZE+DATA_MEM_SIZE-1]
     wire [31:0] instr_fetch_addr_local;
-    wire [31:0] instr_data_addr_local;
     assign instr_fetch_addr_local = cpu_pc_out - `INSTR_MEM_BASE;
-    assign instr_data_addr_local = instr_mem_access ? (data_mem_addr - `INSTR_MEM_BASE) :
-                                   data_mem_access ? ((data_mem_addr - `DATA_MEM_BASE) + `INSTR_MEM_SIZE) :
-                                   32'h0;
 
     // Instantiate unified memory
     unified_mem #(
@@ -103,13 +117,23 @@ module top (
     ) unified_mem_inst (
         .clk(clk),
         .instr_addr(instr_fetch_addr_local),
-        .instr_addr_p2(instr_data_addr_local),
-        .wr_en(cpu_mem_write_en && ram_access),
+        .instr_addr_p2(data_mem_addr),
+        .data_wr_req(cpu_mem_write_en && ram_access),
+        .data_rd_en(cpu_mem_read_en && ram_access),
+        .data_translate_enable(translated_data_access),
+        .data_priv_mode(cpu_data_privilege),
+        .satp(cpu_satp),
+        .data_sum(cpu_data_sum),
+        .data_mxr(cpu_data_mxr),
+        .wr_en(cpu_mem_write_en && ram_access && !cpu_store_page_fault),
         .write_byte_enable(cpu_write_byte_enable),
         .wr_data(cpu_mem_write_data),
         .load_type(cpu_load_type),
         .instr(instr_to_cpu),
-        .instr_p2(instr_read_data)
+        .instr_p2(instr_read_data),
+        .data_load_page_fault(cpu_load_page_fault),
+        .data_store_page_fault(cpu_store_page_fault),
+        .data_fault_addr(cpu_page_fault_addr)
     );
     
     // Instantiate timer module

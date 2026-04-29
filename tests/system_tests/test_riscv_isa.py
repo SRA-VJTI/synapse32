@@ -29,6 +29,7 @@ def _find_repo_root() -> Path:
 async def test_riscv_isa_image(dut):
     tohost_addr = int(os.environ["ISA_TOHOST_ADDR"], 16)
     max_cycles = int(os.environ.get("ISA_MAX_CYCLES", "200000"))
+    trace_isa = os.environ.get("TRACE_ISA", "0") == "1"
 
     clk = Clock(dut.clk, 10, units="ns")
     cocotb.start_soon(clk.start())
@@ -41,6 +42,33 @@ async def test_riscv_isa_image(dut):
 
     for cycle in range(max_cycles):
         await RisingEdge(dut.clk)
+        if trace_isa:
+            cocotb.log.info(
+                "cycle=%d pc=%#x priv=%#x mepc=%#x mcause=%#x mtval=%#x satp=%#x "
+                "rd=%d wr=%d raw_wr=%d mem_wr=%d raddr=%#x waddr=%#x wdata=%#x rdata=%#x "
+                "wb_en=%d wb_rd=%d wb_val=%#x lp=%d sp=%d pfaddr=%#x",
+                cycle,
+                int(dut.cpu_pc_out.value),
+                int(dut.cpu_inst.csr_file_inst.privilege_mode.value),
+                int(dut.cpu_inst.csr_file_inst.mepc.value),
+                int(dut.cpu_inst.csr_file_inst.mcause.value),
+                int(dut.cpu_inst.csr_file_inst.mtval.value),
+                int(dut.cpu_inst.csr_file_inst.satp.value),
+                int(dut.cpu_mem_read_en.value),
+                int(dut.cpu_mem_write_en.value),
+                int(dut.unified_mem_inst.data_wr_req.value),
+                int(dut.unified_mem_inst.wr_en.value),
+                int(dut.cpu_mem_read_addr.value),
+                int(dut.cpu_mem_write_addr.value),
+                int(dut.cpu_mem_write_data.value),
+                int(dut.mem_read_data.value),
+                int(dut.cpu_inst.rf_inst0_wr_en.value),
+                int(dut.cpu_inst.rf_inst0_rd_in.value),
+                int(dut.cpu_inst.rf_inst0_rd_value_in.value),
+                int(dut.cpu_load_page_fault.value),
+                int(dut.cpu_store_page_fault.value),
+                int(dut.cpu_page_fault_addr.value),
+            )
         if int(dut.cpu_mem_write_en.value):
             addr = int(dut.cpu_mem_write_addr.value)
             data = int(dut.cpu_mem_write_data.value) & 0xFFFFFFFF

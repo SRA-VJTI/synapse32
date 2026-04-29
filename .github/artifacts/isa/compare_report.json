@@ -1,0 +1,655 @@
+{
+  "total": 82,
+  "matches": 74,
+  "mismatches": 8,
+  "results": [
+    {
+      "test": "rv32mi-p-breakpoint",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32mi-p-csr",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32mi-p-illegal",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32mi-p-instret_overflow",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32mi-p-lh-misaligned",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32mi-p-lw-misaligned",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32mi-p-ma_addr",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32mi-p-ma_fetch",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32mi-p-mcsr",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32mi-p-pmpaddr",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32mi-p-sbreak",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32mi-p-scall",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32mi-p-sh-misaligned",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32mi-p-shamt",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32mi-p-sw-misaligned",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32mi-p-zicntr",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32si-p-csr",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32si-p-dirty",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32si-p-ma_fetch",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32si-p-sbreak",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32si-p-scall",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32si-p-wfi",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ua-p-amoadd_w",
+      "spike_pass": true,
+      "verilator_pass": false,
+      "match": false,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ua-p-amoand_w",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ua-p-amomax_w",
+      "spike_pass": true,
+      "verilator_pass": false,
+      "match": false,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ua-p-amomaxu_w",
+      "spike_pass": true,
+      "verilator_pass": false,
+      "match": false,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ua-p-amomin_w",
+      "spike_pass": true,
+      "verilator_pass": false,
+      "match": false,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ua-p-amominu_w",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ua-p-amoor_w",
+      "spike_pass": true,
+      "verilator_pass": false,
+      "match": false,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ua-p-amoswap_w",
+      "spike_pass": true,
+      "verilator_pass": false,
+      "match": false,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ua-p-amoxor_w",
+      "spike_pass": true,
+      "verilator_pass": false,
+      "match": false,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ua-p-lrsc",
+      "spike_pass": true,
+      "verilator_pass": false,
+      "match": false,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-add",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-addi",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-and",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-andi",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-auipc",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-beq",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-bge",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-bgeu",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-blt",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-bltu",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-bne",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-fence_i",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-jal",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-jalr",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-lb",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-lbu",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-ld_st",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80002000"
+    },
+    {
+      "test": "rv32ui-p-lh",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-lhu",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-lui",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-lw",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-ma_data",
+      "spike_pass": false,
+      "verilator_pass": false,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-or",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-ori",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-sb",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-sh",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-simple",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-sll",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-slli",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-slt",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-slti",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-sltiu",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-sltu",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-sra",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-srai",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-srl",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-srli",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-st_ld",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-sub",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-sw",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-xor",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32ui-p-xori",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32um-p-div",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32um-p-divu",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32um-p-mul",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32um-p-mulh",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32um-p-mulhsu",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32um-p-mulhu",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32um-p-rem",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    },
+    {
+      "test": "rv32um-p-remu",
+      "spike_pass": true,
+      "verilator_pass": true,
+      "match": true,
+      "tohost": "0x80001000"
+    }
+  ],
+  "mismatch_details": [
+    {
+      "test": "rv32ua-p-amoadd_w",
+      "spike_pass": true,
+      "verilator_pass": false,
+      "match": false,
+      "tohost": "0x80001000",
+      "spike_log_tail": "",
+      "verilator_log_tail": "no-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024root__Slow.o Vtop___024root__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024root__0__Slow.o Vtop___024root__0__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024unit__Slow.o Vtop___024unit__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024unit__0__Slow.o Vtop___024unit__0__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop__Syms__Slow.o Vtop__Syms__Slow.cpp\nERROR cocotb: ranlib: warning: 'Vtop__ALL.a(Vtop__Dpi.o)' has no symbols\nERROR cocotb: ranlib: warning: 'Vtop__ALL.a(Vtop__Dpi.o)' has no symbols\nINFO cocotb: c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv   ../verilator.o verilated.o verilated_dpi.o verilated_vpi.o verilated_threads.o Vtop__ALL.a   -Wl,-rpath,/Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb/libs -L/Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb/libs -lcocotbvpi_verilator  -pthread -lpthread   -o top\nINFO cocotb: rm Vtop__ALL.verilator_deplist.tmp\nINFO cocotb: Running command: /Users/siriboi/github/synapse32/sim_build/sim_build_riscv_isa/top\nINFO cocotb:      -.--ns INFO     gpi                                ..mbed/gpi_embed.cpp:81   in set_program_name_in_venv        Did not detect Python virtual environment. Using system-wide Python interpreter\nINFO cocotb:      -.--ns INFO     gpi                                ../gpi/GpiCommon.cpp:101  in gpi_print_registered_impl       VPI registered\nINFO cocotb:      0.00ns INFO     cocotb                             Running on Verilator version 5.046 2026-02-28\nINFO cocotb:      0.00ns INFO     cocotb                             Running tests with cocotb v1.9.2 from /Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb\nINFO cocotb:      0.00ns INFO     cocotb                             Seeding Python random module with 1777459279\nINFO cocotb:      0.00ns INFO     cocotb.regression                  Found test test_riscv_isa.test_riscv_isa_image\nINFO cocotb:      0.00ns INFO     cocotb.regression                  running test_riscv_isa_image (1/1)\nINFO cocotb:   1150.00ns INFO     cocotb.regression                  test_riscv_isa_image failed\nINFO cocotb:                                                         Traceback (most recent call last):\nINFO cocotb:                                                           File \"/Users/siriboi/github/synapse32/tests/system_tests/test_riscv_isa.py\", line 77, in test_riscv_isa_image\nINFO cocotb:                                                             assert data == 1, f\"ISA test reported failure via tohost: 0x{data:08x}\"\nINFO cocotb:                                                         AssertionError: ISA test reported failure via tohost: 0x00000005\nINFO cocotb:                                                         assert 5 == 1\nINFO cocotb:   1150.00ns INFO     cocotb.regression                  *********************************************************************************************\nINFO cocotb:                                                         ** TEST                                 STATUS  SIM TIME (ns)  REAL TIME (s)  RATIO (ns/s) **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb:                                                         ** test_riscv_isa.test_riscv_isa_image   FAIL        1150.00           0.00     430242.96  **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb:                                                         ** TESTS=1 PASS=0 FAIL=1 SKIP=0                      1150.00           0.02      70215.50  **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb: \nINFO cocotb: -Info: /Users/siriboi/github/synapse32/rtl/top.v:178: $dumpvar ignored, as Verilated without --trace\nINFO cocotb: FST dump file:                                                                                                                    riscv_cpu.fst\nINFO cocotb: Loading instruction memory from file: /Users/siriboi/github/synapse32/.github/artifacts/isa/build_hex/rv32ua-p-amoadd_w.hex\nINFO cocotb: - :0: Verilog $finish\nERROR cocotb: Failed: test_riscv_isa::test_riscv_isa_image\nFAILED 1 tests."
+    },
+    {
+      "test": "rv32ua-p-amomax_w",
+      "spike_pass": true,
+      "verilator_pass": false,
+      "match": false,
+      "tohost": "0x80001000",
+      "spike_log_tail": "",
+      "verilator_log_tail": "no-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024root__Slow.o Vtop___024root__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024root__0__Slow.o Vtop___024root__0__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024unit__Slow.o Vtop___024unit__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024unit__0__Slow.o Vtop___024unit__0__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop__Syms__Slow.o Vtop__Syms__Slow.cpp\nERROR cocotb: ranlib: warning: 'Vtop__ALL.a(Vtop__Dpi.o)' has no symbols\nERROR cocotb: ranlib: warning: 'Vtop__ALL.a(Vtop__Dpi.o)' has no symbols\nINFO cocotb: c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv   ../verilator.o verilated.o verilated_dpi.o verilated_vpi.o verilated_threads.o Vtop__ALL.a   -Wl,-rpath,/Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb/libs -L/Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb/libs -lcocotbvpi_verilator  -pthread -lpthread   -o top\nINFO cocotb: rm Vtop__ALL.verilator_deplist.tmp\nINFO cocotb: Running command: /Users/siriboi/github/synapse32/sim_build/sim_build_riscv_isa/top\nINFO cocotb:      -.--ns INFO     gpi                                ..mbed/gpi_embed.cpp:81   in set_program_name_in_venv        Did not detect Python virtual environment. Using system-wide Python interpreter\nINFO cocotb:      -.--ns INFO     gpi                                ../gpi/GpiCommon.cpp:101  in gpi_print_registered_impl       VPI registered\nINFO cocotb:      0.00ns INFO     cocotb                             Running on Verilator version 5.046 2026-02-28\nINFO cocotb:      0.00ns INFO     cocotb                             Running tests with cocotb v1.9.2 from /Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb\nINFO cocotb:      0.00ns INFO     cocotb                             Seeding Python random module with 1777459291\nINFO cocotb:      0.00ns INFO     cocotb.regression                  Found test test_riscv_isa.test_riscv_isa_image\nINFO cocotb:      0.00ns INFO     cocotb.regression                  running test_riscv_isa_image (1/1)\nINFO cocotb:   1150.00ns INFO     cocotb.regression                  test_riscv_isa_image failed\nINFO cocotb:                                                         Traceback (most recent call last):\nINFO cocotb:                                                           File \"/Users/siriboi/github/synapse32/tests/system_tests/test_riscv_isa.py\", line 77, in test_riscv_isa_image\nINFO cocotb:                                                             assert data == 1, f\"ISA test reported failure via tohost: 0x{data:08x}\"\nINFO cocotb:                                                         AssertionError: ISA test reported failure via tohost: 0x00000005\nINFO cocotb:                                                         assert 5 == 1\nINFO cocotb:   1150.00ns INFO     cocotb.regression                  *********************************************************************************************\nINFO cocotb:                                                         ** TEST                                 STATUS  SIM TIME (ns)  REAL TIME (s)  RATIO (ns/s) **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb:                                                         ** test_riscv_isa.test_riscv_isa_image   FAIL        1150.00           0.00     430242.96  **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb:                                                         ** TESTS=1 PASS=0 FAIL=1 SKIP=0                      1150.00           0.02      69769.63  **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb: \nINFO cocotb: -Info: /Users/siriboi/github/synapse32/rtl/top.v:178: $dumpvar ignored, as Verilated without --trace\nINFO cocotb: FST dump file:                                                                                                                    riscv_cpu.fst\nINFO cocotb: Loading instruction memory from file: /Users/siriboi/github/synapse32/.github/artifacts/isa/build_hex/rv32ua-p-amomax_w.hex\nINFO cocotb: - :0: Verilog $finish\nERROR cocotb: Failed: test_riscv_isa::test_riscv_isa_image\nFAILED 1 tests."
+    },
+    {
+      "test": "rv32ua-p-amomaxu_w",
+      "spike_pass": true,
+      "verilator_pass": false,
+      "match": false,
+      "tohost": "0x80001000",
+      "spike_log_tail": "",
+      "verilator_log_tail": "o-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024root__Slow.o Vtop___024root__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024root__0__Slow.o Vtop___024root__0__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024unit__Slow.o Vtop___024unit__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024unit__0__Slow.o Vtop___024unit__0__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop__Syms__Slow.o Vtop__Syms__Slow.cpp\nERROR cocotb: ranlib: warning: 'Vtop__ALL.a(Vtop__Dpi.o)' has no symbols\nERROR cocotb: ranlib: warning: 'Vtop__ALL.a(Vtop__Dpi.o)' has no symbols\nINFO cocotb: c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv   ../verilator.o verilated.o verilated_dpi.o verilated_vpi.o verilated_threads.o Vtop__ALL.a   -Wl,-rpath,/Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb/libs -L/Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb/libs -lcocotbvpi_verilator  -pthread -lpthread   -o top\nINFO cocotb: rm Vtop__ALL.verilator_deplist.tmp\nINFO cocotb: Running command: /Users/siriboi/github/synapse32/sim_build/sim_build_riscv_isa/top\nINFO cocotb:      -.--ns INFO     gpi                                ..mbed/gpi_embed.cpp:81   in set_program_name_in_venv        Did not detect Python virtual environment. Using system-wide Python interpreter\nINFO cocotb:      -.--ns INFO     gpi                                ../gpi/GpiCommon.cpp:101  in gpi_print_registered_impl       VPI registered\nINFO cocotb:      0.00ns INFO     cocotb                             Running on Verilator version 5.046 2026-02-28\nINFO cocotb:      0.00ns INFO     cocotb                             Running tests with cocotb v1.9.2 from /Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb\nINFO cocotb:      0.00ns INFO     cocotb                             Seeding Python random module with 1777459296\nINFO cocotb:      0.00ns INFO     cocotb.regression                  Found test test_riscv_isa.test_riscv_isa_image\nINFO cocotb:      0.00ns INFO     cocotb.regression                  running test_riscv_isa_image (1/1)\nINFO cocotb:   1150.00ns INFO     cocotb.regression                  test_riscv_isa_image failed\nINFO cocotb:                                                         Traceback (most recent call last):\nINFO cocotb:                                                           File \"/Users/siriboi/github/synapse32/tests/system_tests/test_riscv_isa.py\", line 77, in test_riscv_isa_image\nINFO cocotb:                                                             assert data == 1, f\"ISA test reported failure via tohost: 0x{data:08x}\"\nINFO cocotb:                                                         AssertionError: ISA test reported failure via tohost: 0x00000005\nINFO cocotb:                                                         assert 5 == 1\nINFO cocotb:   1150.00ns INFO     cocotb.regression                  *********************************************************************************************\nINFO cocotb:                                                         ** TEST                                 STATUS  SIM TIME (ns)  REAL TIME (s)  RATIO (ns/s) **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb:                                                         ** test_riscv_isa.test_riscv_isa_image   FAIL        1150.00           0.00     422442.97  **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb:                                                         ** TESTS=1 PASS=0 FAIL=1 SKIP=0                      1150.00           0.02      70006.59  **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb: \nINFO cocotb: -Info: /Users/siriboi/github/synapse32/rtl/top.v:178: $dumpvar ignored, as Verilated without --trace\nINFO cocotb: FST dump file:                                                                                                                    riscv_cpu.fst\nINFO cocotb: Loading instruction memory from file: /Users/siriboi/github/synapse32/.github/artifacts/isa/build_hex/rv32ua-p-amomaxu_w.hex\nINFO cocotb: - :0: Verilog $finish\nERROR cocotb: Failed: test_riscv_isa::test_riscv_isa_image\nFAILED 1 tests."
+    },
+    {
+      "test": "rv32ua-p-amomin_w",
+      "spike_pass": true,
+      "verilator_pass": false,
+      "match": false,
+      "tohost": "0x80001000",
+      "spike_log_tail": "",
+      "verilator_log_tail": "no-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024root__Slow.o Vtop___024root__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024root__0__Slow.o Vtop___024root__0__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024unit__Slow.o Vtop___024unit__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024unit__0__Slow.o Vtop___024unit__0__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop__Syms__Slow.o Vtop__Syms__Slow.cpp\nERROR cocotb: ranlib: warning: 'Vtop__ALL.a(Vtop__Dpi.o)' has no symbols\nERROR cocotb: ranlib: warning: 'Vtop__ALL.a(Vtop__Dpi.o)' has no symbols\nINFO cocotb: c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv   ../verilator.o verilated.o verilated_dpi.o verilated_vpi.o verilated_threads.o Vtop__ALL.a   -Wl,-rpath,/Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb/libs -L/Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb/libs -lcocotbvpi_verilator  -pthread -lpthread   -o top\nINFO cocotb: rm Vtop__ALL.verilator_deplist.tmp\nINFO cocotb: Running command: /Users/siriboi/github/synapse32/sim_build/sim_build_riscv_isa/top\nINFO cocotb:      -.--ns INFO     gpi                                ..mbed/gpi_embed.cpp:81   in set_program_name_in_venv        Did not detect Python virtual environment. Using system-wide Python interpreter\nINFO cocotb:      -.--ns INFO     gpi                                ../gpi/GpiCommon.cpp:101  in gpi_print_registered_impl       VPI registered\nINFO cocotb:      0.00ns INFO     cocotb                             Running on Verilator version 5.046 2026-02-28\nINFO cocotb:      0.00ns INFO     cocotb                             Running tests with cocotb v1.9.2 from /Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb\nINFO cocotb:      0.00ns INFO     cocotb                             Seeding Python random module with 1777459302\nINFO cocotb:      0.00ns INFO     cocotb.regression                  Found test test_riscv_isa.test_riscv_isa_image\nINFO cocotb:      0.00ns INFO     cocotb.regression                  running test_riscv_isa_image (1/1)\nINFO cocotb:   1250.00ns INFO     cocotb.regression                  test_riscv_isa_image failed\nINFO cocotb:                                                         Traceback (most recent call last):\nINFO cocotb:                                                           File \"/Users/siriboi/github/synapse32/tests/system_tests/test_riscv_isa.py\", line 77, in test_riscv_isa_image\nINFO cocotb:                                                             assert data == 1, f\"ISA test reported failure via tohost: 0x{data:08x}\"\nINFO cocotb:                                                         AssertionError: ISA test reported failure via tohost: 0x00000009\nINFO cocotb:                                                         assert 9 == 1\nINFO cocotb:   1250.00ns INFO     cocotb.regression                  *********************************************************************************************\nINFO cocotb:                                                         ** TEST                                 STATUS  SIM TIME (ns)  REAL TIME (s)  RATIO (ns/s) **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb:                                                         ** test_riscv_isa.test_riscv_isa_image   FAIL        1250.00           0.00     427781.02  **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb:                                                         ** TESTS=1 PASS=0 FAIL=1 SKIP=0                      1250.00           0.02      74416.76  **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb: \nINFO cocotb: -Info: /Users/siriboi/github/synapse32/rtl/top.v:178: $dumpvar ignored, as Verilated without --trace\nINFO cocotb: FST dump file:                                                                                                                    riscv_cpu.fst\nINFO cocotb: Loading instruction memory from file: /Users/siriboi/github/synapse32/.github/artifacts/isa/build_hex/rv32ua-p-amomin_w.hex\nINFO cocotb: - :0: Verilog $finish\nERROR cocotb: Failed: test_riscv_isa::test_riscv_isa_image\nFAILED 1 tests."
+    },
+    {
+      "test": "rv32ua-p-amoor_w",
+      "spike_pass": true,
+      "verilator_pass": false,
+      "match": false,
+      "tohost": "0x80001000",
+      "spike_log_tail": "",
+      "verilator_log_tail": "fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024root__Slow.o Vtop___024root__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024root__0__Slow.o Vtop___024root__0__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024unit__Slow.o Vtop___024unit__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024unit__0__Slow.o Vtop___024unit__0__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop__Syms__Slow.o Vtop__Syms__Slow.cpp\nERROR cocotb: ranlib: warning: 'Vtop__ALL.a(Vtop__Dpi.o)' has no symbols\nERROR cocotb: ranlib: warning: 'Vtop__ALL.a(Vtop__Dpi.o)' has no symbols\nINFO cocotb: c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv   ../verilator.o verilated.o verilated_dpi.o verilated_vpi.o verilated_threads.o Vtop__ALL.a   -Wl,-rpath,/Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb/libs -L/Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb/libs -lcocotbvpi_verilator  -pthread -lpthread   -o top\nINFO cocotb: rm Vtop__ALL.verilator_deplist.tmp\nINFO cocotb: Running command: /Users/siriboi/github/synapse32/sim_build/sim_build_riscv_isa/top\nINFO cocotb:      -.--ns INFO     gpi                                ..mbed/gpi_embed.cpp:81   in set_program_name_in_venv        Did not detect Python virtual environment. Using system-wide Python interpreter\nINFO cocotb:      -.--ns INFO     gpi                                ../gpi/GpiCommon.cpp:101  in gpi_print_registered_impl       VPI registered\nINFO cocotb:      0.00ns INFO     cocotb                             Running on Verilator version 5.046 2026-02-28\nINFO cocotb:      0.00ns INFO     cocotb                             Running tests with cocotb v1.9.2 from /Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb\nINFO cocotb:      0.00ns INFO     cocotb                             Seeding Python random module with 1777459314\nINFO cocotb:      0.00ns INFO     cocotb.regression                  Found test test_riscv_isa.test_riscv_isa_image\nINFO cocotb:      0.00ns INFO     cocotb.regression                  running test_riscv_isa_image (1/1)\nINFO cocotb:   1150.00ns INFO     cocotb.regression                  test_riscv_isa_image failed\nINFO cocotb:                                                         Traceback (most recent call last):\nINFO cocotb:                                                           File \"/Users/siriboi/github/synapse32/tests/system_tests/test_riscv_isa.py\", line 77, in test_riscv_isa_image\nINFO cocotb:                                                             assert data == 1, f\"ISA test reported failure via tohost: 0x{data:08x}\"\nINFO cocotb:                                                         AssertionError: ISA test reported failure via tohost: 0x00000005\nINFO cocotb:                                                         assert 5 == 1\nINFO cocotb:   1150.00ns INFO     cocotb.regression                  *********************************************************************************************\nINFO cocotb:                                                         ** TEST                                 STATUS  SIM TIME (ns)  REAL TIME (s)  RATIO (ns/s) **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb:                                                         ** test_riscv_isa.test_riscv_isa_image   FAIL        1150.00           0.00     426665.53  **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb:                                                         ** TESTS=1 PASS=0 FAIL=1 SKIP=0                      1150.00           0.02      69139.58  **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb: \nINFO cocotb: -Info: /Users/siriboi/github/synapse32/rtl/top.v:178: $dumpvar ignored, as Verilated without --trace\nINFO cocotb: FST dump file:                                                                                                                    riscv_cpu.fst\nINFO cocotb: Loading instruction memory from file: /Users/siriboi/github/synapse32/.github/artifacts/isa/build_hex/rv32ua-p-amoor_w.hex\nINFO cocotb: - :0: Verilog $finish\nERROR cocotb: Failed: test_riscv_isa::test_riscv_isa_image\nFAILED 1 tests."
+    },
+    {
+      "test": "rv32ua-p-amoswap_w",
+      "spike_pass": true,
+      "verilator_pass": false,
+      "match": false,
+      "tohost": "0x80001000",
+      "spike_log_tail": "",
+      "verilator_log_tail": "o-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024root__Slow.o Vtop___024root__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024root__0__Slow.o Vtop___024root__0__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024unit__Slow.o Vtop___024unit__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024unit__0__Slow.o Vtop___024unit__0__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop__Syms__Slow.o Vtop__Syms__Slow.cpp\nERROR cocotb: ranlib: warning: 'Vtop__ALL.a(Vtop__Dpi.o)' has no symbols\nERROR cocotb: ranlib: warning: 'Vtop__ALL.a(Vtop__Dpi.o)' has no symbols\nINFO cocotb: c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv   ../verilator.o verilated.o verilated_dpi.o verilated_vpi.o verilated_threads.o Vtop__ALL.a   -Wl,-rpath,/Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb/libs -L/Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb/libs -lcocotbvpi_verilator  -pthread -lpthread   -o top\nINFO cocotb: rm Vtop__ALL.verilator_deplist.tmp\nINFO cocotb: Running command: /Users/siriboi/github/synapse32/sim_build/sim_build_riscv_isa/top\nINFO cocotb:      -.--ns INFO     gpi                                ..mbed/gpi_embed.cpp:81   in set_program_name_in_venv        Did not detect Python virtual environment. Using system-wide Python interpreter\nINFO cocotb:      -.--ns INFO     gpi                                ../gpi/GpiCommon.cpp:101  in gpi_print_registered_impl       VPI registered\nINFO cocotb:      0.00ns INFO     cocotb                             Running on Verilator version 5.046 2026-02-28\nINFO cocotb:      0.00ns INFO     cocotb                             Running tests with cocotb v1.9.2 from /Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb\nINFO cocotb:      0.00ns INFO     cocotb                             Seeding Python random module with 1777459320\nINFO cocotb:      0.00ns INFO     cocotb.regression                  Found test test_riscv_isa.test_riscv_isa_image\nINFO cocotb:      0.00ns INFO     cocotb.regression                  running test_riscv_isa_image (1/1)\nINFO cocotb:   1150.00ns INFO     cocotb.regression                  test_riscv_isa_image failed\nINFO cocotb:                                                         Traceback (most recent call last):\nINFO cocotb:                                                           File \"/Users/siriboi/github/synapse32/tests/system_tests/test_riscv_isa.py\", line 77, in test_riscv_isa_image\nINFO cocotb:                                                             assert data == 1, f\"ISA test reported failure via tohost: 0x{data:08x}\"\nINFO cocotb:                                                         AssertionError: ISA test reported failure via tohost: 0x00000005\nINFO cocotb:                                                         assert 5 == 1\nINFO cocotb:   1150.00ns INFO     cocotb.regression                  *********************************************************************************************\nINFO cocotb:                                                         ** TEST                                 STATUS  SIM TIME (ns)  REAL TIME (s)  RATIO (ns/s) **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb:                                                         ** test_riscv_isa.test_riscv_isa_image   FAIL        1150.00           0.00     427990.58  **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb:                                                         ** TESTS=1 PASS=0 FAIL=1 SKIP=0                      1150.00           0.02      68685.71  **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb: \nINFO cocotb: -Info: /Users/siriboi/github/synapse32/rtl/top.v:178: $dumpvar ignored, as Verilated without --trace\nINFO cocotb: FST dump file:                                                                                                                    riscv_cpu.fst\nINFO cocotb: Loading instruction memory from file: /Users/siriboi/github/synapse32/.github/artifacts/isa/build_hex/rv32ua-p-amoswap_w.hex\nINFO cocotb: - :0: Verilog $finish\nERROR cocotb: Failed: test_riscv_isa::test_riscv_isa_image\nFAILED 1 tests."
+    },
+    {
+      "test": "rv32ua-p-amoxor_w",
+      "spike_pass": true,
+      "verilator_pass": false,
+      "match": false,
+      "tohost": "0x80001000",
+      "spike_log_tail": "",
+      "verilator_log_tail": "no-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024root__Slow.o Vtop___024root__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024root__0__Slow.o Vtop___024root__0__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024unit__Slow.o Vtop___024unit__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024unit__0__Slow.o Vtop___024unit__0__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop__Syms__Slow.o Vtop__Syms__Slow.cpp\nERROR cocotb: ranlib: warning: 'Vtop__ALL.a(Vtop__Dpi.o)' has no symbols\nERROR cocotb: ranlib: warning: 'Vtop__ALL.a(Vtop__Dpi.o)' has no symbols\nINFO cocotb: c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv   ../verilator.o verilated.o verilated_dpi.o verilated_vpi.o verilated_threads.o Vtop__ALL.a   -Wl,-rpath,/Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb/libs -L/Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb/libs -lcocotbvpi_verilator  -pthread -lpthread   -o top\nINFO cocotb: rm Vtop__ALL.verilator_deplist.tmp\nINFO cocotb: Running command: /Users/siriboi/github/synapse32/sim_build/sim_build_riscv_isa/top\nINFO cocotb:      -.--ns INFO     gpi                                ..mbed/gpi_embed.cpp:81   in set_program_name_in_venv        Did not detect Python virtual environment. Using system-wide Python interpreter\nINFO cocotb:      -.--ns INFO     gpi                                ../gpi/GpiCommon.cpp:101  in gpi_print_registered_impl       VPI registered\nINFO cocotb:      0.00ns INFO     cocotb                             Running on Verilator version 5.046 2026-02-28\nINFO cocotb:      0.00ns INFO     cocotb                             Running tests with cocotb v1.9.2 from /Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb\nINFO cocotb:      0.00ns INFO     cocotb                             Seeding Python random module with 1777459325\nINFO cocotb:      0.00ns INFO     cocotb.regression                  Found test test_riscv_isa.test_riscv_isa_image\nINFO cocotb:      0.00ns INFO     cocotb.regression                  running test_riscv_isa_image (1/1)\nINFO cocotb:   1150.00ns INFO     cocotb.regression                  test_riscv_isa_image failed\nINFO cocotb:                                                         Traceback (most recent call last):\nINFO cocotb:                                                           File \"/Users/siriboi/github/synapse32/tests/system_tests/test_riscv_isa.py\", line 77, in test_riscv_isa_image\nINFO cocotb:                                                             assert data == 1, f\"ISA test reported failure via tohost: 0x{data:08x}\"\nINFO cocotb:                                                         AssertionError: ISA test reported failure via tohost: 0x00000005\nINFO cocotb:                                                         assert 5 == 1\nINFO cocotb:   1150.00ns INFO     cocotb.regression                  *********************************************************************************************\nINFO cocotb:                                                         ** TEST                                 STATUS  SIM TIME (ns)  REAL TIME (s)  RATIO (ns/s) **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb:                                                         ** test_riscv_isa.test_riscv_isa_image   FAIL        1150.00           0.00     434623.70  **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb:                                                         ** TESTS=1 PASS=0 FAIL=1 SKIP=0                      1150.00           0.02      70325.04  **\nINFO cocotb:                                                         *********************************************************************************************\nINFO cocotb: \nINFO cocotb: -Info: /Users/siriboi/github/synapse32/rtl/top.v:178: $dumpvar ignored, as Verilated without --trace\nINFO cocotb: FST dump file:                                                                                                                    riscv_cpu.fst\nINFO cocotb: Loading instruction memory from file: /Users/siriboi/github/synapse32/.github/artifacts/isa/build_hex/rv32ua-p-amoxor_w.hex\nINFO cocotb: - :0: Verilog $finish\nERROR cocotb: Failed: test_riscv_isa::test_riscv_isa_image\nFAILED 1 tests."
+    },
+    {
+      "test": "rv32ua-p-lrsc",
+      "spike_pass": true,
+      "verilator_pass": false,
+      "match": false,
+      "tohost": "0x80001000",
+      "spike_log_tail": "",
+      "verilator_log_tail": "no-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024root__Slow.o Vtop___024root__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024root__0__Slow.o Vtop___024root__0__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024unit__Slow.o Vtop___024unit__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop___024unit__0__Slow.o Vtop___024unit__0__Slow.cpp\nINFO cocotb: c++   -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.046/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension      -include-pch Vtop__pch.h.slow.gch -c -o Vtop__Syms__Slow.o Vtop__Syms__Slow.cpp\nERROR cocotb: ranlib: warning: 'Vtop__ALL.a(Vtop__Dpi.o)' has no symbols\nERROR cocotb: ranlib: warning: 'Vtop__ALL.a(Vtop__Dpi.o)' has no symbols\nINFO cocotb: c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv   ../verilator.o verilated.o verilated_dpi.o verilated_vpi.o verilated_threads.o Vtop__ALL.a   -Wl,-rpath,/Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb/libs -L/Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb/libs -lcocotbvpi_verilator  -pthread -lpthread   -o top\nINFO cocotb: rm Vtop__ALL.verilator_deplist.tmp\nINFO cocotb: Running command: /Users/siriboi/github/synapse32/sim_build/sim_build_riscv_isa/top\nINFO cocotb:      -.--ns INFO     gpi                                ..mbed/gpi_embed.cpp:81   in set_program_name_in_venv        Did not detect Python virtual environment. Using system-wide Python interpreter\nINFO cocotb:      -.--ns INFO     gpi                                ../gpi/GpiCommon.cpp:101  in gpi_print_registered_impl       VPI registered\nINFO cocotb:      0.00ns INFO     cocotb                             Running on Verilator version 5.046 2026-02-28\nINFO cocotb:      0.00ns INFO     cocotb                             Running tests with cocotb v1.9.2 from /Users/siriboi/github/synapse32/.venv/lib/python3.14/site-packages/cocotb\nINFO cocotb:      0.00ns INFO     cocotb                             Seeding Python random module with 1777459331\nINFO cocotb:      0.00ns INFO     cocotb.regression                  Found test test_riscv_isa.test_riscv_isa_image\nINFO cocotb:      0.00ns INFO     cocotb.regression                  running test_riscv_isa_image (1/1)\nINFO cocotb: 2000040.00ns INFO     cocotb.regression                  test_riscv_isa_image failed\nINFO cocotb:                                                          Traceback (most recent call last):\nINFO cocotb:                                                            File \"/Users/siriboi/github/synapse32/tests/system_tests/test_riscv_isa.py\", line 80, in test_riscv_isa_image\nINFO cocotb:                                                              assert False, f\"ISA test did not finish within {max_cycles} cycles\"\nINFO cocotb:                                                          AssertionError: ISA test did not finish within 200000 cycles\nINFO cocotb:                                                          assert False\nINFO cocotb: 2000040.00ns INFO     cocotb.regression                  *********************************************************************************************\nINFO cocotb:                                                          ** TEST                                 STATUS  SIM TIME (ns)  REAL TIME (s)  RATIO (ns/s) **\nINFO cocotb:                                                          *********************************************************************************************\nINFO cocotb:                                                          ** test_riscv_isa.test_riscv_isa_image   FAIL     2000040.00           3.50     571052.21  **\nINFO cocotb:                                                          *********************************************************************************************\nINFO cocotb:                                                          ** TESTS=1 PASS=0 FAIL=1 SKIP=0                   2000040.00           3.52     568767.77  **\nINFO cocotb:                                                          *********************************************************************************************\nINFO cocotb: \nINFO cocotb: -Info: /Users/siriboi/github/synapse32/rtl/top.v:178: $dumpvar ignored, as Verilated without --trace\nINFO cocotb: FST dump file:                                                                                                                    riscv_cpu.fst\nINFO cocotb: Loading instruction memory from file: /Users/siriboi/github/synapse32/.github/artifacts/isa/build_hex/rv32ua-p-lrsc.hex\nINFO cocotb: - :0: Verilog $finish\nERROR cocotb: Failed: test_riscv_isa::test_riscv_isa_image\nFAILED 1 tests."
+    }
+  ]
+}
