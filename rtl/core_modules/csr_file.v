@@ -86,7 +86,7 @@ module csr_file (
     localparam PRIV_U = 2'b00;
     localparam PRIV_S = 2'b01;
     localparam PRIV_M = 2'b11;
-    localparam SSTATUS_MASK = 32'h00000122;
+    localparam SSTATUS_MASK = 32'h000C0122;
     localparam S_INTERRUPT_MASK = 32'h00000222;
     localparam MSTATUS_WRITABLE_MASK = 32'h004619AA;
     localparam SUPPORTED_MISA = 32'h40141101;  // RV32IMASU
