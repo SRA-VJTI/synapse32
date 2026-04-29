@@ -22,6 +22,7 @@ __pycache__
 *.log
 sim_build*/
 build/
+sim/.out/
 
 #agent files 
 

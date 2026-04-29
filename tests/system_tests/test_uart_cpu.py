@@ -10,12 +10,17 @@ from cocotb.utils import get_sim_time
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
-# UART register addresses from memory map
-UART_BASE = 0x20000000
-UART_DATA = UART_BASE + 0x00
-UART_STATUS = UART_BASE + 0x04
-UART_CONTROL = UART_BASE + 0x08
-UART_BAUD = UART_BASE + 0x0C
+# NS16550 UART register addresses (reg_shift=2, 4-byte offsets)
+UART_BASE    = 0x20000000
+UART_THR     = UART_BASE + 0x00  # Transmit Holding Register (DLAB=0)
+UART_IER     = UART_BASE + 0x04  # Interrupt Enable Register
+UART_FCR     = UART_BASE + 0x08  # FIFO Control Register
+UART_LCR     = UART_BASE + 0x0C  # Line Control Register (bit7=DLAB)
+UART_MCR     = UART_BASE + 0x10  # Modem Control Register
+UART_LSR     = UART_BASE + 0x14  # Line Status Register (bit5=THRE)
+# Legacy aliases kept for any remaining references
+UART_DATA    = UART_THR
+UART_STATUS  = UART_LSR
 
 class UartMonitor:
     """Monitor the UART TX line and decode transmitted bytes"""
@@ -106,150 +111,106 @@ def run_uart_hello_test():
     instr_mem = []
     
     # Main program
+    # NS16550 poll loop: lw x1,20(x2); andi x1,x1,32; beq x1,x0,-8
+    # Reads LSR (+0x14), checks THRE (bit5=0x20), loops while not ready.
+    POLL = [0x01412083, 0x0200f093, 0xfe008ce3]
+
     main_program = [
         # Initialize registers
         0x20000137,  # lui x2, 0x20000       # x2 = UART_BASE (0x20000000)
         0x020001b7,  # lui x3, 0x2000        # x3 = 0x02000000 (data memory base)
-        
-        # Set baud rate first (write baud divisor to UART_BAUD)
-        0x00a00093,  # addi x1, x0, 10       # x1 = 10 (baud divisor for 5MHz)
-        0x00112623,  # sw x1, 12(x2)         # UART_BAUD = 10
-        
-        # Enable UART (write 1 to UART_CONTROL)
-        0x00100093,  # addi x1, x0, 1        # x1 = 1 (enable UART)
-        0x00112423,  # sw x1, 8(x2)          # UART_CONTROL = 1 (enable)
-        
-        # Wait a few cycles for configuration to settle
-        0x00000213,  # addi x4, x0, 0        # x4 = 0 (delay counter)
-        0x00420213,  # addi x4, x4, 4        # delay
-        0x00420213,  # addi x4, x4, 4        # delay
-        0x00420213,  # addi x4, x4, 4        # delay
-        0x00420213,  # addi x4, x4, 4        # delay
-        
+
+        # NS16550 init: LCR=0x83 (DLAB=1, 8N1)
+        0x08300093,  # addi x1, x0, 0x83
+        0x00112623,  # sw x1, 12(x2)         # LCR = 0x83
+
+        # DLL = 10 (baud divisor low byte)
+        0x00a00093,  # addi x1, x0, 10
+        0x00112023,  # sw x1, 0(x2)          # DLL = 10
+
+        # DLH = 0
+        0x00000093,  # addi x1, x0, 0
+        0x00112223,  # sw x1, 4(x2)          # DLH = 0
+
+        # LCR = 0x03 (DLAB=0, 8N1)
+        0x00300093,  # addi x1, x0, 3
+        0x00112623,  # sw x1, 12(x2)         # LCR = 0x03
+
+        # FCR = 0x07 (enable + clear FIFOs)
+        0x00700093,  # addi x1, x0, 7
+        0x00112423,  # sw x1, 8(x2)          # FCR = 0x07
+
         # Send 'H' (0x48)
-        0x04800093,  # addi x1, x0, 72       # x1 = 'H' (72 = 0x48)
-        0x00112023,  # sw x1, 0(x2)          # UART_DATA = 'H'
-        
-        # Wait for UART transmission (check status register)
-        # Loop until not busy
-        0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
-        0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
-        
+        0x04800093,  # addi x1, x0, 72
+        0x00112023,  # sw x1, 0(x2)          # THR = 'H'
+        *POLL,
+
         # Send 'e' (0x65)
-        0x06500093,  # addi x1, x0, 101      # x1 = 'e' (101 = 0x65)
-        0x00112023,  # sw x1, 0(x2)          # UART_DATA = 'e'
-        
-        # Wait until not busy
-        0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
-        0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
-        
+        0x06500093,  # addi x1, x0, 101
+        0x00112023,  # sw x1, 0(x2)
+        *POLL,
+
         # Send 'l' (0x6C)
-        0x06c00093,  # addi x1, x0, 108      # x1 = 'l' (108 = 0x6C)
-        0x00112023,  # sw x1, 0(x2)          # UART_DATA = 'l'
-        
-        # Wait until not busy
-        0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
-        0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
-        
+        0x06c00093,  # addi x1, x0, 108
+        0x00112023,  # sw x1, 0(x2)
+        *POLL,
+
         # Send 'l' (0x6C)
-        0x06c00093,  # addi x1, x0, 108      # x1 = 'l'
-        0x00112023,  # sw x1, 0(x2)          # UART_DATA = 'l'
-        
-        # Wait until not busy
-        0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
-        0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
-        
+        0x06c00093,
+        0x00112023,
+        *POLL,
+
         # Send 'o' (0x6F)
-        0x06f00093,  # addi x1, x0, 111      # x1 = 'o' (111 = 0x6F)
-        0x00112023,  # sw x1, 0(x2)          # UART_DATA = 'o'
-        
-        # Wait until not busy
-        0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
-        0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
-        
+        0x06f00093,  # addi x1, x0, 111
+        0x00112023,  # sw x1, 0(x2)
+        *POLL,
+
         # Send ' ' (0x20)
-        0x02000093,  # addi x1, x0, 32       # x1 = ' ' (32 = 0x20)
-        0x00112023,  # sw x1, 0(x2)          # UART_DATA = ' '
-        
-        # Wait until not busy
-        0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
-        0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
-        
+        0x02000093,  # addi x1, x0, 32
+        0x00112023,  # sw x1, 0(x2)
+        *POLL,
+
         # Send 'U' (0x55)
-        0x05500093,  # addi x1, x0, 85       # x1 = 'U' (85 = 0x55)
-        0x00112023,  # sw x1, 0(x2)          # UART_DATA = 'U'
-        
-        # Wait until not busy
-        0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
-        0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
-        
+        0x05500093,  # addi x1, x0, 85
+        0x00112023,  # sw x1, 0(x2)
+        *POLL,
+
         # Send 'A' (0x41)
-        0x04100093,  # addi x1, x0, 65       # x1 = 'A' (65 = 0x41)
-        0x00112023,  # sw x1, 0(x2)          # UART_DATA = 'A'
-        
-        # Wait until not busy
-        0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
-        0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
-        
+        0x04100093,  # addi x1, x0, 65
+        0x00112023,  # sw x1, 0(x2)
+        *POLL,
+
         # Send 'R' (0x52)
-        0x05200093,  # addi x1, x0, 82       # x1 = 'R' (82 = 0x52)
-        0x00112023,  # sw x1, 0(x2)          # UART_DATA = 'R'
-        
-        # Wait until not busy
-        0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
-        0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
-        
+        0x05200093,  # addi x1, x0, 82
+        0x00112023,  # sw x1, 0(x2)
+        *POLL,
+
         # Send 'T' (0x54)
-        0x05400093,  # addi x1, x0, 84       # x1 = 'T' (84 = 0x54)
-        0x00112023,  # sw x1, 0(x2)          # UART_DATA = 'T'
-        
-        # Wait until not busy
-        0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
-        0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
-        
+        0x05400093,  # addi x1, x0, 84
+        0x00112023,  # sw x1, 0(x2)
+        *POLL,
+
         # Send '!' (0x21)
-        0x02100093,  # addi x1, x0, 33       # x1 = '!' (33 = 0x21)
-        0x00112023,  # sw x1, 0(x2)          # UART_DATA = '!'
-        
-        # Wait until not busy
-        0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
-        0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
-        
+        0x02100093,  # addi x1, x0, 33
+        0x00112023,  # sw x1, 0(x2)
+        *POLL,
+
         # Send '\r' (0x0D)
-        0x00d00093,  # addi x1, x0, 13       # x1 = '\r' (13 = 0x0D)
-        0x00112023,  # sw x1, 0(x2)          # UART_DATA = '\r'
-        
-        # Wait until not busy
-        0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
-        0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
-        
+        0x00d00093,  # addi x1, x0, 13
+        0x00112023,  # sw x1, 0(x2)
+        *POLL,
+
         # Send '\n' (0x0A)
-        0x00a00093,  # addi x1, x0, 10       # x1 = '\n' (10 = 0x0A)
-        0x00112023,  # sw x1, 0(x2)          # UART_DATA = '\n'
-        
-        # Wait until not busy
-        0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
-        0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
-        
+        0x00a00093,  # addi x1, x0, 10
+        0x00112023,  # sw x1, 0(x2)
+        *POLL,
+
         # Store completion flag
-        0x00100093,  # addi x1, x0, 1        # x1 = 1 (completion marker)
-        0x0011a023,  # sw x1, 0(x3)          # Store completion flag to memory
-        
-        # Infinite loop to end program
-        0x0000006f,  # jal x0, 0             # Jump to self (infinite loop)
+        0x00100093,  # addi x1, x0, 1
+        0x0011a023,  # sw x1, 0(x3)
+
+        # Infinite loop
+        0x0000006f,  # jal x0, 0
     ]
     
     instr_mem = main_program
@@ -264,48 +225,53 @@ def run_uart_status_test():
     # Baud divisor = 50,000,000 / 5,000,000 = 10 (5 MHz baud rate)
     BAUD_DIVISOR = 10
     
+    # NS16550 poll: lw x1,20(x2); andi x1,x1,32; beq x1,x0,-8
+    POLL = [0x01412083, 0x0200f093, 0xfe008ce3]
+
     instr_mem = [
         # Initialize registers
-        0x20000137,  # lui x2, 0x20000       # x2 = UART_BASE (0x20000000)
-        0x020001b7,  # lui x3, 0x2000        # x3 = 0x02000000 (data memory base)
-        
-        # Set baud rate to 5MHz (same as hello test)
-        0x00a00093,  # addi x1, x0, 10       # x1 = 10 (baud divisor for 5MHz)
-        0x00112623,  # sw x1, 12(x2)         # UART_BAUD = 10
-        
-        # Enable UART
-        0x00100093,  # addi x1, x0, 1        # x1 = 1 (enable UART)
-        0x00112423,  # sw x1, 8(x2)          # UART_CONTROL = 1 (enable)
-        
-        # Read UART status register (initial)
-        0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
-        0x0011a023,  # sw x1, 0(x3)          # Store status to memory[0x02000000]
-        
-        # Write to UART data register
-        0x04100093,  # addi x1, x0, 65       # x1 = 'A' (65)
-        0x00112023,  # sw x1, 0(x2)          # UART_DATA = 'A'
-        
-        # Read status again (should show busy)
-        0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
-        0x0011a223,  # sw x1, 4(x3)          # Store status to memory[0x02000004]
-        
-        # Wait for transmission to complete
-        0x00100213,  # addi x4, x0, 1        # x4 = 1 (delay counter)
-        # Loop to wait for UART ready
-        0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
-        0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
-        
-        # Read final status (should not be busy)
-        0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
-        0x0011a423,  # sw x1, 8(x3)          # Store status to memory[0x02000008]
-        
+        0x20000137,  # lui x2, 0x20000       # x2 = UART_BASE
+        0x020001b7,  # lui x3, 0x2000        # x3 = data memory base
+
+        # NS16550 init: LCR=0x83 (DLAB=1)
+        0x08300093,  # addi x1, x0, 0x83
+        0x00112623,  # sw x1, 12(x2)         # LCR
+
+        # DLL=10, DLH=0
+        0x00a00093,  # addi x1, x0, 10
+        0x00112023,  # sw x1, 0(x2)          # DLL
+        0x00000093,  # addi x1, x0, 0
+        0x00112223,  # sw x1, 4(x2)          # DLH
+
+        # LCR=0x03 (DLAB=0)
+        0x00300093,  # addi x1, x0, 3
+        0x00112623,  # sw x1, 12(x2)         # LCR
+
+        # Read LSR (initial — should show THRE=1, i.e. ready)
+        0x01412083,  # lw x1, 20(x2)         # x1 = LSR
+        0x0011a023,  # sw x1, 0(x3)          # store to memory[base+0]
+
+        # Write 'A'
+        0x04100093,  # addi x1, x0, 65
+        0x00112023,  # sw x1, 0(x2)          # THR = 'A'
+
+        # Read LSR immediately after write (THRE may be 0 = busy)
+        0x01412083,  # lw x1, 20(x2)
+        0x0011a223,  # sw x1, 4(x3)          # store to memory[base+4]
+
+        # Wait until THRE=1
+        *POLL,
+
+        # Read final LSR (should show THRE=1 again)
+        0x01412083,  # lw x1, 20(x2)
+        0x0011a423,  # sw x1, 8(x3)          # store to memory[base+8]
+
         # Store completion flag
-        0x00100093,  # addi x1, x0, 1        # x1 = 1 (completion marker)
-        0x0011a623,  # sw x1, 12(x3)         # Store completion flag to memory[0x0200000C]
-        
+        0x00100093,  # addi x1, x0, 1
+        0x0011a623,  # sw x1, 12(x3)         # memory[base+12] = 1
+
         # Infinite loop
-        0x0000006f,  # jal x0, 0             # Jump to self
+        0x0000006f,
     ]
     
     test_name = "uart_status"
@@ -426,24 +392,21 @@ async def test_uart_status_register(dut):
     completion_found = 0x0200000C in mem_writes and mem_writes[0x0200000C] == 1
     assert completion_found, "Program completion flag not found"
     
-    # Verify status register values
+    # Verify LSR values (NS16550: bit5=THRE=1 means TX ready)
     if 0x02000000 in mem_writes:
-        initial_status = mem_writes[0x02000000]
-        log.info(f"Initial UART status: 0x{initial_status:08x}")
-        # Should indicate FIFO empty (bit 1) and not busy (bit 2 clear)
-        assert (initial_status & 0x2) != 0, "Initial status should show FIFO empty"
-        assert (initial_status & 0x4) == 0, "Initial status should show not busy"
-    
+        initial_lsr = mem_writes[0x02000000]
+        log.info(f"Initial LSR: 0x{initial_lsr:08x}")
+        assert (initial_lsr & 0x20) != 0, "Initial LSR should show THRE=1 (TX ready)"
+
     if 0x02000004 in mem_writes:
-        busy_status = mem_writes[0x02000004]
-        log.info(f"Status after write: 0x{busy_status:08x}")
-        # May or may not be busy depending on timing
-    
+        busy_lsr = mem_writes[0x02000004]
+        log.info(f"LSR after write: 0x{busy_lsr:08x}")
+        # May or may not be ready depending on timing
+
     if 0x02000008 in mem_writes:
-        final_status = mem_writes[0x02000008]
-        log.info(f"Final UART status: 0x{final_status:08x}")
-        # Should not be busy after transmission completes
-        assert (final_status & 0x4) == 0, "Final status should show not busy"
+        final_lsr = mem_writes[0x02000008]
+        log.info(f"Final LSR: 0x{final_lsr:08x}")
+        assert (final_lsr & 0x20) != 0, "Final LSR should show THRE=1 (TX ready)"
     
     # Verify we received the 'A' character
     received_string = uart_monitor.get_received_string()

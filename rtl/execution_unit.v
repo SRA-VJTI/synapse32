@@ -501,6 +501,14 @@ always @(*) begin
                         illegal_instruction_exception = 1;
                     end else begin
                         exec_output = csr_rd_value;
+                        // Serialize successful CSR writes by refetching the
+                        // next sequential instruction, so younger instructions
+                        // cannot observe stale control state.
+                        if (csr_write_enable) begin
+                            jump_signal = 1;
+                            jump_addr = pc_input + 4;
+                            flush_pipeline = 1;
+                        end
                     end
                 end
             endcase

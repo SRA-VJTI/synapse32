@@ -1,0 +1,66 @@
+/dts-v1/;
+
+/ {
+	#address-cells = <1>;
+	#size-cells = <1>;
+	compatible = "synapse32";
+
+	chosen {
+		stdout-path = &uart0;
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		timebase-frequency = <50000000>;
+
+		cpu0: cpu@0 {
+			compatible = "riscv";
+			device_type = "cpu";
+			reg = <0>;
+			riscv,isa = "rv32imasu";
+			mmu-type = "riscv,sv32";
+			status = "okay";
+
+			cpu0_intc: interrupt-controller {
+				compatible = "riscv,cpu-intc";
+				interrupt-controller;
+				#interrupt-cells = <1>;
+			};
+		};
+	};
+
+	/* 512KB instruction memory */
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x80000000 0x00080000>;
+	};
+
+	/* 1MB data memory */
+	memory@10000000 {
+		device_type = "memory";
+		reg = <0x10000000 0x00100000>;
+	};
+
+	/*
+	 * CLINT: mtimecmp at 0x02004000, mtime at 0x0200BFF8.
+	 * riscv,clint0 covers the full region starting at 0x02000000.
+	 * MSIP (IPI) registers at 0x02000000 are not implemented —
+	 * safe for single-hart because openSBI never actually fires IPIs.
+	 */
+	clint@2000000 {
+		compatible = "riscv,clint0";
+		reg = <0x02000000 0x000C0000>;
+		interrupts-extended = <&cpu0_intc 3 &cpu0_intc 7>;
+	};
+
+	uart0: uart@20000000 {
+		compatible = "ns16550a";
+		reg = <0x20000000 0x00001000>;
+		clock-frequency = <50000000>;
+		current-speed = <115200>;
+		reg-shift = <2>;
+		reg-io-width = <4>;
+		no-loopback-test;
+	};
+};

@@ -105,6 +105,31 @@ To run the regression tests, follow these steps:
    pytest
    ```
 
+## Booting OpenSBI In Simulation
+
+There is a dedicated OpenSBI simulation flow under [`sim/`](sim). It builds the
+firmware image, loads it into Verilator, and streams UART output live.
+
+From inside the devcontainer or Docker environment:
+
+```bash
+cd sim
+make opensbi-run
+```
+
+Useful targets:
+
+- `make deps` installs the Python simulator dependencies into `/workspace/.venv`
+- `make opensbi-build` rebuilds `sim/.out/opensbi/opensbi.hex`
+- `make uart-run` boots the current `IMAGE` without rebuilding OpenSBI
+- `make opensbi-waves` keeps an FST waveform at `sim/.out/waveforms/opensbi_boot.fst`
+
+Useful overrides:
+
+```bash
+make uart-run IMAGE=$PWD/.out/opensbi/opensbi.hex BOOT_TIMEOUT_CYCLES=8000000 UART_IDLE_CYCLES=300000
+```
+
 ### Available Tests
 
 The regression tests include:
