@@ -35,7 +35,7 @@ async def run_csr_test_program(dut, instr_mem):
     cocotb.start_soon(drive_instruction_memory())
     
     # Feed instructions and track CSR operations
-    for cycle in range(len(instr_mem) + 10):  # Run for enough cycles
+    for cycle in range(len(instr_mem) + 30):  # +20 ensures pipeline drains fully
         await RisingEdge(dut.clk)
         await ReadOnly()
         
@@ -1094,6 +1094,144 @@ async def test_delegated_user_timer_interrupt_sret(dut):
     print("Delegated U-mode timer interrupt/SRET test passed!")
 
 @cocotb.test()
+async def test_mpp_set_on_m_mode_illegal_instruction(dut):
+    """Illegal instruction trap in M-mode must save MPP=3 in mstatus.
+
+    This is the gap that lets rv32mi-p-illegal pass even when MPP is wrong:
+    that test never does an mret that relies on MPP for a privilege switch.
+    OpenSBI's CSR probe pattern does, so we test it explicitly here.
+    """
+    print("Starting M-mode illegal instruction MPP test...")
+
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+
+    dut.module_instr_in.value = 0
+    dut.module_read_data_in.value = 0
+    dut.rst.value = 1
+    await Timer(20, units="ns")
+    dut.rst.value = 0
+    await RisingEdge(dut.clk)
+
+    NOP = 0x00000013
+    instr_mem = [NOP] * 32
+
+    # 0x00: addi x1, x0, 0x40          # handler address
+    instr_mem[0] = 0x04000093
+    # 0x04: csrrw x0, mtvec, x1        # install handler
+    instr_mem[1] = 0x30509073
+    # 0x08: 0xFFFFFFFF                  # illegal instruction → trap
+    instr_mem[2] = 0xFFFFFFFF
+    # 0x0C: addi x3, x0, 0x33          # post-mret M-mode sentinel
+    instr_mem[3] = 0x03300193
+    # 0x10: jal x0, 0                   # hang
+    instr_mem[4] = 0x0000006F
+
+    # Handler at 0x40 (word 16):
+    # 0x40: csrrs x2, mstatus, x0       # x2 = mstatus at trap time (check MPP in bits 12-11)
+    instr_mem[16] = 0x30002173
+    # 0x44: csrrs x4, mepc, x0          # x4 = mepc (must be address of illegal instr)
+    instr_mem[17] = 0x34102273
+    # 0x48: addi x8, x4, 4              # x8 = return address
+    instr_mem[18] = 0x00420413
+    # 0x4C: csrrw x0, mepc, x8          # advance past illegal instr
+    instr_mem[19] = 0x34141073
+    # 0x50: mret
+    instr_mem[20] = 0x30200073
+
+    await run_csr_test_program(dut, instr_mem)
+
+    x2 = int(dut.rf_inst0.register_file[2].value)
+    x3 = int(dut.rf_inst0.register_file[3].value)
+    x4 = int(dut.rf_inst0.register_file[4].value)
+    mcause = int(dut.csr_file_inst.mcause.value)
+    privilege_mode = int(dut.csr_file_inst.privilege_mode.value)
+    mpp = (x2 >> 11) & 0x3
+
+    print(f"x2 (mstatus at trap): {x2:#x}, MPP={mpp:#x}")
+    print(f"x3 (post-mret sentinel): {x3:#x}")
+    print(f"x4 (mepc at trap): {x4:#x}")
+    print(f"mcause={mcause:#x}, privilege_mode={privilege_mode:#x}")
+
+    assert mcause == 0x2, f"Expected illegal instruction mcause=2, got {mcause:#x}"
+    assert mpp == 0x3, f"mstatus.MPP must be 3 (M-mode) when trapping in M-mode, got {mpp:#x}"
+    assert x4 == 0x08, f"mepc must point to faulting instruction, got {x4:#x}"
+    assert x3 == 0x33, f"mret did not return to M-mode: post-mret sentinel missing (x3={x3:#x})"
+    assert privilege_mode == 0x3, f"Expected M-mode after mret with MPP=3, got {privilege_mode:#x}"
+
+    print("M-mode illegal instruction MPP test passed!")
+
+
+@cocotb.test()
+async def test_m_mode_illegal_csr_probe_pattern(dut):
+    """OpenSBI-style CSR probe: swap mtvec, probe unknown CSR, restore mtvec.
+
+    OpenSBI probes optional CSRs (e.g. mtopi/0xFB0) by installing a temporary
+    mtvec, attempting the access, and relying on the trap handler to advance
+    mepc+4 and mret back. Verifies the full round-trip: trap → probe handler →
+    mret → M-mode execution resumes at the instruction after the probe.
+    """
+    print("Starting M-mode illegal CSR probe pattern test...")
+
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+
+    dut.module_instr_in.value = 0
+    dut.module_read_data_in.value = 0
+    dut.rst.value = 1
+    await Timer(20, units="ns")
+    dut.rst.value = 0
+    await RisingEdge(dut.clk)
+
+    NOP = 0x00000013
+    instr_mem = [NOP] * 32
+
+    # 0x00: addi x1, x0, 0x50          # probe handler address
+    instr_mem[0] = 0x05000093
+    # 0x04: csrrw x2, mtvec, x1        # save old mtvec in x2, install probe handler
+    instr_mem[1] = 0x30509173
+    # 0x08: csrr x0, 0xFB0             # probe mtopi (AIA ext, unknown → illegal instr)
+    instr_mem[2] = 0xFB002073
+    # 0x0C: csrw mtvec, x2             # restore mtvec (reached after probe mret)
+    instr_mem[3] = 0x30511073
+    # 0x10: addi x5, x0, 0xAA         # sentinel: probe handled, execution continued
+    instr_mem[4] = 0x0AA00293
+    # 0x14: jal x0, 0                  # hang
+    instr_mem[5] = 0x0000006F
+
+    # Probe handler at 0x50 (word 20):
+    # 0x50: csrrs x3, mepc, x0         # x3 = faulting PC
+    instr_mem[20] = 0x341021F3
+    # 0x54: addi x3, x3, 4             # advance past probe instruction
+    instr_mem[21] = 0x00418193
+    # 0x58: csrrw x0, mepc, x3         # mepc = probe PC + 4
+    instr_mem[22] = 0x34119073
+    # 0x5C: mret
+    instr_mem[23] = 0x30200073
+
+    await run_csr_test_program(dut, instr_mem)
+
+    x3 = int(dut.rf_inst0.register_file[3].value)
+    x5 = int(dut.rf_inst0.register_file[5].value)
+    mcause = int(dut.csr_file_inst.mcause.value)
+    privilege_mode = int(dut.csr_file_inst.privilege_mode.value)
+
+    print(f"x3 (probe handler observed mepc + 4): {x3:#x}")
+    print(f"x5 (post-probe sentinel): {x5:#x}")
+    print(f"mcause={mcause:#x}, privilege_mode={privilege_mode:#x}")
+
+    assert mcause == 0x2, f"Expected illegal instruction mcause=2 from CSR probe, got {mcause:#x}"
+    assert x3 == 0x0C, \
+        f"Probe handler must observe mepc+4=0x0c, got {x3:#x}"
+    assert x5 == 0xAA, \
+        f"Execution must continue after probe mret: sentinel missing (x5={x5:#x})"
+    assert privilege_mode == 0x3, \
+        f"Must remain in M-mode after probe mret, got {privilege_mode:#x}"
+
+    print("M-mode illegal CSR probe pattern test passed!")
+
+
+@cocotb.test()
 async def test_csr_invalid_access(dut):
     """Test access to invalid CSR addresses"""
     print("Starting invalid CSR access test...")
@@ -1170,6 +1308,10 @@ async def test_csr_mret(dut):
     instr_mem[4] = 0x00000073
     # 0x14: addi x6, x0, 0xBB              # executes only if mret returned here
     instr_mem[5] = 0x0BB00313
+    # 0x18: jal x0, 0                      # hold here after the return path
+    # Prevents fall-through into the handler region at 0x40, which would
+    # otherwise execute as ordinary code and clobber trap CSRs.
+    instr_mem[6] = 0x0000006F
 
     # Handler at 0x40 (word index 16):
     # 0x40: addi x7, x0, 0xCC              # handler sentinel
@@ -1245,6 +1387,8 @@ def runCocotbTests():
         "test_delegated_user_ecall_sret",
         "test_delegated_user_illegal_instruction_sret",
         "test_delegated_user_timer_interrupt_sret",
+        "test_mpp_set_on_m_mode_illegal_instruction",
+        "test_m_mode_illegal_csr_probe_pattern",
         "test_csr_invalid_access",
         "test_csr_mret",
     ]

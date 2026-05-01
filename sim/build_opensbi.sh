@@ -8,7 +8,7 @@
 set -euo pipefail
 
 # OpenSBI tags this release as v1.5 rather than v1.5.0.
-OPENSBI_VERSION="v1.5"
+OPENSBI_VERSION="v1.4"
 OPENSBI_DIR="/tmp/opensbi-build"
 WORKSPACE="${WORKSPACE:-/workspace}"
 SIM_DIR="$WORKSPACE/sim"
@@ -48,6 +48,7 @@ make -C "$OPENSBI_DIR" -j"$(nproc)" \
     FW_JUMP_ADDR=0x80200000 \
     FW_TEXT_START=0x80000000 \
     FW_FDT_PATH="$DTB" \
+    FW_JUMP_FDT_ADDR=0x80050000 \
     PLATFORM_RISCV_XLEN=32 \
     PLATFORM_RISCV_ISA="$PLATFORM_RISCV_ISA" \
     PLATFORM_RISCV_ABI="$PLATFORM_RISCV_ABI" \

@@ -84,6 +84,19 @@ module csr_file (
     localparam CSR_MARCHID   = 12'hF12;
     localparam CSR_MIMPID    = 12'hF13;
     localparam CSR_MHARTID   = 12'hF14;
+    // AIA CSRs — return 0 so probe sequences don't fault
+    localparam CSR_MTOPI     = 12'hFB0;
+    localparam CSR_SCOVTOVF  = 12'hDA0;
+    // RV32 / Sme / Smstateen / Smepmp extensions — read-zero, write-ignore
+    localparam CSR_MSTATUSH  = 12'h310;
+    localparam CSR_MENVCFG   = 12'h30A;
+    localparam CSR_MENVCFGH  = 12'h31A;
+    localparam CSR_MSECCFG   = 12'h747;
+    localparam CSR_MSECCFGH  = 12'h757;
+    localparam CSR_MCONFIGPTR = 12'hF15;
+    // mhpmcounter3-31: 0xB03-0xB1F; high halves mhpmcounterh3-31: 0xB83-0xB9F
+    // mhpmevent3-31:   0x323-0x33F
+    // (handled via range checks in csr_valid)
 
     localparam PRIV_U = 2'b00;
     localparam PRIV_S = 2'b01;
@@ -176,7 +189,14 @@ module csr_file (
                        (csr_addr == CSR_TSELECT) || (csr_addr == CSR_TDATA1) ||
                        (csr_addr == CSR_TDATA2) || (csr_addr == CSR_TDATA3) ||
                        (csr_addr == CSR_MVENDORID) || (csr_addr == CSR_MARCHID) ||
-                       (csr_addr == CSR_MIMPID) || (csr_addr == CSR_MHARTID);
+                       (csr_addr == CSR_MIMPID) || (csr_addr == CSR_MHARTID) ||
+                       (csr_addr == CSR_MTOPI) || (csr_addr == CSR_SCOVTOVF) ||
+                       (csr_addr == CSR_MSTATUSH) || (csr_addr == CSR_MENVCFG) ||
+                       (csr_addr == CSR_MENVCFGH) || (csr_addr == CSR_MSECCFG) ||
+                       (csr_addr == CSR_MSECCFGH) || (csr_addr == CSR_MCONFIGPTR) ||
+                       (csr_addr >= 12'hB03 && csr_addr <= 12'hB1F) ||  // mhpmcounter3-31
+                       (csr_addr >= 12'hB83 && csr_addr <= 12'hB9F) ||  // mhpmcounterh3-31
+                       (csr_addr >= 12'h323 && csr_addr <= 12'h33F);    // mhpmevent3-31
 
     // Initialize CSRs
     always @(posedge clk or posedge rst) begin
@@ -362,6 +382,8 @@ module csr_file (
                 CSR_MARCHID:   read_data = 32'h0;
                 CSR_MIMPID:    read_data = 32'h0;
                 CSR_MHARTID:   read_data = 32'h0;
+                CSR_MTOPI:     read_data = 32'h0;
+                CSR_SCOVTOVF:  read_data = 32'h0;
                 default:      read_data = 32'h0;
             endcase
         end else begin

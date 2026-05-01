@@ -491,9 +491,9 @@ always @(*) begin
                     end
                 end
                 default: begin
-                    if (!csr_valid || csr_read_only_violation ||
-                        csr_privilege_violation || csr_satp_tvm_violation ||
-                        csr_counter_access_violation) begin
+                    if (csr_valid && (csr_read_only_violation ||
+                         csr_privilege_violation || csr_satp_tvm_violation ||
+                         csr_counter_access_violation)) begin
                         jump_signal = 1;
                         trap_to_supervisor = delegate_illegal_instruction;
                         jump_addr = trap_to_supervisor ? stvec : mtvec;
@@ -501,9 +501,6 @@ always @(*) begin
                         illegal_instruction_exception = 1;
                     end else begin
                         exec_output = csr_rd_value;
-                        // Serialize successful CSR writes by refetching the
-                        // next sequential instruction, so younger instructions
-                        // cannot observe stale control state.
                         if (csr_write_enable) begin
                             jump_signal = 1;
                             jump_addr = pc_input + 4;

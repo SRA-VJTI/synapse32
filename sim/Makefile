@@ -2,7 +2,7 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
 ROOT_DIR := $(abspath $(CURDIR)/..)
-VENV_DIR ?= $(ROOT_DIR)/.venv
+VENV_DIR ?= $(ROOT_DIR)/venv
 PYTHON ?= python3
 PIP := $(VENV_DIR)/bin/pip
 DEPS_STAMP := $(VENV_DIR)/.sim-deps-stamp
@@ -22,7 +22,7 @@ DOCKER_RUN = docker run --rm -it -v "$(ROOT_DIR):$(DOCKER_WORKDIR)" -w "$(DOCKER
 
 help:
 	@printf "\nSynapse32 OpenSBI sim targets:\n"
-	@printf "  make deps           Create .venv and install cocotb/verilator Python deps\n"
+	@printf "  make deps           Create venv and install cocotb/verilator Python deps\n"
 	@printf "  make docker-build   Build the Synapse32 dev image\n"
 	@printf "  make docker-opensbi-run   Run OpenSBI boot flow inside Docker\n"
 	@printf "  make docker-opensbi-waves Run OpenSBI boot flow with waves inside Docker\n"

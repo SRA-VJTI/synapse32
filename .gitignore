@@ -16,6 +16,7 @@ results.xml
 *.pyo
 __pycache__
 .venv*
+venv/
 *.egg-info
 
 #cocotb build files
