@@ -7,6 +7,7 @@
 
 	chosen {
 		stdout-path = &uart0;
+		bootargs = "console=ttyS0,115200 earlycon=uart8250,mmio32,0x20000000 loglevel=8 rdinit=/init cpuidle.off=1";
 	};
 
 	cpus {
@@ -30,16 +31,10 @@
 		};
 	};
 
-	/* 512KB instruction memory */
+	/* 64MB unified RAM — OpenSBI at base, kernel at +2MB (0x80200000) */
 	memory@80000000 {
 		device_type = "memory";
-		reg = <0x80000000 0x00080000>;
-	};
-
-	/* 1MB data memory */
-	memory@10000000 {
-		device_type = "memory";
-		reg = <0x10000000 0x00100000>;
+		reg = <0x80000000 0x04000000>;
 	};
 
 	/*
@@ -54,11 +49,22 @@
 		interrupts-extended = <&cpu0_intc 3 &cpu0_intc 7>;
 	};
 
+	plic: interrupt-controller@c000000 {
+		compatible = "sifive,plic-1.0.0";
+		reg = <0x0c000000 0x00400000>;
+		interrupt-controller;
+		#interrupt-cells = <1>;
+		interrupts-extended = <&cpu0_intc 11 &cpu0_intc 9>;
+		riscv,ndev = <1>;
+	};
+
 	uart0: uart@20000000 {
 		compatible = "ns16550a";
 		reg = <0x20000000 0x00001000>;
 		clock-frequency = <50000000>;
 		current-speed = <115200>;
+		interrupt-parent = <&plic>;
+		interrupts = <1>;
 		reg-shift = <2>;
 		reg-io-width = <4>;
 		no-loopback-test;

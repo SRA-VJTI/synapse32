@@ -7,11 +7,12 @@
 
 set -euo pipefail
 
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
 # OpenSBI tags this release as v1.5 rather than v1.5.0.
 OPENSBI_VERSION="v1.4"
 OPENSBI_DIR="/tmp/opensbi-build"
-WORKSPACE="${WORKSPACE:-/workspace}"
-SIM_DIR="$WORKSPACE/sim"
+SIM_DIR="${SIM_DIR:-$script_dir}"
 OUT_DIR="${SIM_OUT_DIR:-$SIM_DIR/.out/opensbi}"
 OUT_ELF="$OUT_DIR/fw_jump.elf"
 OUT_BIN="$OUT_DIR/fw_jump.bin"
@@ -25,6 +26,22 @@ PLATFORM_RISCV_ISA="${PLATFORM_RISCV_ISA:-rv32ima_zicsr_zifencei}"
 PLATFORM_RISCV_ABI="${PLATFORM_RISCV_ABI:-ilp32}"
 
 mkdir -p "$OUT_DIR"
+
+num_jobs() {
+    if command -v nproc >/dev/null 2>&1; then
+        nproc
+        return
+    fi
+    if command -v getconf >/dev/null 2>&1; then
+        getconf _NPROCESSORS_ONLN
+        return
+    fi
+    if command -v sysctl >/dev/null 2>&1; then
+        sysctl -n hw.ncpu
+        return
+    fi
+    echo 4
+}
 
 # ---- compile DTB from DTS --------------------------------------------------
 echo "==> Compiling device tree..."
@@ -42,10 +59,10 @@ fi
 
 # ---- build -----------------------------------------------------------------
 echo "==> Building openSBI..."
-make -C "$OPENSBI_DIR" -j"$(nproc)" \
+make -C "$OPENSBI_DIR" -j"$(num_jobs)" \
     PLATFORM=generic \
     FW_JUMP=y \
-    FW_JUMP_ADDR=0x80200000 \
+    FW_JUMP_ADDR=0x80400000 \
     FW_TEXT_START=0x80000000 \
     FW_FDT_PATH="$DTB" \
     FW_JUMP_FDT_ADDR=0x80050000 \

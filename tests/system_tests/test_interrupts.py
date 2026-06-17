@@ -6,6 +6,19 @@ import os
 import shutil
 from pathlib import Path
 
+INSTR_MEM_BASE = 0x80000000
+INSTR_MEM_SIZE = 0x04000000
+DATA_MEM_BASE = 0x10000000
+
+
+def _phys_word_index(addr):
+    if INSTR_MEM_BASE <= addr < (INSTR_MEM_BASE + INSTR_MEM_SIZE):
+        return (addr - INSTR_MEM_BASE) // 4
+    if addr >= DATA_MEM_BASE:
+        return (INSTR_MEM_SIZE + (addr - DATA_MEM_BASE)) // 4
+    raise AssertionError(f"Unsupported physical address: 0x{addr:08x}")
+
+
 def create_interrupt_test_hex(test_name, instr_mem):
     """Create a hex file for the interrupt test instructions"""
     # Create build directory if it doesn't exist
@@ -320,6 +333,252 @@ async def test_wfi_interrupt(dut):
 
     print("WFI interrupt wake test passed!")
 
+@cocotb.test()
+async def test_wfi_pending_no_global(dut):
+    """Test WFI resumes on an enabled pending interrupt even with MIE=0."""
+    print("Starting WFI pending-with-global-disabled test...")
+
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+
+    dut.timer_interrupt.value = 0
+    dut.software_interrupt.value = 0
+    dut.external_interrupt.value = 0
+    dut.rst.value = 1
+    await ClockCycles(dut.clk, 5)
+    dut.rst.value = 0
+
+    mem_writes = {}
+    max_cycles = 120
+
+    for cycle in range(max_cycles):
+        if int(dut.cpu_mem_write_en.value):
+            addr = int(dut.cpu_mem_write_addr.value)
+            data = int(dut.cpu_mem_write_data.value)
+            mem_writes[addr] = data
+            print(f"Cycle {cycle}: Memory write addr=0x{addr:08x} data=0x{data:08x}")
+
+        if mem_writes.get(0x02000008) == 1:
+            print(f"Cycle {cycle}: Completion flag observed")
+            break
+
+        await RisingEdge(dut.clk)
+
+    assert mem_writes.get(0x02000000) == 0x11, "Pre-WFI marker missing"
+    assert mem_writes.get(0x02000004) == 0x22, (
+        "Post-WFI marker missing; WFI did not resume with pending enabled interrupt"
+    )
+    assert mem_writes.get(0x02000008) == 1, "Completion flag missing"
+    assert int(dut.cpu_inst.csr_file_inst.mcause.value) == 0, (
+        "Interrupt should not have trapped while global MIE was disabled"
+    )
+
+    print("WFI pending-with-global-disabled test passed!")
+
+@cocotb.test()
+async def test_arch_cpu_idle_resume(dut):
+    """Model Linux arch_cpu_idle(): fence; wfi; lw; ret in S-mode.
+
+    Seed the core close to the Linux stuck state:
+    - privilege=S
+    - supervisor timer interrupt pending
+    - source enabled in mie
+    - global SIE cleared
+
+    WFI should still resume, retire the post-WFI load, and return.
+    """
+    print("Starting arch_cpu_idle narrow reproducer...")
+
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+
+    dut.timer_interrupt.value = 0
+    dut.software_interrupt.value = 0
+    dut.external_interrupt.value = 0
+    dut.uart_rx.value = 1
+    dut.rst.value = 1
+    await ClockCycles(dut.clk, 5)
+
+    sp_base = 0x10000100
+    return_pc = 0x80000018
+    scratch_base = 0x10002000
+
+    # Seed the stack frame and architectural state while reset is asserted.
+    dut.cpu_inst.rf_inst0.register_file[2].value = sp_base
+    dut.cpu_inst.rf_inst0.register_file[8].value = 0xCAFEBABE
+    dut.cpu_inst.rf_inst0.register_file[1].value = 0x11111111
+    dut.unified_mem_inst.instr_ram[(sp_base - 0x10000000 + 8) // 4].value = 0x12345678
+    dut.unified_mem_inst.instr_ram[(sp_base - 0x10000000 + 12) // 4].value = return_pc
+
+    csr = dut.cpu_inst.csr_file_inst
+    csr.privilege_mode.value = 0x1
+    csr.mstatus.value = 0x00000000
+    csr.mie.value = 0x00000020
+    csr.mideleg.value = 0x00000020
+    csr.stip_software_pending.value = 1
+    csr.mip.value = 0x00000020
+
+    dut.rst.value = 0
+
+    observed = []
+    mem_writes = {}
+    reached_return = False
+
+    for cycle in range(40):
+        await RisingEdge(dut.clk)
+
+        sample = {
+            "cycle": cycle,
+            "pc": int(dut.pc_debug.value) & 0xFFFFFFFF,
+            "instr": int(dut.instr_debug.value) & 0xFFFFFFFF,
+            "wfi_active": int(dut.cpu_inst.wfi_active.value),
+            "wfi_stall": int(dut.cpu_inst.wfi_stall.value),
+            "wfi_resume_pending": int(dut.cpu_inst.wfi_resume_pending.value),
+            "interrupt_pending": int(dut.cpu_inst.interrupt_pending.value),
+            "mip": int(csr.mip.value) & 0xFFFFFFFF,
+            "mie": int(csr.mie.value) & 0xFFFFFFFF,
+            "mstatus": int(csr.mstatus.value) & 0xFFFFFFFF,
+            "priv": int(csr.privilege_mode.value),
+        }
+        observed.append(sample)
+        print(
+            "Cycle {cycle}: pc=0x{pc:08x} instr=0x{instr:08x} "
+            "wfi_active={wfi_active} wfi_stall={wfi_stall} "
+            "wake={wfi_resume_pending} ipend={interrupt_pending} "
+            "mip=0x{mip:08x} mie=0x{mie:08x} mstatus=0x{mstatus:08x} priv={priv}".format(
+                **sample
+            )
+        )
+
+        if sample["pc"] == return_pc:
+            reached_return = True
+            break
+
+        if int(dut.cpu_mem_write_en.value):
+            addr = int(dut.cpu_mem_write_addr.value) & 0xFFFFFFFF
+            data = int(dut.cpu_mem_write_data.value) & 0xFFFFFFFF
+            mem_writes[addr] = data
+            print(f"Cycle {cycle}: Memory write addr=0x{addr:08x} data=0x{data:08x}")
+
+    assert reached_return, "arch_cpu_idle reproducer never reached the return target"
+
+    stall_at_post_wfi = [
+        s for s in observed if s["pc"] == 0x80000008 and s["wfi_stall"] == 1
+    ]
+    assert not stall_at_post_wfi, (
+        "Core remained stalled at the post-WFI load: "
+        + ", ".join(
+            f"cycle={s['cycle']} wake={s['wfi_resume_pending']} ipend={s['interrupt_pending']} "
+            f"mip=0x{s['mip']:08x} mie=0x{s['mie']:08x} mstatus=0x{s['mstatus']:08x}"
+            for s in stall_at_post_wfi[:6]
+        )
+    )
+
+    print("arch_cpu_idle narrow reproducer passed!")
+
+@cocotb.test()
+async def test_arch_cpu_idle_resume_mmu(dut):
+    """Run the idle helper through Sv32 mappings without full Linux boot."""
+    print("Starting arch_cpu_idle MMU reproducer...")
+
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+
+    dut.timer_interrupt.value = 0
+    dut.software_interrupt.value = 0
+    dut.external_interrupt.value = 0
+    dut.uart_rx.value = 1
+    dut.rst.value = 1
+    await ClockCycles(dut.clk, 5)
+
+    code_va = 0x80000000
+    stack_va = 0x80001000
+    scratch_va = 0x80002000
+    stack_pa = 0x10000000
+    scratch_pa = 0x10001000
+    root_pt_pa = 0x10002000
+    l0_pt_pa = 0x10003000
+    return_pc = code_va + 0x18
+
+    def pte_leaf(ppn, flags):
+        return ((ppn & 0xFFFFF) << 10) | flags
+
+    def pte_ptr(ppn):
+        return ((ppn & 0xFFFFF) << 10) | 0x001
+
+    # Seed stack frame.
+    dut.unified_mem_inst.instr_ram[_phys_word_index(stack_pa + 8)].value = 0x12345678
+    dut.unified_mem_inst.instr_ram[_phys_word_index(stack_pa + 12)].value = return_pc
+
+    # Root entry for vpn1=0x200, then leaf entries for vpn0=0/1/2.
+    dut.unified_mem_inst.instr_ram[_phys_word_index(root_pt_pa + 0x800)].value = pte_ptr(l0_pt_pa >> 12)
+    dut.unified_mem_inst.instr_ram[_phys_word_index(l0_pt_pa + 0x000)].value = pte_leaf(INSTR_MEM_BASE >> 12, 0x04B)
+    dut.unified_mem_inst.instr_ram[_phys_word_index(l0_pt_pa + 0x004)].value = pte_leaf(stack_pa >> 12, 0x0C7)
+    dut.unified_mem_inst.instr_ram[_phys_word_index(l0_pt_pa + 0x008)].value = pte_leaf(scratch_pa >> 12, 0x0C7)
+
+    # Seed S-mode + satp-on state while reset is asserted.
+    dut.cpu_inst.rf_inst0.register_file[2].value = stack_va
+    dut.cpu_inst.rf_inst0.register_file[8].value = 0xCAFEBABE
+    dut.cpu_inst.rf_inst0.register_file[1].value = 0x11111111
+    csr = dut.cpu_inst.csr_file_inst
+    csr.privilege_mode.value = 0x1
+    csr.mstatus.value = 0x00000000
+    csr.mie.value = 0x00000020
+    csr.mideleg.value = 0x00000020
+    csr.stip_software_pending.value = 1
+    csr.satp.value = 0x80000000 | (root_pt_pa >> 12)
+
+    dut.rst.value = 0
+
+    observed = []
+    mem_writes = {}
+    reached_return = False
+
+    for cycle in range(80):
+        await RisingEdge(dut.clk)
+
+        sample = {
+            "cycle": cycle,
+            "pc": int(dut.pc_debug.value) & 0xFFFFFFFF,
+            "instr": int(dut.instr_debug.value) & 0xFFFFFFFF,
+            "ipaddr": int(dut.phys_instr_addr.value) & 0xFFFFFFFF,
+            "dpaddr": int(dut.phys_data_addr.value) & 0xFFFFFFFF,
+            "ifault": int(dut.cpu_instr_page_fault.value),
+            "lfault": int(dut.cpu_load_page_fault.value),
+            "sfault": int(dut.cpu_store_page_fault.value),
+            "wfi_active": int(dut.cpu_inst.wfi_active.value),
+            "wfi_stall": int(dut.cpu_inst.wfi_stall.value),
+            "wake": int(dut.cpu_inst.wfi_resume_pending.value),
+            "ipend": int(dut.cpu_inst.interrupt_pending.value),
+            "mip": int(csr.mip.value) & 0xFFFFFFFF,
+            "mie": int(csr.mie.value) & 0xFFFFFFFF,
+            "satp": int(csr.satp.value) & 0xFFFFFFFF,
+        }
+        observed.append(sample)
+        print(
+            "Cycle {cycle}: pc=0x{pc:08x} instr=0x{instr:08x} ipaddr=0x{ipaddr:08x} "
+            "dpaddr=0x{dpaddr:08x} ifault={ifault} lfault={lfault} sfault={sfault} "
+            "wfi_active={wfi_active} wfi_stall={wfi_stall} wake={wake} ipend={ipend} "
+            "mip=0x{mip:08x} mie=0x{mie:08x} satp=0x{satp:08x}".format(**sample)
+        )
+
+        if sample["pc"] == return_pc:
+            reached_return = True
+            break
+
+        if int(dut.cpu_mem_write_en.value):
+            addr = int(dut.cpu_mem_write_addr.value) & 0xFFFFFFFF
+            data = int(dut.cpu_mem_write_data.value) & 0xFFFFFFFF
+            mem_writes[addr] = data
+            print(f"Cycle {cycle}: Memory write addr=0x{addr:08x} data=0x{data:08x}")
+
+    assert reached_return, "MMU arch_cpu_idle reproducer never reached the return target"
+    assert not any(s["ifault"] or s["lfault"] or s["sfault"] for s in observed), (
+        "Unexpected MMU fault during idle reproducer"
+    )
+
+    print("arch_cpu_idle MMU reproducer passed!")
+
 def run_interrupt_setup_test():
     instr_mem = [
         0x10000137,  # lui x2, 0x10000       # Load upper immediate: Set x2 (sp) to point to 0x10000000 (MTVEC base)
@@ -505,6 +764,81 @@ def run_wfi_interrupt_test():
     hex_file = create_interrupt_test_hex(test_name, instr_mem)
     return test_name, hex_file
 
+def run_wfi_pending_no_global_test():
+    """Create program that proves WFI resumes on a pending enabled interrupt
+    even when the global MIE bit is clear.
+    """
+    main_program = [
+        0x02000137,  # lui x2, 0x2000       # data base: 0x02000000
+        0x02000093,  # addi x1, x0, 0x20    # STIP bit
+        0x30409073,  # csrw mie, x1         # enable STIP source in MIE
+        0x34409073,  # csrw mip, x1         # pend STIP via supervisor-visible MIP
+        0x30001073,  # csrw mstatus, x0     # keep global MIE cleared
+        0x01100213,  # addi x4, x0, 0x11    # pre-WFI marker
+        0x00412023,  # sw x4, 0(x2)
+        0x10500073,  # wfi
+        0x02200293,  # addi x5, x0, 0x22    # post-WFI marker
+        0x00512223,  # sw x5, 4(x2)
+        0x00100313,  # addi x6, x0, 1       # done
+        0x00612423,  # sw x6, 8(x2)
+        0x0000006F,  # jal x0, 0
+    ]
+
+    test_name = "wfi_pending_no_global"
+    hex_file = create_interrupt_test_hex(test_name, instr_mem=main_program)
+    return test_name, hex_file
+
+def run_arch_cpu_idle_resume_test():
+    """Encode Linux arch_cpu_idle() plus a tiny return target.
+
+    0x80000000: fence
+    0x80000004: wfi
+    0x80000008: lw ra, 12(sp)
+    0x8000000c: ret
+    0x80000018: store loaded RA, store marker, store done, spin
+    """
+    instr_mem = [
+        0x0FF0000F,  # fence
+        0x10500073,  # wfi
+        0x00C12083,  # lw ra, 12(sp)
+        0x00812403,  # lw s0, 8(sp)
+        0x01010113,  # addi sp, sp, 0x10
+        0x00008067,  # ret
+        0x100023B7,  # lui x7, 0x10002      -> 0x10002000
+        0x0013A023,  # sw ra, 0(x7)
+        0x07700293,  # addi x5, x0, 0x77
+        0x0053A223,  # sw x5, 4(x7)
+        0x00100313,  # addi x6, x0, 1
+        0x0063A423,  # sw x6, 8(x7)
+        0x0000006F,  # jal x0, 0
+    ]
+
+    test_name = "arch_cpu_idle_resume"
+    hex_file = create_interrupt_test_hex(test_name, instr_mem=instr_mem)
+    return test_name, hex_file
+
+def run_arch_cpu_idle_resume_mmu_test():
+    """Same idle helper, but return target stores into a mapped scratch page."""
+    instr_mem = [
+        0x0FF0000F,  # fence
+        0x10500073,  # wfi
+        0x00C12083,  # lw ra, 12(sp)
+        0x00812403,  # lw s0, 8(sp)
+        0x01010113,  # addi sp, sp, 0x10
+        0x00008067,  # ret
+        0x800023B7,  # lui x7, 0x80002      -> 0x80002000
+        0x0013A023,  # sw ra, 0(x7)
+        0x07700293,  # addi x5, x0, 0x77
+        0x0053A223,  # sw x5, 4(x7)
+        0x00100313,  # addi x6, x0, 1
+        0x0063A423,  # sw x6, 8(x7)
+        0x0000006F,  # jal x0, 0
+    ]
+
+    test_name = "arch_cpu_idle_resume_mmu"
+    hex_file = create_interrupt_test_hex(test_name, instr_mem=instr_mem)
+    return test_name, hex_file
+
 def runCocotbTests():
     # Find RTL directory
     sources = []
@@ -537,7 +871,16 @@ def runCocotbTests():
         ("mret_test", run_mret_test),
         ("timer_interrupt", run_timer_interrupt_test),
         ("wfi_interrupt", run_wfi_interrupt_test),
+        ("wfi_pending_no_global", run_wfi_pending_no_global_test),
+        ("arch_cpu_idle_resume", run_arch_cpu_idle_resume_test),
+        ("arch_cpu_idle_resume_mmu", run_arch_cpu_idle_resume_mmu_test),
     ]
+
+    test_filter = os.getenv("INTERRUPT_TEST_FILTER")
+    if test_filter:
+        tests_config = [item for item in tests_config if item[0] == test_filter]
+        if not tests_config:
+            raise ValueError(f"Unknown INTERRUPT_TEST_FILTER={test_filter}")
     
     # Run each test
     for test_name, test_func in tests_config:

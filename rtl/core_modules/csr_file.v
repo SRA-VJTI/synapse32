@@ -25,6 +25,7 @@ module csr_file (
     input wire instruction_address_misaligned_exception,
     input wire load_address_misaligned_exception,
     input wire store_address_misaligned_exception,
+    input wire instr_page_fault_exception,
     input wire load_page_fault_exception,
     input wire store_page_fault_exception,
     input wire [31:0] exception_tval_in,
@@ -134,6 +135,9 @@ module csr_file (
     reg [31:0] satp;
     reg [31:0] pmpcfg0;
     reg [31:0] pmpaddr0;
+    reg ssip_software_pending;
+    reg stip_software_pending;
+    reg seip_software_pending;
 
     wire [31:0] sstatus = mstatus & SSTATUS_MASK;
     wire [31:0] sie = mie & S_INTERRUPT_MASK;
@@ -147,6 +151,7 @@ module csr_file (
                                  instruction_address_misaligned_exception ||
                                  load_address_misaligned_exception ||
                                  store_address_misaligned_exception ||
+                                 instr_page_fault_exception ||
                                  load_page_fault_exception ||
                                  store_page_fault_exception;
     wire [31:0] ecall_cause =
@@ -159,6 +164,7 @@ module csr_file (
         ebreak_exception                          ? 32'h00000003 :
         load_address_misaligned_exception         ? 32'h00000004 :
         store_address_misaligned_exception        ? 32'h00000006 :
+        instr_page_fault_exception                ? 32'h0000000C :
         load_page_fault_exception                 ? 32'h0000000D :
         store_page_fault_exception                ? 32'h0000000F :
                                                     ecall_cause;
@@ -190,7 +196,6 @@ module csr_file (
                        (csr_addr == CSR_TDATA2) || (csr_addr == CSR_TDATA3) ||
                        (csr_addr == CSR_MVENDORID) || (csr_addr == CSR_MARCHID) ||
                        (csr_addr == CSR_MIMPID) || (csr_addr == CSR_MHARTID) ||
-                       (csr_addr == CSR_MTOPI) || (csr_addr == CSR_SCOVTOVF) ||
                        (csr_addr == CSR_MSTATUSH) || (csr_addr == CSR_MENVCFG) ||
                        (csr_addr == CSR_MENVCFGH) || (csr_addr == CSR_MSECCFG) ||
                        (csr_addr == CSR_MSECCFGH) || (csr_addr == CSR_MCONFIGPTR) ||
@@ -226,6 +231,9 @@ module csr_file (
             satp <= 32'h0;
             pmpcfg0 <= 32'h0;
             pmpaddr0 <= 32'h0;
+            ssip_software_pending <= 1'b0;
+            stip_software_pending <= 1'b0;
+            seip_software_pending <= 1'b0;
         end else begin
             if (cycle_enabled && !writes_mcycle) begin
                 cycle_counter <= cycle_counter + 64'h1;
@@ -235,10 +243,18 @@ module csr_file (
                 instret_counter <= instret_counter + 64'h1;
             end
             
-            // Update MIP based on interrupt inputs
-            mip[3] <= software_interrupt;  // MSIP
-            mip[7] <= timer_interrupt;     // MTIP
-            mip[11] <= external_interrupt; // MEIP
+            // Update MIP/SIP view based on interrupt inputs and delegation.
+            // Delegated interrupts are surfaced through the supervisor-pending
+            // bits so S-mode sees the expected cause codes.
+            mip[1] <= (mideleg[1] ? software_interrupt : 1'b0) |
+                      ssip_software_pending;                    // SSIP
+            mip[3] <= mideleg[1] ? 1'b0 : software_interrupt;   // MSIP
+            mip[5] <= (mideleg[5] ? timer_interrupt : 1'b0) |
+                      stip_software_pending;                    // STIP
+            mip[7] <= mideleg[5] ? 1'b0 : timer_interrupt;      // MTIP
+            mip[9] <= (mideleg[9] ? external_interrupt : 1'b0) |
+                      seip_software_pending;                    // SEIP
+            mip[11] <= mideleg[9] ? 1'b0 : external_interrupt;  // MEIP
             
             // Handle interrupt entry
             if (interrupt_taken) begin
@@ -320,9 +336,19 @@ module csr_file (
                     CSR_SCAUSE:   scause <= write_data;
                     CSR_STVAL:    stval <= write_data;
                     CSR_SATP:     satp <= write_data;
-                    CSR_SIP:      mip <= (mip & ~S_INTERRUPT_MASK) | (write_data & S_INTERRUPT_MASK);
-                    // MIP is updated by hardware, only software bits writable
-                    CSR_MIP:      mip <= (mip & 32'h888) | (write_data & 32'h777);
+                    CSR_SIP: begin
+                        ssip_software_pending <= write_data[1];
+                        stip_software_pending <= write_data[5];
+                        seip_software_pending <= write_data[9];
+                    end
+                    // Keep hardware pending bits driven by the platform, but
+                    // allow software to synthesize/clear supervisor-visible
+                    // pending bits for focused trap tests and SBI flows.
+                    CSR_MIP: begin
+                        ssip_software_pending <= write_data[1];
+                        stip_software_pending <= write_data[5];
+                        seip_software_pending <= write_data[9];
+                    end
                     CSR_PMPCFG0:  pmpcfg0 <= write_data;
                     CSR_PMPADDR0: pmpaddr0 <= write_data;
                     CSR_MCYCLE:   cycle_counter[31:0] <= write_data;
@@ -367,10 +393,10 @@ module csr_file (
                 CSR_MCYCLEH:  read_data = cycle_counter[63:32];
                 CSR_MINSTRETH: read_data = instret_counter[63:32];
                 CSR_CYCLE:    read_data = cycle_counter[31:0];
-                CSR_TIME:     read_data = 32'h0;
+                CSR_TIME:     read_data = cycle_counter[31:0];
                 CSR_INSTRET:  read_data = instret_counter[31:0];
                 CSR_CYCLEH:   read_data = cycle_counter[63:32];
-                CSR_TIMEH:    read_data = 32'h0;
+                CSR_TIMEH:    read_data = cycle_counter[63:32];
                 CSR_INSTRETH: read_data = instret_counter[63:32];
                 CSR_PMPCFG0:  read_data = pmpcfg0;
                 CSR_PMPADDR0: read_data = pmpaddr0;

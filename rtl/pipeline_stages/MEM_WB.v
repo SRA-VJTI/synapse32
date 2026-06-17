@@ -2,6 +2,7 @@
 module MEM_WB (
     input wire clk,
     input wire rst,
+    input wire flush,
     
     // Standard pipeline register inputs
     input wire [4:0] rs1_addr_in,
@@ -51,7 +52,21 @@ module MEM_WB (
             rd_valid_out <= 1'b0;
             mem_data_out <= 32'b0;
         end
-        else begin
+        else if (flush) begin
+            rs1_addr_out <= 5'b0;
+            rs2_addr_out <= 5'b0;
+            rd_addr_out <= 5'b0;
+            rs1_value_out <= 32'b0;
+            rs2_value_out <= 32'b0;
+            pc_out <= pc_in;
+            mem_addr_out <= 32'b0;
+            exec_output_out <= 32'b0;
+            jump_signal_out <= 1'b0;
+            jump_addr_out <= 32'b0;
+            instr_id_out <= 7'b0;
+            rd_valid_out <= 1'b0;
+            mem_data_out <= 32'b0;
+        end else begin
             // Transfer all register values
             rs1_addr_out <= rs1_addr_in;
             rs2_addr_out <= rs2_addr_in;

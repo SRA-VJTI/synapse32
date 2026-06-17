@@ -235,7 +235,7 @@ always @(*) begin
     target_addr = 0;
     
     // Handle interrupts first (highest priority)
-    if (interrupt_pending) begin
+    if (interrupt_pending && instr_valid) begin
         jump_signal = 1;
         trap_to_supervisor = interrupt_to_supervisor;
         jump_addr = interrupt_to_supervisor ? stvec : mtvec;  // Jump to interrupt handler
@@ -491,9 +491,9 @@ always @(*) begin
                     end
                 end
                 default: begin
-                    if (csr_valid && (csr_read_only_violation ||
+                    if (!csr_valid || csr_read_only_violation ||
                          csr_privilege_violation || csr_satp_tvm_violation ||
-                         csr_counter_access_violation)) begin
+                         csr_counter_access_violation) begin
                         jump_signal = 1;
                         trap_to_supervisor = delegate_illegal_instruction;
                         jump_addr = trap_to_supervisor ? stvec : mtvec;
@@ -517,6 +517,9 @@ always @(*) begin
                 jump_signal = 1;
                 jump_addr = pc_input + 4;
                 flush_pipeline = 1;
+            end else if (instr_id == INSTR_PAUSE) begin
+                // Zihintpause is architecturally a hint. This core treats it as
+                // a legal no-op so software can run without taking an illegal trap.
             end
             end
             default: begin

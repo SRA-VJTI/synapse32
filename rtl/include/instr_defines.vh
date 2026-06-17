@@ -67,6 +67,7 @@ localparam [6:0] INSTR_AUIPC = 7'h25;
 // System instructions
 localparam [6:0] INSTR_FENCE   = 7'h3A;
 localparam [6:0] INSTR_FENCE_I = 7'h26;
+localparam [6:0] INSTR_PAUSE   = 7'h3C;
 
 // CSR instructions
 localparam [6:0] INSTR_CSRRW  = 7'h27;
