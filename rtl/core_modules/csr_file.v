@@ -104,7 +104,9 @@ module csr_file (
     localparam PRIV_M = 2'b11;
     localparam SSTATUS_MASK = 32'h000C0122;
     localparam S_INTERRUPT_MASK = 32'h00000222;
-    localparam MSTATUS_WRITABLE_MASK = 32'h007619AA;
+    // Writable mstatus bits: 1(SIE),3(MIE),5(SPIE),7(MPIE),8(SPP),
+    // 11:12(MPP),17(MPRV),18(SUM),19(MXR),20(TVM),21(TW),22(TSR)
+    localparam MSTATUS_WRITABLE_MASK = 32'h007E19AA;
     localparam SUPPORTED_MISA = 32'h40141101;  // RV32IMASU
     localparam MCOUNTINHIBIT_MASK = 32'h00000005;
     localparam COUNTEREN_MASK = 32'h00000007;
@@ -133,8 +135,6 @@ module csr_file (
     reg [31:0] scause;
     reg [31:0] stval;
     reg [31:0] satp;
-    reg [31:0] pmpcfg0;
-    reg [31:0] pmpaddr0;
     reg ssip_software_pending;
     reg stip_software_pending;
     reg seip_software_pending;
@@ -158,17 +158,23 @@ module csr_file (
         (privilege_mode == PRIV_U) ? 32'h00000008 :
         (privilege_mode == PRIV_S) ? 32'h00000009 :
                                      32'h0000000B;
+    // MEM-stage faults are older than IF/EX-stage exceptions and must win if
+    // more than one pipeline stage requests a trap in the same cycle.
+    wire page_fault_exception = instr_page_fault_exception ||
+                                load_page_fault_exception ||
+                                store_page_fault_exception;
     wire [31:0] exception_cause =
+        load_page_fault_exception                 ? 32'h0000000D :
+        store_page_fault_exception                ? 32'h0000000F :
+        instr_page_fault_exception                ? 32'h0000000C :
         instruction_address_misaligned_exception ? 32'h00000000 :
         illegal_instruction_exception             ? 32'h00000002 :
         ebreak_exception                          ? 32'h00000003 :
         load_address_misaligned_exception         ? 32'h00000004 :
         store_address_misaligned_exception        ? 32'h00000006 :
-        instr_page_fault_exception                ? 32'h0000000C :
-        load_page_fault_exception                 ? 32'h0000000D :
-        store_page_fault_exception                ? 32'h0000000F :
                                                     ecall_cause;
-    wire [31:0] exception_tval = (ecall_exception || ebreak_exception) ?
+    wire [31:0] exception_tval = (!page_fault_exception &&
+                                  (ecall_exception || ebreak_exception)) ?
                                  32'h00000000 : exception_tval_in;
 
     // Check if CSR address is valid
@@ -229,8 +235,6 @@ module csr_file (
             scause <= 32'h0;
             stval <= 32'h0;
             satp <= 32'h0;
-            pmpcfg0 <= 32'h0;
-            pmpaddr0 <= 32'h0;
             ssip_software_pending <= 1'b0;
             stip_software_pending <= 1'b0;
             seip_software_pending <= 1'b0;
@@ -281,6 +285,11 @@ module csr_file (
                 mstatus[7] <= 1'b1;              // Set MPIE to 1
                 privilege_mode <= mstatus[12:11]; // Return to privilege encoded in MPP
                 mstatus[12:11] <= PRIV_U;        // Clear MPP after return
+                // MPRV is cleared when MRET returns to a mode less
+                // privileged than M (privileged spec §3.1.6.5).
+                if (mstatus[12:11] != PRIV_M) begin
+                    mstatus[17] <= 1'b0;
+                end
             end
 
             // Handle SRET
@@ -349,8 +358,11 @@ module csr_file (
                         stip_software_pending <= write_data[5];
                         seip_software_pending <= write_data[9];
                     end
-                    CSR_PMPCFG0:  pmpcfg0 <= write_data;
-                    CSR_PMPADDR0: pmpaddr0 <= write_data;
+                    // No PMP entries are implemented. Keep these WARL CSRs
+                    // hardwired to zero so firmware probing observes a count
+                    // of zero instead of trusting unenforced permissions.
+                    CSR_PMPCFG0:  ;
+                    CSR_PMPADDR0: ;
                     CSR_MCYCLE:   cycle_counter[31:0] <= write_data;
                     CSR_MCYCLEH:  cycle_counter[63:32] <= write_data;
                     CSR_MINSTRET: instret_counter[31:0] <= write_data;
@@ -398,8 +410,8 @@ module csr_file (
                 CSR_CYCLEH:   read_data = cycle_counter[63:32];
                 CSR_TIMEH:    read_data = cycle_counter[63:32];
                 CSR_INSTRETH: read_data = instret_counter[63:32];
-                CSR_PMPCFG0:  read_data = pmpcfg0;
-                CSR_PMPADDR0: read_data = pmpaddr0;
+                CSR_PMPCFG0:  read_data = 32'h0;
+                CSR_PMPADDR0: read_data = 32'h0;
                 CSR_TSELECT:  read_data = 32'h0;
                 CSR_TDATA1:   read_data = 32'h0;
                 CSR_TDATA2:   read_data = 32'h0;

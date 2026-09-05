@@ -18,6 +18,8 @@ UART_PTY_TRANSCRIPT ?= $(OUT_DIR)/linux-pty-uart.log
 UART_PTY_RX_TRANSCRIPT ?= $(OUT_DIR)/linux-pty-input.log
 BOOT_TIMEOUT_CYCLES ?= 5000000
 UART_IDLE_CYCLES ?= 200000
+LINUX_BOOT_TIMEOUT_CYCLES ?= 250000000
+LINUX_UART_IDLE_CYCLES ?= 80000000
 STATUS_INTERVAL_CYCLES ?= 250000
 CLOCK_PERIOD_NS ?= 20
 DOCKER_IMAGE ?= synapse32-dev
@@ -26,8 +28,9 @@ DOCKER_CONTAINER_LINUX ?= synapse32-linux
 DOCKER_VENV_DIR ?= /tmp/synapse32-venv
 DOCKER_RUN = docker run --rm -v "$(ROOT_DIR):$(DOCKER_WORKDIR)" -w "$(DOCKER_WORKDIR)/sim" $(DOCKER_IMAGE)
 HOST_OS := $(shell uname -s)
+CHECK_COCOTB_RESULTS = $(VENV_PYTHON) -c 'import sys, xml.etree.ElementTree as ET; root = ET.parse(sys.argv[1]).getroot(); failed = root.findall(".//failure") + root.findall(".//error"); sys.exit(1 if failed else 0)' "$(CURDIR)/results.xml"
 
-.PHONY: help venv deps docker-build docker-opensbi-run docker-opensbi-waves opensbi-build opensbi-run opensbi-waves docker-linux-build docker-linux-run docker-linux-clean docker-linux-tty linux-build linux-build-local linux-run linux-run-local linux-tty linux-tty-local linux-pty linux-pty-local uart-run clean
+.PHONY: help venv deps docker-build docker-opensbi-run docker-opensbi-waves opensbi-build opensbi-run opensbi-waves docker-linux-build docker-linux-run docker-linux-clean docker-linux-tty linux-build linux-build-local require-linux-image linux-run linux-run-local linux-tty linux-tty-local linux-pty linux-pty-local uart-run clean
 
 help:
 	@printf "\nSynapse32 OpenSBI sim targets:\n"
@@ -90,6 +93,7 @@ docker-linux-run: docker-build
 		$(MAKE) docker-linux-build; \
 	fi
 	@docker start $(DOCKER_CONTAINER_LINUX) > /dev/null
+	docker exec -w "$(DOCKER_WORKDIR)/sim" $(DOCKER_CONTAINER_LINUX) make linux-build-local
 	docker exec -w "$(DOCKER_WORKDIR)/sim" $(DOCKER_CONTAINER_LINUX) make VENV_DIR="$(DOCKER_VENV_DIR)" deps linux-run-local
 
 opensbi-build:
@@ -110,6 +114,7 @@ opensbi-waves: deps opensbi-build
 	SIM_BUILD="$(SIM_BUILD)" \
 	DUMPFILE="$(OUT_DIR)/waveforms/opensbi_boot.fst" \
 	$(MAKE) -f $(CURDIR)/opensbi_runner.mk sim INSTRUCTION_MEMORY_HEX="$(abspath $(IMAGE))"
+	$(CHECK_COCOTB_RESULTS)
 
 uart-run: deps
 	PATH="$(VENV_DIR)/bin:$$PATH" \
@@ -121,6 +126,7 @@ uart-run: deps
 	WAVES=0 \
 	SIM_BUILD="$(SIM_BUILD)" \
 	$(MAKE) -f $(CURDIR)/opensbi_runner.mk sim INSTRUCTION_MEMORY_HEX="$(abspath $(IMAGE))"
+	$(CHECK_COCOTB_RESULTS)
 
 docker-linux-clean:
 	docker rm -f $(DOCKER_CONTAINER_LINUX) 2>/dev/null || true
@@ -130,6 +136,7 @@ docker-linux-tty: docker-build
 		$(MAKE) docker-linux-build; \
 	fi
 	@docker start $(DOCKER_CONTAINER_LINUX) > /dev/null
+	docker exec -w "$(DOCKER_WORKDIR)/sim" $(DOCKER_CONTAINER_LINUX) make linux-build-local
 	docker exec -it -w "$(DOCKER_WORKDIR)/sim" $(DOCKER_CONTAINER_LINUX) \
 		make VENV_DIR="$(DOCKER_VENV_DIR)" deps linux-tty-local
 
@@ -141,8 +148,17 @@ linux-build:
 		$(MAKE) linux-build-local; \
 	fi
 
-linux-build-local:
+linux-build-local: $(LINUX_IMAGE)
+
+$(LINUX_IMAGE): $(CURDIR)/build_linux.sh $(CURDIR)/synapse32.dts
 	LINUX_OUT_DIR="$(LINUX_OUT_DIR)" bash $(CURDIR)/build_linux.sh
+
+require-linux-image:
+	@test -f "$(LINUX_IMAGE)" || { \
+		echo "Missing Linux image: $(LINUX_IMAGE)" >&2; \
+		echo "Run 'make linux-build' first." >&2; \
+		exit 1; \
+	}
 
 linux-run:
 	@if [ "$(HOST_OS)" != "Linux" ] || ! command -v riscv32-unknown-linux-gnu-gcc >/dev/null 2>&1 || ! command -v riscv64-linux-gnu-gcc >/dev/null 2>&1 || ! command -v dtc >/dev/null 2>&1; then \
@@ -153,11 +169,10 @@ linux-run:
 		$(MAKE) linux-run-local; \
 	fi
 
-linux-run-local: deps
-	rm -rf "$(OUT_DIR)/sim_build_linux"
+linux-run-local: deps require-linux-image
 	PATH="$(VENV_DIR)/bin:$$PATH" \
-	BOOT_TIMEOUT_CYCLES=250000000 \
-	UART_IDLE_CYCLES=80000000 \
+	BOOT_TIMEOUT_CYCLES="$(LINUX_BOOT_TIMEOUT_CYCLES)" \
+	UART_IDLE_CYCLES="$(LINUX_UART_IDLE_CYCLES)" \
 	STATUS_INTERVAL_CYCLES="$(STATUS_INTERVAL_CYCLES)" \
 	CLOCK_PERIOD_NS="$(CLOCK_PERIOD_NS)" \
 	PYTHON_BIN="$(VENV_DIR)/bin/python" \
@@ -166,14 +181,14 @@ linux-run-local: deps
 	SIM_BUILD="$(OUT_DIR)/sim_build_linux" \
 	$(MAKE) -f $(CURDIR)/opensbi_runner.mk sim \
 		INSTRUCTION_MEMORY_HEX="$(abspath $(LINUX_IMAGE))"
+	$(CHECK_COCOTB_RESULTS)
 
 linux-tty: deps linux-build linux-tty-local
 
-linux-tty-local: deps
-	rm -rf "$(OUT_DIR)/sim_build_linux"
+linux-tty-local: deps require-linux-image
 	PATH="$(VENV_DIR)/bin:$$PATH" \
-	BOOT_TIMEOUT_CYCLES=250000000 \
-	UART_IDLE_CYCLES=80000000 \
+	BOOT_TIMEOUT_CYCLES="$(LINUX_BOOT_TIMEOUT_CYCLES)" \
+	UART_IDLE_CYCLES="$(LINUX_UART_IDLE_CYCLES)" \
 	CLOCK_PERIOD_NS="$(CLOCK_PERIOD_NS)" \
 	PYTHON_BIN="$(VENV_DIR)/bin/python" \
 	INTERACTIVE_TTY=1 \
@@ -182,14 +197,14 @@ linux-tty-local: deps
 	SIM_BUILD="$(OUT_DIR)/sim_build_linux" \
 	$(MAKE) -f $(CURDIR)/opensbi_runner.mk sim \
 		INSTRUCTION_MEMORY_HEX="$(abspath $(LINUX_IMAGE))"
+	$(CHECK_COCOTB_RESULTS)
 
 linux-pty: deps linux-build linux-pty-local
 
-linux-pty-local: deps
-	rm -rf "$(OUT_DIR)/sim_build_linux"
+linux-pty-local: deps require-linux-image
 	PATH="$(VENV_DIR)/bin:$$PATH" \
-	BOOT_TIMEOUT_CYCLES=250000000 \
-	UART_IDLE_CYCLES=80000000 \
+	BOOT_TIMEOUT_CYCLES="$(LINUX_BOOT_TIMEOUT_CYCLES)" \
+	UART_IDLE_CYCLES="$(LINUX_UART_IDLE_CYCLES)" \
 	CLOCK_PERIOD_NS="$(CLOCK_PERIOD_NS)" \
 	PYTHON_BIN="$(VENV_DIR)/bin/python" \
 	UART_PTY=1 \
@@ -201,6 +216,7 @@ linux-pty-local: deps
 	SIM_BUILD="$(OUT_DIR)/sim_build_linux" \
 	$(MAKE) -f $(CURDIR)/opensbi_runner.mk sim \
 		INSTRUCTION_MEMORY_HEX="$(abspath $(LINUX_IMAGE))"
+	$(CHECK_COCOTB_RESULTS)
 
 clean:
 	rm -rf $(OUT_DIR) $(CURDIR)/sim_build $(CURDIR)/sim_build_* $(CURDIR)/results.xml $(CURDIR)/__pycache__ $(CURDIR)/dump.vcd $(CURDIR)/riscv_cpu.fst $(CURDIR)/fw_jump.bin $(CURDIR)/fw_jump.elf $(CURDIR)/opensbi.hex $(CURDIR)/synapse32.dtb

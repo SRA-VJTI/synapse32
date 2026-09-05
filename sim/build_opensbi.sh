@@ -9,14 +9,15 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
-# OpenSBI tags this release as v1.5 rather than v1.5.0.
-OPENSBI_VERSION="v1.4"
-OPENSBI_DIR="/tmp/opensbi-build"
+OPENSBI_VERSION="${OPENSBI_VERSION:-v1.4}"
+OPENSBI_REPO="${OPENSBI_REPO:-https://github.com/riscv-software-src/opensbi.git}"
+OPENSBI_DIR="${OPENSBI_DIR:-/tmp/opensbi-build}"
 SIM_DIR="${SIM_DIR:-$script_dir}"
 OUT_DIR="${SIM_OUT_DIR:-$SIM_DIR/.out/opensbi}"
 OUT_ELF="$OUT_DIR/fw_jump.elf"
 OUT_BIN="$OUT_DIR/fw_jump.bin"
 OUT_HEX="$OUT_DIR/opensbi.hex"
+BUILD_DIR="$OUT_DIR/opensbi-build"
 DTB="$OUT_DIR/synapse32.dtb"
 # OpenSBI requires a PIE-capable Linux-targeted toolchain.
 CROSS_COMPILE="${CROSS_COMPILE:-riscv64-linux-gnu-}"
@@ -52,14 +53,24 @@ echo "    $DTB ($(wc -c < "$DTB") bytes)"
 if [ ! -d "$OPENSBI_DIR/.git" ]; then
     echo "==> Cloning openSBI $OPENSBI_VERSION..."
     git clone --depth 1 --branch "$OPENSBI_VERSION" \
-        https://github.com/riscv-software-src/opensbi.git "$OPENSBI_DIR"
+        "$OPENSBI_REPO" "$OPENSBI_DIR"
 else
-    echo "==> openSBI already cloned at $OPENSBI_DIR"
+    actual_repo="$(git -C "$OPENSBI_DIR" remote get-url origin)"
+    if [ "$actual_repo" != "$OPENSBI_REPO" ]; then
+        echo "Cached checkout $OPENSBI_DIR uses $actual_repo, expected $OPENSBI_REPO" >&2
+        echo "Choose a different OPENSBI_DIR or remove the stale build cache." >&2
+        exit 1
+    fi
+    echo "==> Updating openSBI to $OPENSBI_VERSION..."
+    git -C "$OPENSBI_DIR" fetch --depth 1 origin "$OPENSBI_VERSION"
+    git -C "$OPENSBI_DIR" checkout --detach --force FETCH_HEAD
 fi
 
 # ---- build -----------------------------------------------------------------
 echo "==> Building openSBI..."
+make -C "$OPENSBI_DIR" O="$BUILD_DIR" clean
 make -C "$OPENSBI_DIR" -j"$(num_jobs)" \
+    O="$BUILD_DIR" \
     PLATFORM=generic \
     FW_JUMP=y \
     FW_JUMP_ADDR=0x80400000 \
@@ -71,7 +82,7 @@ make -C "$OPENSBI_DIR" -j"$(num_jobs)" \
     PLATFORM_RISCV_ABI="$PLATFORM_RISCV_ABI" \
     CROSS_COMPILE="$CROSS_COMPILE"
 
-ELF="$OPENSBI_DIR/build/platform/generic/firmware/fw_jump.elf"
+ELF="$BUILD_DIR/platform/generic/firmware/fw_jump.elf"
 
 # ---- copy outputs ----------------------------------------------------------
 cp "$ELF" "$OUT_ELF"

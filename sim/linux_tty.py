@@ -7,6 +7,7 @@ import sys
 import termios
 import threading
 import tty
+from collections import deque
 
 import cocotb
 from cocotb.triggers import RisingEdge
@@ -33,6 +34,13 @@ UART_PTY_BUFFER_LIMIT = int(os.getenv("UART_PTY_BUFFER_LIMIT", "65536"))
 UART_PTY_WAIT_FOR_ATTACH = os.getenv("UART_PTY_WAIT_FOR_ATTACH", "1") == "1"
 UART_PTY_TRANSCRIPT = os.getenv("UART_PTY_TRANSCRIPT", "")
 UART_PTY_RX_TRANSCRIPT = os.getenv("UART_PTY_RX_TRANSCRIPT", "")
+# Host keystrokes arrive in wall-clock time while the guest advances in much
+# slower simulated time.  Keep interactive input to one outstanding RX byte by
+# default so typing or pasting cannot overrun the modeled UART before Linux has
+# serviced its interrupt.  The host-side queue retains all later bytes.
+UART_INPUT_MAX_PENDING = min(
+    16, max(1, int(os.getenv("UART_INPUT_MAX_PENDING", "1")))
+)
 TTY_EXIT_BYTE = 0x1D
 
 
@@ -93,7 +101,7 @@ class PtyBridge:
         self._stop = threading.Event()
         self._thread = None
         self._queue = queue.Queue()
-        self._tx_backlog = queue.deque(maxlen=UART_PTY_BUFFER_LIMIT)
+        self._tx_backlog = deque(maxlen=UART_PTY_BUFFER_LIMIT)
         self._master_fd = None
         self._slave_fd = None
         self._slave_path = None
@@ -187,6 +195,9 @@ class PtyBridge:
         except queue.Empty:
             return None
 
+    def request_stop(self):
+        self._stop.set()
+
     def write_byte(self, byte: int):
         if self._transcript is not None:
             self._transcript.write(bytes([byte]))
@@ -263,6 +274,20 @@ async def drive_bridge_to_uart(dut, bridge):
 
         if byte == TTY_EXIT_BYTE:
             bridge.request_stop()
+            return
+
+        # A real terminal and CPU progress concurrently.  In simulation, a
+        # human can type many characters while only a handful of DUT cycles
+        # elapse, so line-rate serialization alone is not sufficient flow
+        # control.  Do not dequeue another byte into the UART until Linux has
+        # consumed enough of the receive FIFO.
+        while (
+            not bridge.stop_requested
+            and int(dut.uart_inst.rx_fifo_count.value) >= UART_INPUT_MAX_PENDING
+        ):
+            await RisingEdge(dut.clk)
+
+        if bridge.stop_requested:
             return
 
         if byte in (0x0A, 0x0D):
@@ -363,6 +388,9 @@ async def boot_linux(dut):
 
             if INTERACTIVE_TTY and stdin_bridge is not None and stdin_bridge.stop_requested:
                 cocotb.log.info("Interactive UART session closed after %d cycles", cycle)
+                return
+            if UART_PTY_ENABLE and pty_bridge is not None and pty_bridge.stop_requested:
+                cocotb.log.info("PTY UART session closed after %d cycles", cycle)
                 return
 
             if not interactive_mode:

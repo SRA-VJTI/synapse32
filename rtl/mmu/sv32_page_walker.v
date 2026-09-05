@@ -18,6 +18,11 @@ module sv32_page_walker (
 
     wire [9:0] vpn0 = virtual_addr[21:12];
 
+    // NOTE: PTE bits [33:32] (ppn[1] high bits) are not modeled — PTE[31:30]
+    // must be zero, so physical addresses are effectively capped at 4 GB.
+    // Sv32 nominally allows 34-bit PAs; any PTE encoding PA >= 4 GB is
+    // treated as an invalid (non-leaf) entry and faults.
+
     always @(*) begin
         phys_addr     = virtual_addr;
         addr_valid    = 1'b1;
@@ -27,7 +32,8 @@ module sv32_page_walker (
         if (translate_enable) begin
             addr_valid = 1'b0;
 
-            if (l1_pte_backed && l1_pte_value[0] && !(!l1_pte_value[1] && l1_pte_value[2])) begin
+            if (l1_pte_backed && (l1_pte_value[31:30] == 2'b00) &&
+                l1_pte_value[0] && !(!l1_pte_value[1] && l1_pte_value[2])) begin
                 if (l1_pte_value[1] || l1_pte_value[3]) begin
                     if (l1_pte_value[19:10] == 10'b0) begin
                         addr_valid = 1'b1;
@@ -35,7 +41,8 @@ module sv32_page_walker (
                         leaf_pte_addr = l1_pte_addr;
                         leaf_pte_value = l1_pte_value;
                     end
-                end else if (l0_pte_backed && l0_pte_value[0] &&
+                end else if (l0_pte_backed && (l0_pte_value[31:30] == 2'b00) &&
+                             l0_pte_value[0] &&
                              !(!l0_pte_value[1] && l0_pte_value[2]) &&
                              (l0_pte_value[1] || l0_pte_value[3])) begin
                     addr_valid = 1'b1;

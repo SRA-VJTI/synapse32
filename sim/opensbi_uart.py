@@ -134,7 +134,7 @@ def dump_status(dut, cycle, force=False):
         "uart_rbr": _read_value(uart.rbr, 0),
         "uart_irq": _read_value(uart.interrupt, 0),
         "plic_pending": _read_value(plic.pending_1, 0) if plic is not None else 0,
-        "plic_claimed": _read_value(plic.claimed_1, 0) if plic is not None else 0,
+        "plic_gateway_busy": _read_value(plic.gateway_busy_1, 0) if plic is not None else 0,
         "plic_enable_m": _read_value(plic.enable_m_1, 0) if plic is not None else 0,
         "plic_enable_s": _read_value(plic.enable_s_1, 0) if plic is not None else 0,
         "plic_ext_irq": _read_value(plic.external_interrupt, 0) if plic is not None else 0,
@@ -158,7 +158,7 @@ def dump_status(dut, cycle, force=False):
         "stall=%(pipeline_stall)d hazard=%(hazard_stall)d "
         "rx_state=%(uart_rx_state)d rx_dr=%(uart_rx_dr)d rx_oe=%(uart_rx_oe)d "
         "rbr=0x%(uart_rbr)02x uart_irq=%(uart_irq)d "
-        "plic_pending=%(plic_pending)d plic_claimed=%(plic_claimed)d "
+        "plic_pending=%(plic_pending)d plic_gateway_busy=%(plic_gateway_busy)d "
         "plic_en_m=%(plic_enable_m)d plic_en_s=%(plic_enable_s)d plic_irq=%(plic_ext_irq)d "
         "a0=0x%(a0)08x a1=0x%(a1)08x "
         "a2=0x%(a2)08x a3=0x%(a3)08x a4=0x%(a4)08x a5=0x%(a5)08x s1=0x%(s1)08x",
@@ -200,7 +200,7 @@ async def monitor_traps(dut):
             )
 
         if mem_pf and not prev_mem_pf:
-            cocotb.log.error(
+            cocotb.log.info(
                 "MEM trap: pc=0x%08x ex_mem_addr=0x%08x read_req=%d mem_wr_en=%d "
                 "load_pf=%d store_pf=%d fault_addr=0x%08x read_addr=0x%08x write_addr=0x%08x "
                 "priv=%d scause=0x%08x stval=0x%08x",
@@ -218,7 +218,7 @@ async def monitor_traps(dut):
                 _read_value(dut.cpu_inst.csr_file_inst.stval, 0),
             )
             if reg_trace:
-                cocotb.log.error(
+                cocotb.log.info(
                     "Recent fp/sp/ra writes: %s",
                     ", ".join(
                         f"x{rd}=0x{val:08x}@pc=0x{pc:08x}/insn=0x{insn:08x}"
@@ -227,7 +227,7 @@ async def monitor_traps(dut):
                 )
 
         if instr_pf and not prev_instr_pf:
-            cocotb.log.error(
+            cocotb.log.info(
                 "IF trap: pc=0x%08x id_ex_pc=0x%08x instr=0x%08x priv=%d scause=0x%08x stval=0x%08x",
                 _read_value(dut.pc_debug, 0),
                 _read_value(dut.cpu_inst.id_ex_inst0_pc_out, 0),
@@ -239,7 +239,7 @@ async def monitor_traps(dut):
 
         if (scause in (0x0000000C, 0x0000000D, 0x0000000F) and
                 (scause != prev_scause or sepc != prev_sepc or stval != prev_stval)):
-            cocotb.log.error(
+            cocotb.log.info(
                 "CSR trap: scause=0x%08x sepc=0x%08x stval=0x%08x mepc=0x%08x "
                 "pc=0x%08x ex_mem_pc=0x%08x ex_mem_addr=0x%08x read_req=%d mem_wr_en=%d "
                 "load_pf=%d store_pf=%d fault_addr=0x%08x read_addr=0x%08x write_addr=0x%08x "
@@ -261,7 +261,7 @@ async def monitor_traps(dut):
                 _read_value(dut.cpu_inst.csr_file_inst.privilege_mode, 0),
             )
             if reg_trace:
-                cocotb.log.error(
+                cocotb.log.info(
                     "Recent fp/sp/ra writes: %s",
                     ", ".join(
                         f"x{rd}=0x{val:08x}@pc=0x{pc:08x}/insn=0x{insn:08x}"

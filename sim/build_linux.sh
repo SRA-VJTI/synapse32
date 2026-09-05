@@ -148,7 +148,17 @@ clone_or_update() {
         return
     fi
 
-    echo "==> Reusing existing checkout at $dest"
+    local actual_repo
+    actual_repo="$(git -C "$dest" remote get-url origin)"
+    if [ "$actual_repo" != "$repo_url" ]; then
+        echo "Cached checkout $dest uses $actual_repo, expected $repo_url" >&2
+        echo "Choose a different cache directory or remove the stale build cache." >&2
+        exit 1
+    fi
+
+    echo "==> Updating $(basename "$dest") to $git_ref..."
+    git -C "$dest" fetch --depth 1 origin "$git_ref"
+    git -C "$dest" checkout --detach --force FETCH_HEAD
 }
 
 patch_linux_source() {
@@ -822,7 +832,10 @@ cp "$LINUX_DIR/vmlinux" "$LINUX_VMLINUX"
 cp "$LINUX_DIR/System.map" "$LINUX_SYSTEM_MAP"
 
 echo "==> Building OpenSBI fw_payload..."
+OPENSBI_BUILD_DIR="$LINUX_OUT_DIR/opensbi-build"
+make -C "$OPENSBI_DIR" O="$OPENSBI_BUILD_DIR" clean
 make -C "$OPENSBI_DIR" -j"$(num_jobs)" \
+    O="$OPENSBI_BUILD_DIR" \
     PLATFORM=generic \
     FW_PAYLOAD=y \
     FW_PAYLOAD_PATH="$LINUX_IMAGE" \
@@ -834,7 +847,7 @@ make -C "$OPENSBI_DIR" -j"$(num_jobs)" \
     PLATFORM_RISCV_ABI="$PLATFORM_RISCV_ABI" \
     CROSS_COMPILE="$OPENSBI_CROSS_COMPILE"
 
-cp "$OPENSBI_DIR/build/platform/generic/firmware/fw_payload.elf" "$LINUX_ELF"
+cp "$OPENSBI_BUILD_DIR/platform/generic/firmware/fw_payload.elf" "$LINUX_ELF"
 "${OPENSBI_CROSS_COMPILE}objcopy" \
     --change-addresses -0x80000000 \
     -O binary \

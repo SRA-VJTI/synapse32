@@ -182,6 +182,9 @@ or:
 screen sim/.out/synapse32-tty 115200
 ```
 
+Use `Ctrl-A d` to detach from `screen` without stopping the simulator. `Ctrl-]`
+terminates the simulator session.
+
 The PTY flow also keeps raw UART logs under `sim/.out/`:
 
 - `linux-pty-uart.log` for guest TX output

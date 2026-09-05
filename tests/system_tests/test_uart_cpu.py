@@ -10,6 +10,19 @@ from cocotb.utils import get_sim_time
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
+
+async def uart_send_byte(dut, byte, baud_cycles=None):
+    """Drive one 8N1 byte using the divisor currently programmed in the DUT."""
+    if baud_cycles is None:
+        baud_cycles = int(dut.uart_inst.baud_div.value) + 1
+    dut.uart_rx.value = 0
+    await ClockCycles(dut.clk, baud_cycles)
+    for bit in range(8):
+        dut.uart_rx.value = (byte >> bit) & 1
+        await ClockCycles(dut.clk, baud_cycles)
+    dut.uart_rx.value = 1
+    await ClockCycles(dut.clk, baud_cycles)
+
 # NS16550 UART register addresses (reg_shift=2, 4-byte offsets)
 UART_BASE    = 0x20000000
 UART_THR     = UART_BASE + 0x00  # Transmit Holding Register (DLAB=0)
