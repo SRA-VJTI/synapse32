@@ -2,13 +2,36 @@ import cocotb
 from cocotb.triggers import Timer
 import subprocess
 import os
+import sys
+from contextlib import contextmanager
+
+
+@contextmanager
+def prepend_to_path(*path_entries: str):
+    """Temporarily prepend directories to PATH for simulator subprocesses."""
+    entries = [entry for entry in path_entries if entry]
+    if not entries:
+        yield
+        return
+
+    original_path = os.environ.get("PATH")
+    prefix = os.pathsep.join(entries)
+    new_path = prefix if not original_path else f"{prefix}{os.pathsep}{original_path}"
+    os.environ["PATH"] = new_path
+    try:
+        yield
+    finally:
+        if original_path is None:
+            os.environ.pop("PATH", None)
+        else:
+            os.environ["PATH"] = original_path
 
 def assemble_riscv_instruction(assembly_code, bin_file="temp.bin"):
     with open("temp.s", "w") as f:
         f.write(assembly_code)
 
     subprocess.run([
-        "riscv64-unknown-elf-as", "-march=rv32i_zifencei", "-mabi=ilp32", "-o", "temp.o", "temp.s"
+        "riscv64-unknown-elf-as", "-march=rv32im_zifencei", "-mabi=ilp32", "-o", "temp.o", "temp.s"
     ], check=True)
 
     subprocess.run([
@@ -97,6 +120,14 @@ async def test_decoder_exhaustive(dut):
         ("lui x16, 0x12345", {"opcode": 0b0110111, "rs1": 0, "rs2": 0, "rd": 16, "instr_id": 0x24, "imm": 0x12345000}),
         # Add fence.i test
         ("fence.i", {"opcode": 0b0001111, "rs1": 0, "rs2": 0, "rd": 0, "instr_id": 0x26, "imm": 0}),
+        ("mul x1, x2, x3", {"opcode": 0b0110011, "rs1": 2, "rs2": 3, "rd": 1, "instr_id": 0x30}),
+        ("mulh x4, x5, x6", {"opcode": 0b0110011, "rs1": 5, "rs2": 6, "rd": 4, "instr_id": 0x31}),
+        ("mulhsu x7, x8, x9", {"opcode": 0b0110011, "rs1": 8, "rs2": 9, "rd": 7, "instr_id": 0x32}),
+        ("mulhu x10, x11, x12", {"opcode": 0b0110011, "rs1": 11, "rs2": 12, "rd": 10, "instr_id": 0x33}),
+        ("div x13, x14, x15", {"opcode": 0b0110011, "rs1": 14, "rs2": 15, "rd": 13, "instr_id": 0x34}),
+        ("divu x16, x17, x18", {"opcode": 0b0110011, "rs1": 17, "rs2": 18, "rd": 16, "instr_id": 0x35}),
+        ("rem x19, x20, x21", {"opcode": 0b0110011, "rs1": 20, "rs2": 21, "rd": 19, "instr_id": 0x36}),
+        ("remu x22, x23, x24", {"opcode": 0b0110011, "rs1": 23, "rs2": 24, "rd": 22, "instr_id": 0x37}),
     ]
 
     for instr, expected in instructions:
@@ -129,12 +160,16 @@ def runCocotbTests():
     instr_defines_file = os.path.join(rtl_dir, "instr_defines.vh")
     decoder_file = os.path.join(rtl_dir, "core_modules", "decoder.v")
 
-    run(
-        verilog_sources=[
-            decoder_file        
-        ],
-        toplevel="decoder",
-        module="test_decoder_gcc",
-        simulator="verilator",
-        includes=[str(incl_dir)],
-    )
+    tools_dir = os.path.join(root_dir, "tests", "tools")
+    python_dir = os.path.dirname(sys.executable)
+    with prepend_to_path(tools_dir, python_dir):
+        run(
+            verilog_sources=[
+                decoder_file        
+            ],
+            toplevel="decoder",
+            module="test_decoder_gcc",
+            simulator="verilator",
+            includes=[str(incl_dir)],
+            extra_env={"PYTHON3": sys.executable},
+        )

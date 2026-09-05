@@ -146,41 +146,40 @@ def compile_fibonacci():
 async def test_fibonacci_program(dut):
     """Test the Fibonacci program execution on the RISC-V CPU"""
     
+    log.info("Starting cocotb test: test_fibonacci_program")
     # Start clock (10ns period)
     clock = Clock(dut.clk, 10, units="ns")
     cocotb.start_soon(clock.start())
-    
+    log.info("Clock started")
     # Reset the design
     dut.rst.value = 1
+    log.info("Reset asserted")
     await ClockCycles(dut.clk, 5)
     dut.rst.value = 0
-    
+    log.info("Reset deasserted")
     # Expected Fibonacci sequence for N=10
     expected_sequence = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55]
-    
     # Monitor for CPU_DONE signal
     max_cycles = 10000  # Maximum cycles to run before timeout
     cpu_done = False
     data_values = []
-    
     # Track memory accesses
     mem_accesses = {}
-    
+    log.info("Entering simulation loop")
     for cycle in range(max_cycles):
         await RisingEdge(dut.clk)
-        
+        if cycle % 1000 == 0:
+            log.info(f"Cycle {cycle}...")
         # Check for memory writes
         if dut.cpu_mem_write_en.value:
             addr = int(dut.cpu_mem_write_addr.value)
             data = int(dut.cpu_mem_write_data.value)
             mem_accesses[addr] = data
             log.info(f"Cycle {cycle}: Memory write: addr=0x{addr:08x}, data=0x{data:08x}")
-            
             # Check if CPU_DONE flag was set
             if addr == CPU_DONE_ADDR and (data & 0xFF) == 1:
                 cpu_done = True
                 log.info("CPU_DONE flag set - program finished execution")
-                
             # Collect Fibonacci sequence values (byte writes)
             if FIBONACCI_START_ADDR <= addr < FIBONACCI_START_ADDR + 10:
                 index = addr - FIBONACCI_START_ADDR
@@ -193,9 +192,9 @@ async def test_fibonacci_program(dut):
                         data_values.append(0)
                     data_values[index] = value
                 log.info(f"Fibonacci[{index}] = {value}")
-        
         # Exit simulation once CPU_DONE is set and we've collected all values
         if cpu_done and len([x for x in data_values if x != 0]) >= 10:
+            log.info(f"Exiting simulation loop at cycle {cycle}")
             break
     
     # Verify results

@@ -2,7 +2,57 @@ import cocotb
 from cocotb.triggers import Timer
 import random
 import os
-from pathlib import Path
+import sys
+from contextlib import contextmanager
+
+MASK32 = 0xFFFFFFFF
+MASK64 = 0xFFFFFFFFFFFFFFFF
+
+
+def to_signed32(value: int) -> int:
+    """Interpret value as signed 32-bit integer."""
+    return value if value < 0x80000000 else value - 0x100000000
+
+
+def to_twos_complement(value: int, bits: int) -> int:
+    """Convert possibly negative integer to two's complement representation."""
+    return value & ((1 << bits) - 1)
+
+
+def signed_truncating_div(dividend: int, divisor: int) -> int:
+    """RISC-V DIV semantics: truncates toward zero."""
+    assert divisor != 0
+    negative = (dividend < 0) ^ (divisor < 0)
+    quotient = abs(dividend) // abs(divisor)
+    return -quotient if negative else quotient
+
+
+def signed_truncating_rem(dividend: int, divisor: int) -> int:
+    """RISC-V REM semantics: matches dividend sign."""
+    assert divisor != 0
+    quotient = signed_truncating_div(dividend, divisor)
+    return dividend - quotient * divisor
+
+
+@contextmanager
+def prepend_to_path(*path_entries: str):
+    """Temporarily prepend directories to PATH for simulator subprocesses."""
+    entries = [entry for entry in path_entries if entry]
+    if not entries:
+        yield
+        return
+
+    original_path = os.environ.get("PATH")
+    prefix = os.pathsep.join(entries)
+    new_path = prefix if not original_path else f"{prefix}{os.pathsep}{original_path}"
+    os.environ["PATH"] = new_path
+    try:
+        yield
+    finally:
+        if original_path is None:
+            os.environ.pop("PATH", None)
+        else:
+            os.environ["PATH"] = original_path
 
 # Helper function to verify ALU operation
 async def verify_alu_operation(dut, rs1, rs2, imm, instruction, pc_input, expected_output, operation_name):
@@ -144,6 +194,61 @@ async def test_immediate_operations(dut):
     await verify_alu_operation(dut, 0x80000000, 0, 1, 0x13, 0, 0, "SLTIU MSB high > low (unsigned)")
 
 @cocotb.test()
+async def test_m_extension_operations(dut):
+    """Test multiplication and division operations from the M extension."""
+    # MUL: signed * signed low word
+    await verify_alu_operation(
+        dut, 0x0000FFFF, 0x00001000, 0, 0x30, 0, (0x0000FFFF * 0x1000) & MASK32, "MUL simple")
+    await verify_alu_operation(
+        dut, 0xFFFFFFFF, 0x00000002, 0, 0x30, 0, (to_signed32(0xFFFFFFFF) * 2) & MASK32, "MUL negative operand")
+
+    # Prepare operands for high-word checks
+    rs1 = 0x80000000  # -2147483648
+    rs2 = 0x00000003
+    mul_signed = to_twos_complement(to_signed32(rs1) * to_signed32(rs2), 64)
+    mul_mixed = to_twos_complement(to_signed32(rs1) * rs2, 64)
+    mul_unsigned = to_twos_complement(rs1 * rs2, 64)
+
+    await verify_alu_operation(
+        dut, rs1, rs2, 0, 0x31, 0, (mul_signed >> 32) & MASK32, "MULH signed high")
+    await verify_alu_operation(
+        dut, rs1, rs2, 0, 0x32, 0, (mul_mixed >> 32) & MASK32, "MULHSU signed*unsigned high")
+    await verify_alu_operation(
+        dut, rs1, rs2, 0, 0x33, 0, (mul_unsigned >> 32) & MASK32, "MULHU unsigned high")
+
+    # DIV signed
+    await verify_alu_operation(
+        dut, 0xFFFFFFFE, 0x00000002, 0, 0x34, 0,
+        to_twos_complement(signed_truncating_div(to_signed32(0xFFFFFFFE), to_signed32(0x2)), 32),
+        "DIV negative dividend")
+    await verify_alu_operation(
+        dut, 0x80000000, 0xFFFFFFFF, 0, 0x34, 0, 0x80000000, "DIV overflow INT_MIN / -1")
+    await verify_alu_operation(
+        dut, 0x12345678, 0, 0, 0x34, 0, 0xFFFFFFFF, "DIV divide by zero")
+
+    # DIVU unsigned
+    await verify_alu_operation(
+        dut, 0x80000000, 0x00000002, 0, 0x35, 0, (0x80000000 // 2) & MASK32, "DIVU simple")
+    await verify_alu_operation(
+        dut, 0x80000000, 0x0, 0, 0x35, 0, 0xFFFFFFFF, "DIVU divide by zero")
+
+    # REM signed
+    await verify_alu_operation(
+        dut, 0xFFFFFFFE, 0x00000003, 0, 0x36, 0,
+        to_twos_complement(signed_truncating_rem(to_signed32(0xFFFFFFFE), to_signed32(0x3)), 32),
+        "REM negative dividend")
+    await verify_alu_operation(
+        dut, 0x80000000, 0xFFFFFFFF, 0, 0x36, 0, 0x00000000, "REM overflow INT_MIN % -1")
+    await verify_alu_operation(
+        dut, 0x89ABCDEF, 0x0, 0, 0x36, 0, 0x89ABCDEF, "REM divide by zero")
+
+    # REMU unsigned
+    await verify_alu_operation(
+        dut, 0x12345678, 0x00000010, 0, 0x37, 0, (0x12345678 % 0x10) & MASK32, "REMU simple")
+    await verify_alu_operation(
+        dut, 0x12345678, 0x0, 0, 0x37, 0, 0x12345678, "REMU divide by zero")
+
+@cocotb.test()
 async def test_default(dut):
     """Test default operation (should output zero)"""
     await verify_alu_operation(dut, 0x1234, 0x8765, 0xABCDE, 0, 0x100, 0, "DEFAULT")
@@ -226,10 +331,14 @@ def runCocotbTests():
     incl_dir = os.path.join(rtl_dir, "include")
     verilog_file = os.path.join(rtl_dir, "core_modules", "alu.v")
     
-    run(
-        verilog_sources=[verilog_file],
-        toplevel="alu",
-        module="test_alu",
-        simulator="verilator",
-        includes=[incl_dir]
-    )
+    tools_dir = os.path.join(root_dir, "tests", "tools")
+    python_dir = os.path.dirname(sys.executable)
+    with prepend_to_path(tools_dir, python_dir):
+        run(
+            verilog_sources=[verilog_file],
+            toplevel="alu",
+            module="test_alu",
+            simulator="verilator",
+            includes=[incl_dir],
+            extra_env={"PYTHON3": sys.executable},
+        )
