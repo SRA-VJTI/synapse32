@@ -8,6 +8,7 @@ RUN apt-get update && \
         automake \
         autotools-dev \
         binutils-riscv64-linux-gnu \
+        binutils-riscv64-unknown-elf \
         bc \
         bison \
         bzip2 \
@@ -19,6 +20,7 @@ RUN apt-get update && \
         g++ \
         gawk \
         gcc-riscv64-linux-gnu \
+        gcc-riscv64-unknown-elf \
         git \
         gperf \
         iverilog \

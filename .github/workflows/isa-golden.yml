@@ -111,7 +111,13 @@ jobs:
           )
           printf 'Building %d riscv-tests targets:\n' "${#targets[@]}"
           printf '  %s\n' "${targets[@]}" | sort
-          make -j"$(nproc)" XLEN=32 "${targets[@]}"
+          # Ubuntu installs picolibc headers outside GCC's default search path.
+          # The -v- runtime provides its own libc functions, but needs the headers.
+          picolibc_include=/usr/lib/picolibc/riscv64-unknown-elf/include
+          test -f "$picolibc_include/string.h"
+          make -j"$(nproc)" XLEN=32 \
+            RISCV_GCC="riscv64-unknown-elf-gcc -isystem $picolibc_include" \
+            "${targets[@]}"
           ls -1 rv32mi-p-* rv32si-p-* rv32ui-v-* > /dev/null
 
       - name: Verify tools
