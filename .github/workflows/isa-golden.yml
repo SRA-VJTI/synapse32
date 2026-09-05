@@ -27,12 +27,14 @@ on:
 jobs:
   spike-golden:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 180
     env:
       RISCV: /usr
       SPIKE_PREFIX: ${{ github.workspace }}/.cache/spike-install
       RISCV_TESTS_DIR: ${{ github.workspace }}/.cache/riscv-tests
       RISCV_TEST_SUITES: rv32ui rv32um rv32ua rv32mi rv32si
+      # Suites that also define -v- variants (S-mode under Sv32 paging).
+      RISCV_TEST_VM_SUITES: rv32ui rv32um rv32ua
       TEST_LIMIT: ${{ github.event.inputs.test_limit || '0' }}
       MAX_CYCLES: ${{ github.event.inputs.max_cycles || '200000' }}
 
@@ -91,7 +93,7 @@ jobs:
           autoconf
           ./configure --prefix="$RISCV_TESTS_DIR/install"
           cd isa
-          mapfile -t p_targets < <(
+          mapfile -t targets < <(
             for suite in $RISCV_TEST_SUITES; do
               for f in "$suite"/*.S; do
                 d="$(dirname "$f")"
@@ -99,11 +101,18 @@ jobs:
                 echo "${d}-p-${b}"
               done
             done
+            for suite in $RISCV_TEST_VM_SUITES; do
+              for f in "$suite"/*.S; do
+                d="$(dirname "$f")"
+                b="$(basename "$f" .S)"
+                echo "${d}-v-${b}"
+              done
+            done
           )
-          printf 'Building %d riscv-tests targets:\n' "${#p_targets[@]}"
-          printf '  %s\n' "${p_targets[@]}" | sort
-          make -j"$(nproc)" XLEN=32 "${p_targets[@]}"
-          ls -1 rv32mi-p-* rv32si-p-*
+          printf 'Building %d riscv-tests targets:\n' "${#targets[@]}"
+          printf '  %s\n' "${targets[@]}" | sort
+          make -j"$(nproc)" XLEN=32 "${targets[@]}"
+          ls -1 rv32mi-p-* rv32si-p-* rv32ui-v-* > /dev/null
 
       - name: Verify tools
         run: |

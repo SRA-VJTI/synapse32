@@ -69,8 +69,12 @@ async def test_riscv_isa_image(dut):
                 int(dut.cpu_store_page_fault.value),
                 int(dut.cpu_page_fault_addr.value),
             )
-        if int(dut.cpu_mem_write_en.value):
-            addr = int(dut.cpu_mem_write_addr.value)
+        if int(dut.cpu_mem_write_en.value) and not int(dut.cpu_store_page_fault.value):
+            # Match on the post-MMU physical address. The -p- tests run with
+            # satp=0 so this equals the virtual address, but the -v- tests run
+            # under Sv32 and store to tohost through a kernel alias, whose
+            # virtual address never equals the ELF symbol address.
+            addr = int(dut.phys_data_addr.value)
             data = int(dut.cpu_mem_write_data.value) & 0xFFFFFFFF
             if addr == tohost_addr and (data & 1):
                 # riscv-tests convention: 1 = pass, else fail code in upper bits.

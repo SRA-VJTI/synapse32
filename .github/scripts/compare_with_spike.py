@@ -2,7 +2,8 @@
 """Compare riscv-tests results between Spike (golden) and Verilator model.
 
 Assumes riscv-tests has already been built, producing ELF binaries under:
-  <riscv-tests>/isa/rv32*-p-*
+  <riscv-tests>/isa/rv32*-p-*   (machine mode, no translation)
+  <riscv-tests>/isa/rv32*-v-*   (supervisor mode under Sv32 paging)
 
 Usage:
   python .github/scripts/compare_with_spike.py --riscv-tests /path/to/riscv-tests
@@ -19,8 +20,11 @@ from pathlib import Path
 
 
 DEFAULT_SUITES = "rv32ui,rv32um,rv32ua,rv32mi,rv32si"
-TEST_NAME_RE = re.compile(r"^(rv32(ui|um|ua|mi|si))-p-[A-Za-z0-9_-]+$")
-SPIKE_ISA = "rv32ima_zicsr_zicntr"
+# The -v- variants run the same bodies in S-mode with Sv32 translation on;
+# only rv32ui/um/ua define them upstream.
+TEST_NAME_RE = re.compile(r"^(rv32(ui|um|ua|mi|si))-[pv]-[A-Za-z0-9_-]+$")
+# zifencei: the -v- environment issues fence.i, and the core implements Zifencei.
+SPIKE_ISA = "rv32ima_zicsr_zifencei_zicntr"
 
 
 def parse_suites(suites: str) -> set[str]:
@@ -85,6 +89,13 @@ def elf_to_hex(elf: Path, out_hex: Path) -> None:
     rc = run(["riscv64-unknown-elf-objcopy", "-O", "binary", str(elf), str(bin_file)])
     if rc.returncode != 0:
         raise RuntimeError(f"objcopy binary failed for {elf}:\n{rc.stderr}")
+    # objcopy --reverse-bytes=4 refuses a section whose length is not a
+    # multiple of 4 (e.g. rv32ui-v-sb, rv32ui-v-ma_data). The image is loaded
+    # into a 32-bit word array, so pad the tail out to a whole word.
+    size = bin_file.stat().st_size
+    if size % 4:
+        with bin_file.open("ab") as handle:
+            handle.write(b"\x00" * (4 - size % 4))
     rc = run(
         [
             "riscv64-unknown-elf-objcopy",
@@ -144,7 +155,7 @@ def main() -> int:
     require_suites(all_tests, suites)
     tests = all_tests[: args.limit] if args.limit > 0 else all_tests
     if not tests:
-        print("No rv32*-p-* test binaries found. Did riscv-tests build succeed?", file=sys.stderr)
+        print("No rv32*-[pv]-* test binaries found. Did riscv-tests build succeed?", file=sys.stderr)
         return 2
 
     out_hex_dir = repo_root / ".github" / "artifacts" / "isa" / "build_hex"
