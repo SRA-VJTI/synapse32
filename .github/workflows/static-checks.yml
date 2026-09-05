@@ -1,0 +1,51 @@
+name: Static Checks
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  static:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y verilator device-tree-compiler
+
+      - name: Show tool versions
+        run: |
+          verilator --version
+          dtc --version
+
+      - name: Lint full RTL top with Verilator
+        run: |
+          mapfile -t sources < <(find rtl -name '*.v' -o -name '*.sv' | sort)
+          printf 'Linting %d RTL sources against top module "top"\n' "${#sources[@]}"
+          verilator --lint-only --top-module top -Irtl/include -Irtl "${sources[@]}"
+
+      - name: Compile device tree
+        run: dtc -I dts -O dtb -o /dev/null sim/synapse32.dts
+
+      - name: Check shell scripts parse
+        run: |
+          shopt -s nullglob
+          for script in sim/*.sh; do
+            echo "bash -n $script"
+            bash -n "$script"
+          done
+
+      - name: Check Python sources compile
+        run: |
+          python3 -m compileall -q \
+            .github/scripts \
+            sim/linux_tty.py \
+            sim/opensbi_uart.py \
+            tests
