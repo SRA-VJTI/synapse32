@@ -13,6 +13,9 @@ flowchart LR
         UMEM["unified_mem\n(instr + data RAM)"]
         TIMER["timer"]
         UART["uart"]
+        PLIC["plic"]
+        IRQ_OR["External IRQ OR"]
+        EXT_IRQ["external_interrupt input"]
     end
 
     CPU -- "module_pc_out" --> UMEM
@@ -22,13 +25,19 @@ flowchart LR
     DECODE -- "RAM region" --> UMEM
     DECODE -- "TIMER region" --> TIMER
     DECODE -- "UART region" --> UART
+    DECODE -- "PLIC region" --> PLIC
 
     UMEM -- "read_data" --> RMUX
     TIMER -- "read_data" --> RMUX
     UART -- "read_data" --> RMUX
+    PLIC -- "plic_read_data" --> RMUX
     RMUX -- "module_read_data_in" --> CPU
 
     TIMER -- "timer_interrupt" --> CPU
+    UART -- "uart_interrupt" --> PLIC
+    PLIC -- "plic_interrupt" --> IRQ_OR
+    EXT_IRQ --> IRQ_OR
+    IRQ_OR -- "external_interrupt_combined" --> CPU
 ```
 
 ## CPU Datapath (`riscv_cpu.v`)
@@ -70,9 +79,10 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    M0["0x8000_0000 - 0x8007_FFFF\nInstruction RAM region"]
+    M0["0x8000_0000 - 0x83FF_FFFF\nInstruction RAM region (64 MB)"]
     M1["0x1000_0000 - 0x100F_FFFF\nData RAM region"]
     M2["0x0200_4000 - 0x0200_BFFF\nTimer region"]
     M3["0x2000_0000 - 0x2000_0FFF\nUART region"]
+    M4["0x0C00_0000 - 0x0C3F_FFFF\nPLIC region"]
 ```
 
