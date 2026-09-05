@@ -8,6 +8,7 @@ module riscv_cpu (
     output wire [31:0] module_wr_data_out,
     output wire module_mem_wr_en,
     output wire module_mem_rd_en,
+    input wire  stall,
     output wire [31:0] module_read_addr,
     output wire [31:0] module_write_addr,
     output wire [3:0] module_write_byte_enable,  // Write byte enables
@@ -24,6 +25,7 @@ module riscv_cpu (
     wire pc_inst0_j_signal;
     wire [31:0] pc_inst0_jump;
     wire stall_pipeline; // For load-use hazards
+
     // Branch handling: use EX stage jump signal/address
     assign pc_inst0_j_signal = ex_inst0_jump_signal_out;
     assign pc_inst0_jump = ex_inst0_jump_addr_out;
@@ -32,7 +34,7 @@ module riscv_cpu (
         .rst(rst),
         .j_signal(pc_inst0_j_signal),
         .jump(pc_inst0_jump),
-        .stall(stall_pipeline), // Stall on load-use hazard
+        .stall(stall_pipeline || stall), // Stall on load-use hazard
         .out(pc_inst0_out)
     );
 
@@ -51,7 +53,7 @@ module riscv_cpu (
         .rst(rst),
         .pc_in(pc_inst0_out),
         .instruction_in(branch_flush ? 32'h13 : module_instr_in),
-        .stall(stall_pipeline), // Stall on load-use hazard
+        .stall(stall_pipeline || stall), // Stall on load-use hazard or cache miss
         .pc_out(if_id_pc_out),
         .instruction_out(if_id_instr_out)
     );
@@ -151,7 +153,7 @@ module riscv_cpu (
         .pc_in(if_id_pc_out),
         .rs1_value_in(rf_inst0_rs1_value_out),
         .rs2_value_in(rf_inst0_rs2_value_out),
-        .stall(pipeline_flush || stall_pipeline), // Use combined flush
+        .stall(pipeline_flush || stall_pipeline || stall), // Use combined flush or stall on cache miss
         .rs1_valid_out(id_ex_inst0_rs1_valid_out),
         .rs2_valid_out(id_ex_inst0_rs2_valid_out),
         .rd_valid_out(id_ex_inst0_rd_valid_out),

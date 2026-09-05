@@ -1,4 +1,4 @@
-// Memory mapped addresses
+//memory mapped address
 #define UART_BASE       0x20000000
 #define UART_DATA       (UART_BASE + 0x00)
 #define UART_STATUS     (UART_BASE + 0x04)

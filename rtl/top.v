@@ -30,6 +30,8 @@ module top (
     wire [3:0] cpu_write_byte_enable;  // Write byte enables
     wire [2:0] cpu_load_type;          // Load type
     wire [31:0] instr_read_data;
+
+    wire stall;
     
     // Timer module wires
     wire [31:0] timer_read_data;
@@ -84,7 +86,8 @@ module top (
         .module_read_addr(cpu_mem_read_addr),
         .module_write_addr(cpu_mem_write_addr),
         .module_write_byte_enable(cpu_write_byte_enable),
-        .module_load_type(cpu_load_type)
+        .module_load_type(cpu_load_type),
+        .stall(stall)
     );
 
     // Instantiate instruction memory
@@ -101,19 +104,30 @@ module top (
     );
 
     // Instantiate data memory  
-    data_mem #(
+    cache_fsm #(
         .DATA_WIDTH(32),
-        .ADDR_WIDTH(32),
+        .ADDRESS_WIDTH(32),
+        .SETS(256),
+        .TAG_WIDTH(18),
+        .SET_WIDTH(8),
+        .OFFSET_WIDTH(4),
+        .WAY(4),
+        .BYTE_OFFSET(2),
+        .WORDS_PER_BLOCK(16),
+        .BYTES_PER_WORD(4),
+        .CACHE_SIZE(1024),
         .MEM_SIZE(1048576)  // 1MB in bytes
     ) data_mem_inst (
         .clk(clk),
-        .wr_en(cpu_mem_write_en && data_mem_access),
-        .rd_en(cpu_mem_read_en && data_mem_access),
-        .write_byte_enable(cpu_write_byte_enable),
+        .reset(rst),
+        .write_en(cpu_mem_write_en && data_mem_access),
+        .read_en(cpu_mem_read_en && data_mem_access),
+        .write_bytes_enable(cpu_write_byte_enable),
         .load_type(cpu_load_type),
-        .addr(data_mem_addr - `DATA_MEM_BASE),
-        .wr_data(cpu_mem_write_data),
-        .rd_data_out(data_mem_read_data)
+        .mem_add(data_mem_addr - `DATA_MEM_BASE),
+        .data_in(cpu_mem_write_data),
+        .data_out(data_mem_read_data),
+        .stall(stall)
     );
     
     // Instantiate timer module

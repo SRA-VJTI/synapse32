@@ -1,6 +1,6 @@
 `default_nettype none
 `include "memory_map.vh"
-
+//This module is obsolete now, the main memory is included in the cache itself
 // data_mem.v - byte-addressable data memory for RISC-V CPU
 
 module data_mem #(parameter DATA_WIDTH = 32, ADDR_WIDTH = 32, MEM_SIZE = 1048576) ( // 1MB = 1024*1024 bytes
