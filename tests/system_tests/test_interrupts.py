@@ -400,10 +400,10 @@ def run_timer_interrupt_test():
     
     # Main program - sets up timer and waits for interrupt
     main_program = [
-        # Setup interrupt vector - point to our handler at instruction address 0x100 (byte 0x400)
-        0x00000137,  # lui x2, 0x0           # Set x2 = 0x00000000 
-        0x10010113,  # addi x2, x2, 0x100    # x2 = 0x00000100 (handler at instruction 64, byte 0x100)
-        0x30511073,  # csrw mtvec, x2        # Set mtvec = 0x100 (direct mode)
+        # Setup interrupt vector to 0x80000100 where handler is placed.
+        0x80000137,  # lui x2, 0x80000       # Set x2 = 0x80000000
+        0x10010113,  # addi x2, x2, 0x100    # x2 = 0x80000100 (handler at instruction 64, byte 0x100)
+        0x30511073,  # csrw mtvec, x2        # Set mtvec = 0x80000100 (direct mode)
         
         # Enable timer interrupts  
         0x08000093,  # addi x1, x0, 128      # Set x1 = 0x80 (MTIE bit)
@@ -472,7 +472,8 @@ def run_timer_interrupt_test():
 def run_wfi_interrupt_test():
     """Create program that executes WFI and resumes after a SW interrupt."""
     main_program = [
-        0x10000093,  # addi x1, x0, 0x100   # mtvec = 0x100
+        0x800000b7,  # lui x1, 0x80000      # x1 = 0x80000000
+        0x10008093,  # addi x1, x1, 0x100   # mtvec = 0x80000100
         0x30509073,  # csrw mtvec, x1
         0x00800093,  # addi x1, x0, 8       # MSIE
         0x30409073,  # csrw mie, x1
@@ -549,10 +550,7 @@ def runCocotbTests():
             plus_args = [f"+dumpfile={waveform_path}"]
         
         # Create unique sim_build directory for each test to force recompilation
-        #make dir sim_build
-        if not os.path.exists(os.path.join(curr_dir, "sim_build")):
-            os.makedirs(os.path.join(curr_dir, "sim_build"))
-        sim_build_dir = os.path.join(curr_dir, "sim_build", f"sim_build_{test_name}")
+        sim_build_dir = os.path.join(curr_dir, f"sim_build_{test_name}")
         
         # Clean up previous sim_build for this test to force recompilation
         if os.path.exists(sim_build_dir):
@@ -570,6 +568,12 @@ def runCocotbTests():
             plus_args=plus_args,
             sim_build=sim_build_dir,
             force_compile=True,
+            extra_env={
+                "TOPLEVEL": "top",
+                "MODULE": "test_interrupts",
+                "COCOTB_TOPLEVEL": "top",
+                "COCOTB_TEST_MODULES": "test_interrupts",
+            },
         )
 
 if __name__ == "__main__":

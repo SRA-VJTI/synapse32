@@ -3,6 +3,9 @@ from cocotb.triggers import RisingEdge, Timer
 from cocotb.clock import Clock
 import pytest
 
+RESET_PC_BASE = 0x80000000
+
+
 @cocotb.test()
 async def test_riscv_cpu_raw_hazards(dut):
     """Test for RAW hazards - when an instruction needs register data from previous instructions"""
@@ -177,7 +180,10 @@ async def run_test_program(dut, instr_mem):
     
     # Simulate instruction memory fetch
     def get_instr(pc):
-        idx = pc // 4
+        if pc >= RESET_PC_BASE:
+            idx = (pc - RESET_PC_BASE) // 4
+        else:
+            idx = pc // 4
         if 0 <= idx < len(instr_mem):
             return instr_mem[idx]
         return 0
@@ -194,7 +200,10 @@ async def run_test_program(dut, instr_mem):
         
         # Track what's in each pipeline stage
         if current_instr != 0:
-            instr_idx = pc // 4
+            if pc >= RESET_PC_BASE:
+                instr_idx = (pc - RESET_PC_BASE) // 4
+            else:
+                instr_idx = pc // 4
             pipeline_tracker.append({
                 'cycle': cycle,
                 'pc': pc,
