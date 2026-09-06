@@ -29,6 +29,7 @@ jobs:
       - name: Run tests in DevContainer
         uses: devcontainers/ci@v0.3
         with:
+          configFile: .devcontainer/ci.json
           runCmd: |
             verilator --version
             verilator --version | grep -E '^Verilator 5\.'

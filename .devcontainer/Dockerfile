@@ -46,17 +46,17 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Build a native rv32ima+ilp32 Linux toolchain (gcc + glibc) from riscv-gnu-toolchain.
-# This is the only reliable way to get rv32+ilp32 userspace binaries; no Ubuntu package
-# provides rv32 multilib or an ilp32 glibc sysroot.
-RUN git clone --depth 1 https://github.com/riscv-collab/riscv-gnu-toolchain /tmp/riscv-gnu-toolchain && \
-    cd /tmp/riscv-gnu-toolchain && \
-    ./configure \
-        --prefix=/opt/riscv32 \
-        --with-arch=rv32ima \
-        --with-abi=ilp32 && \
-    make linux -j"$(( $(nproc) < 4 ? $(nproc) : 4 ))" && \
-    rm -rf /tmp/riscv-gnu-toolchain
+# Building a native rv32ima+ilp32 Linux toolchain from source takes about
+# 45 minutes in GitHub Actions. Keep it opt-in for Linux bring-up images; the
+# CI image only needs the packaged bare-metal toolchain below.
+ARG BUILD_RV32_LINUX_TOOLCHAIN=1
+RUN if [ "$BUILD_RV32_LINUX_TOOLCHAIN" = "1" ]; then \
+      git clone --depth 1 https://github.com/riscv-collab/riscv-gnu-toolchain /tmp/riscv-gnu-toolchain && \
+      cd /tmp/riscv-gnu-toolchain && \
+      ./configure --prefix=/opt/riscv32 --with-arch=rv32ima --with-abi=ilp32 && \
+      make linux -j"$(( $(nproc) < 4 ? $(nproc) : 4 ))" && \
+      rm -rf /tmp/riscv-gnu-toolchain; \
+    fi
 
 ENV PATH="/opt/riscv32/bin:${PATH}"
 
