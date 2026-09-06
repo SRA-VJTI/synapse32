@@ -10,6 +10,19 @@ from cocotb.utils import get_sim_time
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
+
+async def uart_send_byte(dut, byte, baud_cycles=None):
+    """Drive one 8N1 byte using the divisor currently programmed in the DUT."""
+    if baud_cycles is None:
+        baud_cycles = int(dut.uart_inst.baud_div.value) + 1
+    dut.uart_rx.value = 0
+    await ClockCycles(dut.clk, baud_cycles)
+    for bit in range(8):
+        dut.uart_rx.value = (byte >> bit) & 1
+        await ClockCycles(dut.clk, baud_cycles)
+    dut.uart_rx.value = 1
+    await ClockCycles(dut.clk, baud_cycles)
+
 # NS16550 UART register addresses (reg_shift=2, 4-byte offsets)
 UART_BASE    = 0x20000000
 UART_THR     = UART_BASE + 0x00  # Transmit Holding Register (DLAB=0)
@@ -278,6 +291,204 @@ def run_uart_status_test():
     hex_file = create_uart_test_hex(test_name, instr_mem)
     return test_name, hex_file
 
+def run_uart_fifo_burst_test():
+    """Create assembly that writes a burst through THR without per-byte polling."""
+
+    message = "PANIC TRACE!\r\n"
+    instr_mem = [
+        0x20000137,  # lui x2, 0x20000       # x2 = UART_BASE
+        0x020001b7,  # lui x3, 0x2000        # x3 = data memory base
+
+        # NS16550 init: LCR=0x83 (DLAB=1)
+        0x08300093,  # addi x1, x0, 0x83
+        0x00112623,  # sw x1, 12(x2)
+
+        # DLL=10, DLH=0
+        0x00a00093,  # addi x1, x0, 10
+        0x00112023,  # sw x1, 0(x2)
+        0x00000093,  # addi x1, x0, 0
+        0x00112223,  # sw x1, 4(x2)
+
+        # LCR=0x03 (DLAB=0), FCR=0x07
+        0x00300093,  # addi x1, x0, 3
+        0x00112623,  # sw x1, 12(x2)
+        0x00700093,  # addi x1, x0, 7
+        0x00112423,  # sw x1, 8(x2)
+    ]
+
+    for ch in message:
+        instr_mem.extend([
+            0x00000093 | (ord(ch) << 20),  # addi x1, x0, imm
+            0x00112023,                    # sw x1, 0(x2)
+        ])
+
+    # Poll until TEMT (LSR bit6) reports the transmitter is fully empty.
+    instr_mem.extend([
+        0x01412083,  # lw x1, 20(x2)
+        0x0400f093,  # andi x1, x1, 64
+        0xfe008ce3,  # beq x1, x0, -8
+
+        # Store completion flag
+        0x00100093,  # addi x1, x0, 1
+        0x0011a023,  # sw x1, 0(x3)
+
+        # Infinite loop
+        0x0000006f,
+    ])
+
+    test_name = "uart_fifo_burst"
+    hex_file = create_uart_test_hex(test_name, instr_mem)
+    return test_name, hex_file
+
+def run_uart_fifo_status_test():
+    """Verify FIFO mode drives THRE/TEMT low once data is queued."""
+
+    instr_mem = [
+        0x20000137,  # lui x2, 0x20000       # x2 = UART_BASE
+        0x020001b7,  # lui x3, 0x2000        # x3 = data memory base
+
+        # NS16550 init: LCR=0x83 (DLAB=1)
+        0x08300093,  # addi x1, x0, 0x83
+        0x00112623,  # sw x1, 12(x2)
+
+        # DLL=10, DLH=0
+        0x00a00093,  # addi x1, x0, 10
+        0x00112023,  # sw x1, 0(x2)
+        0x00000093,  # addi x1, x0, 0
+        0x00112223,  # sw x1, 4(x2)
+
+        # LCR=0x03 (DLAB=0), FCR=0x07
+        0x00300093,  # addi x1, x0, 3
+        0x00112623,  # sw x1, 12(x2)
+        0x00700093,  # addi x1, x0, 7
+        0x00112423,  # sw x1, 8(x2)
+
+        # Read initial LSR (expect THRE=1/TEMT=1)
+        0x01412083,  # lw x1, 20(x2)
+        0x0011a023,  # sw x1, 0(x3)
+
+        # Queue one byte and immediately sample LSR again.
+        0x04100093,  # addi x1, x0, 'A'
+        0x00112023,  # sw x1, 0(x2)
+        0x01412083,  # lw x1, 20(x2)
+        0x0011a223,  # sw x1, 4(x3)
+
+        # Wait until transmitter fully empties, then sample once more.
+        0x01412083,  # lw x1, 20(x2)
+        0x0400f093,  # andi x1, x1, 64
+        0xfe008ce3,  # beq x1, x0, -8
+        0x01412083,  # lw x1, 20(x2)
+        0x0011a423,  # sw x1, 8(x3)
+
+        # Completion flag
+        0x00100093,  # addi x1, x0, 1
+        0x0011a623,  # sw x1, 12(x3)
+        0x0000006f,
+    ]
+
+    test_name = "uart_fifo_status"
+    hex_file = create_uart_test_hex(test_name, instr_mem)
+    return test_name, hex_file
+
+def run_uart_fifo_group_burst_test():
+    """Send multiple 16-byte FIFO bursts, waiting on THRE between groups."""
+
+    poll_thre = [0x01412083, 0x0200f093, 0xfe008ce3]
+    message = "ABCDEFGHIJKLMNOPabcdefghijklmnop"
+    assert len(message) == 32
+
+    instr_mem = [
+        0x20000137,  # lui x2, 0x20000       # x2 = UART_BASE
+        0x020001b7,  # lui x3, 0x2000        # x3 = data memory base
+
+        # NS16550 init: LCR=0x83 (DLAB=1)
+        0x08300093,  # addi x1, x0, 0x83
+        0x00112623,  # sw x1, 12(x2)
+
+        # DLL=10, DLH=0
+        0x00a00093,  # addi x1, x0, 10
+        0x00112023,  # sw x1, 0(x2)
+        0x00000093,  # addi x1, x0, 0
+        0x00112223,  # sw x1, 4(x2)
+
+        # LCR=0x03 (DLAB=0), FCR=0x07
+        0x00300093,  # addi x1, x0, 3
+        0x00112623,  # sw x1, 12(x2)
+        0x00700093,  # addi x1, x0, 7
+        0x00112423,  # sw x1, 8(x2)
+    ]
+
+    for group_start in range(0, len(message), 16):
+        instr_mem.extend(poll_thre)
+        for ch in message[group_start:group_start + 16]:
+            instr_mem.extend([
+                0x00000093 | (ord(ch) << 20),  # addi x1, x0, imm
+                0x00112023,                    # sw x1, 0(x2)
+            ])
+
+    instr_mem.extend([
+        # Poll until TEMT reports the transmitter is fully empty.
+        0x01412083,  # lw x1, 20(x2)
+        0x0400f093,  # andi x1, x1, 64
+        0xfe008ce3,  # beq x1, x0, -8
+
+        0x00100093,  # addi x1, x0, 1
+        0x0011a023,  # sw x1, 0(x3)
+        0x0000006f,
+    ])
+
+    test_name = "uart_fifo_group_burst"
+    hex_file = create_uart_test_hex(test_name, instr_mem)
+    return test_name, hex_file
+
+def run_uart_rx_test():
+    """Create assembly that waits for one RX byte and stores it to memory."""
+
+    instr_mem = [
+        0x20000137,  # lui x2, 0x20000       # x2 = UART_BASE
+        0x020001b7,  # lui x3, 0x2000        # x3 = data memory base
+
+        # NS16550 init: LCR=0x83 (DLAB=1)
+        0x08300093,  # addi x1, x0, 0x83
+        0x00112623,  # sw x1, 12(x2)
+
+        # DLL=10, DLH=0
+        0x00a00093,  # addi x1, x0, 10
+        0x00112023,  # sw x1, 0(x2)
+        0x00000093,  # addi x1, x0, 0
+        0x00112223,  # sw x1, 4(x2)
+
+        # LCR=0x03 (DLAB=0), FCR=0x07
+        0x00300093,  # addi x1, x0, 3
+        0x00112623,  # sw x1, 12(x2)
+        0x00700093,  # addi x1, x0, 7
+        0x00112423,  # sw x1, 8(x2)
+
+        # Poll LSR[0] (DR) until data ready
+        0x01412083,  # lw x1, 20(x2)
+        0x0010f093,  # andi x1, x1, 1
+        0xfe008ce3,  # beq x1, x0, -8
+
+        # Read RBR and store to memory
+        0x00012083,  # lw x1, 0(x2)
+        0x0011a023,  # sw x1, 0(x3)
+
+        # Read LSR again and store to verify DR cleared
+        0x01412083,  # lw x1, 20(x2)
+        0x0011a223,  # sw x1, 4(x3)
+
+        # Completion flag
+        0x00100093,  # addi x1, x0, 1
+        0x0011a423,  # sw x1, 8(x3)
+
+        # Infinite loop
+        0x0000006f,
+    ]
+
+    test_name = "uart_rx"
+    hex_file = create_uart_test_hex(test_name, instr_mem)
+    return test_name, hex_file
+
 async def monitor_cpu_execution(dut, test_name, max_cycles=1000):
     """Monitor CPU execution and return memory writes"""
     mem_writes = {}
@@ -415,6 +626,143 @@ async def test_uart_status_register(dut):
     
     log.info("UART status register test passed!")
 
+@cocotb.test()
+async def test_uart_fifo_burst(dut):
+    """Verify FIFO-enabled back-to-back THR writes are not dropped."""
+    log.info("Starting UART FIFO burst test...")
+
+    clock = Clock(dut.clk, 20, units="ns")
+    cocotb.start_soon(clock.start())
+
+    dut.timer_interrupt.value = 0
+    dut.software_interrupt.value = 0
+    dut.external_interrupt.value = 0
+    dut.rst.value = 1
+    await ClockCycles(dut.clk, 5)
+    dut.rst.value = 0
+
+    uart_monitor = UartMonitor(dut.uart_tx, dut.clk, baud_rate=5000000)
+    monitor_task = cocotb.start_soon(uart_monitor.start_monitoring())
+
+    mem_writes = await monitor_cpu_execution(dut, "uart_fifo_burst", max_cycles=2000)
+    await ClockCycles(dut.clk, 300)
+
+    completion_found = 0x02000000 in mem_writes and mem_writes[0x02000000] == 1
+    assert completion_found, "Program completion flag not found"
+
+    received_string = uart_monitor.get_received_string()
+    log.info(f"UART received: '{received_string}'")
+    assert "PANIC TRACE!" in received_string, (
+        f"Expected burst text in UART output, got '{received_string}'"
+    )
+
+    log.info("UART FIFO burst test passed!")
+
+@cocotb.test()
+async def test_uart_fifo_status(dut):
+    """Verify FIFO mode clears THRE/TEMT while bytes remain queued."""
+    log.info("Starting UART FIFO status test...")
+
+    clock = Clock(dut.clk, 20, units="ns")
+    cocotb.start_soon(clock.start())
+
+    dut.timer_interrupt.value = 0
+    dut.software_interrupt.value = 0
+    dut.external_interrupt.value = 0
+    dut.rst.value = 1
+    await ClockCycles(dut.clk, 5)
+    dut.rst.value = 0
+
+    mem_writes = await monitor_cpu_execution(dut, "uart_fifo_status", max_cycles=2000)
+
+    initial_lsr = mem_writes.get(0x02000000)
+    queued_lsr = mem_writes.get(0x02000004)
+    final_lsr = mem_writes.get(0x02000008)
+    completion = mem_writes.get(0x0200000C)
+
+    assert completion == 1, "Program completion flag not found"
+    assert initial_lsr is not None and (initial_lsr & 0x60) == 0x60, (
+        f"Expected THRE/TEMT high before FIFO write, got 0x{initial_lsr:02x}"
+    )
+    assert queued_lsr is not None and (queued_lsr & 0x60) == 0x00, (
+        f"Expected THRE/TEMT low with queued FIFO data, got 0x{queued_lsr:02x}"
+    )
+    assert final_lsr is not None and (final_lsr & 0x60) == 0x60, (
+        f"Expected THRE/TEMT high after drain, got 0x{final_lsr:02x}"
+    )
+
+    log.info("UART FIFO status test passed!")
+
+@cocotb.test()
+async def test_uart_fifo_group_burst(dut):
+    """Verify FIFO bursts preserve data across multiple 16-byte groups."""
+    log.info("Starting UART FIFO group burst test...")
+
+    clock = Clock(dut.clk, 20, units="ns")
+    cocotb.start_soon(clock.start())
+
+    dut.timer_interrupt.value = 0
+    dut.software_interrupt.value = 0
+    dut.external_interrupt.value = 0
+    dut.rst.value = 1
+    await ClockCycles(dut.clk, 5)
+    dut.rst.value = 0
+
+    uart_monitor = UartMonitor(dut.uart_tx, dut.clk, baud_rate=5000000)
+    cocotb.start_soon(uart_monitor.start_monitoring())
+
+    mem_writes = await monitor_cpu_execution(dut, "uart_fifo_group_burst", max_cycles=6000)
+    await ClockCycles(dut.clk, 500)
+
+    completion_found = 0x02000000 in mem_writes and mem_writes[0x02000000] == 1
+    assert completion_found, "Program completion flag not found"
+
+    received_string = uart_monitor.get_received_string()
+    expected = "ABCDEFGHIJKLMNOPabcdefghijklmnop"
+    log.info(f"UART received: '{received_string}'")
+    assert expected in received_string, (
+        f"Expected exact FIFO group text '{expected}', got '{received_string}'"
+    )
+
+    log.info("UART FIFO group burst test passed!")
+
+@cocotb.test()
+async def test_uart_rx(dut):
+    """Verify a byte driven on uart_rx sets DR and is readable through RBR."""
+    log.info("Starting UART RX test...")
+
+    clock = Clock(dut.clk, 20, units="ns")
+    cocotb.start_soon(clock.start())
+
+    dut.timer_interrupt.value = 0
+    dut.software_interrupt.value = 0
+    dut.external_interrupt.value = 0
+    dut.rst.value = 1
+    dut.uart_rx.value = 1
+    await ClockCycles(dut.clk, 5)
+    dut.rst.value = 0
+
+    async def inject_rx_byte():
+        # Let the test program finish UART init and enter the DR poll loop.
+        await ClockCycles(dut.clk, 200)
+        await uart_send_byte(dut, ord('Z'))
+
+    cocotb.start_soon(inject_rx_byte())
+
+    mem_writes = await monitor_cpu_execution(dut, "uart_rx", max_cycles=2000)
+
+    received = mem_writes.get(0x02000000)
+    lsr_after = mem_writes.get(0x02000004)
+    completion = mem_writes.get(0x02000008)
+
+    assert completion == 1, "Program completion flag not found"
+    assert received == ord('Z'), f"Expected received byte 0x5a, got {received!r}"
+    assert lsr_after is not None and (lsr_after & 0x01) == 0, (
+        f"Expected DR clear after RBR read, got LSR=0x{lsr_after:02x}"
+    )
+
+    log.info("UART RX test passed!")
+
 def runCocotbTests():
     """Run the cocotb tests via cocotb-test"""
     from cocotb_test.simulator import run
@@ -424,6 +772,10 @@ def runCocotbTests():
     tests_config = [
         ("uart_hello_output", run_uart_hello_test),
         ("uart_status_register", run_uart_status_test),
+        ("uart_fifo_burst", run_uart_fifo_burst_test),
+        ("uart_fifo_status", run_uart_fifo_status_test),
+        ("uart_fifo_group_burst", run_uart_fifo_group_burst_test),
+        ("uart_rx", run_uart_rx_test),
     ]
     
     # Get repository root directory

@@ -7,16 +7,20 @@
 
 set -euo pipefail
 
-OPENSBI_VERSION="v1.4"
-OPENSBI_DIR="/tmp/opensbi-build"
 # Resolve paths from this script's own location so the flow works regardless of
 # where the repo is mounted (the devcontainer uses /workspaces/<repo>, the
 # docker-* targets use /workspace).
-SIM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+OPENSBI_VERSION="${OPENSBI_VERSION:-v1.4}"
+OPENSBI_REPO="${OPENSBI_REPO:-https://github.com/riscv-software-src/opensbi.git}"
+OPENSBI_DIR="${OPENSBI_DIR:-/tmp/opensbi-build}"
+SIM_DIR="${SIM_DIR:-$script_dir}"
 OUT_DIR="${SIM_OUT_DIR:-$SIM_DIR/.out/opensbi}"
 OUT_ELF="$OUT_DIR/fw_jump.elf"
 OUT_BIN="$OUT_DIR/fw_jump.bin"
 OUT_HEX="$OUT_DIR/opensbi.hex"
+BUILD_DIR="$OUT_DIR/opensbi-build"
 DTB="$OUT_DIR/synapse32.dtb"
 # OpenSBI requires a PIE-capable Linux-targeted toolchain.
 CROSS_COMPILE="${CROSS_COMPILE:-riscv64-linux-gnu-}"
@@ -26,6 +30,22 @@ PLATFORM_RISCV_ISA="${PLATFORM_RISCV_ISA:-rv32ima_zicsr_zifencei}"
 PLATFORM_RISCV_ABI="${PLATFORM_RISCV_ABI:-ilp32}"
 
 mkdir -p "$OUT_DIR"
+
+num_jobs() {
+    if command -v nproc >/dev/null 2>&1; then
+        nproc
+        return
+    fi
+    if command -v getconf >/dev/null 2>&1; then
+        getconf _NPROCESSORS_ONLN
+        return
+    fi
+    if command -v sysctl >/dev/null 2>&1; then
+        sysctl -n hw.ncpu
+        return
+    fi
+    echo 4
+}
 
 # ---- compile DTB from DTS --------------------------------------------------
 echo "==> Compiling device tree..."
@@ -42,28 +62,27 @@ fi
 if [ ! -d "$OPENSBI_DIR/.git" ]; then
     echo "==> Cloning openSBI $OPENSBI_VERSION..."
     git clone --depth 1 --branch "$OPENSBI_VERSION" \
-        https://github.com/riscv-software-src/opensbi.git "$OPENSBI_DIR"
+        "$OPENSBI_REPO" "$OPENSBI_DIR"
 else
-    # An existing clone may be left over from a different version; check the
-    # checked-out tag rather than silently building whatever is there.
-    CURRENT_TAG="$(git -C "$OPENSBI_DIR" describe --tags --exact-match 2>/dev/null || true)"
-    if [ "$CURRENT_TAG" = "$OPENSBI_VERSION" ]; then
-        echo "==> openSBI $OPENSBI_VERSION already cloned at $OPENSBI_DIR"
-    else
-        echo "==> $OPENSBI_DIR is at '${CURRENT_TAG:-unknown}', switching to $OPENSBI_VERSION..."
-        git -C "$OPENSBI_DIR" fetch --depth 1 --force origin \
-            "refs/tags/$OPENSBI_VERSION:refs/tags/$OPENSBI_VERSION"
-        git -C "$OPENSBI_DIR" checkout --force "$OPENSBI_VERSION"
-        make -C "$OPENSBI_DIR" distclean >/dev/null 2>&1 || true
+    actual_repo="$(git -C "$OPENSBI_DIR" remote get-url origin)"
+    if [ "$actual_repo" != "$OPENSBI_REPO" ]; then
+        echo "Cached checkout $OPENSBI_DIR uses $actual_repo, expected $OPENSBI_REPO" >&2
+        echo "Choose a different OPENSBI_DIR or remove the stale build cache." >&2
+        exit 1
     fi
+    echo "==> Updating openSBI to $OPENSBI_VERSION..."
+    git -C "$OPENSBI_DIR" fetch --depth 1 origin "$OPENSBI_VERSION"
+    git -C "$OPENSBI_DIR" checkout --detach --force FETCH_HEAD
 fi
 
 # ---- build -----------------------------------------------------------------
 echo "==> Building openSBI..."
-make -C "$OPENSBI_DIR" -j"$(nproc)" \
+make -C "$OPENSBI_DIR" O="$BUILD_DIR" clean
+make -C "$OPENSBI_DIR" -j"$(num_jobs)" \
+    O="$BUILD_DIR" \
     PLATFORM=generic \
     FW_JUMP=y \
-    FW_JUMP_ADDR=0x80200000 \
+    FW_JUMP_ADDR=0x80400000 \
     FW_TEXT_START=0x80000000 \
     FW_FDT_PATH="$DTB" \
     FW_JUMP_FDT_ADDR=0x80050000 \
@@ -72,7 +91,7 @@ make -C "$OPENSBI_DIR" -j"$(nproc)" \
     PLATFORM_RISCV_ABI="$PLATFORM_RISCV_ABI" \
     CROSS_COMPILE="$CROSS_COMPILE"
 
-ELF="$OPENSBI_DIR/build/platform/generic/firmware/fw_jump.elf"
+ELF="$BUILD_DIR/platform/generic/firmware/fw_jump.elf"
 
 # ---- copy outputs ----------------------------------------------------------
 cp "$ELF" "$OUT_ELF"

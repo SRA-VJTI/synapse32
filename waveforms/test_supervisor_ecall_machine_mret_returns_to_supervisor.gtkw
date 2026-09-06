@@ -1,8 +1,8 @@
 [*]
 [*] GTKWave Analyzer v3.3.120 (w)1999-2024 BSI
 [*]
-[dumpfile] "/Users/siriboi/github/synapse32/waveforms/test_supervisor_ecall_machine_mret_returns_to_supervisor.fst"
-[savefile] "/Users/siriboi/github/synapse32/waveforms/test_supervisor_ecall_machine_mret_returns_to_supervisor.gtkw"
+[dumpfile] "waveforms/test_supervisor_ecall_machine_mret_returns_to_supervisor.fst"
+[savefile] "waveforms/test_supervisor_ecall_machine_mret_returns_to_supervisor.gtkw"
 [timestart] 0
 [size] 1600 900
 [pos] -1 -1

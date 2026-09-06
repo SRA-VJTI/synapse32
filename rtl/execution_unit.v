@@ -441,7 +441,7 @@ always @(*) begin
                     end
                 end
                 INSTR_SRET: begin
-                    if ((privilege_mode != PRIV_S) || sret_tsr_violation) begin
+                    if ((privilege_mode < PRIV_S) || sret_tsr_violation) begin
                         jump_signal = 1;
                         trap_to_supervisor = delegate_illegal_instruction;
                         jump_addr = trap_to_supervisor ? stvec : mtvec;

@@ -2,10 +2,10 @@
 [*] GTKWave Analyzer v3.3.120 (w)1999-2024 BSI
 [*] Tue Jun 17 20:06:00 2025
 [*]
-[dumpfile] "/workspaces/synapse32/tests/system_tests/waveforms/uart_hello_output.vcd"
+[dumpfile] "tests/system_tests/waveforms/uart_hello_output.vcd"
 [dumpfile_mtime] "Tue Jun 17 20:04:43 2025"
 [dumpfile_size] 2306844
-[savefile] "/workspaces/synapse32/tests/system_tests/fibonacci.gtkw"
+[savefile] "tests/system_tests/fibonacci.gtkw"
 [timestart] 0
 [size] 1854 1121
 [pos] -1 -1

@@ -284,6 +284,7 @@ async def test_non_alu_ops_map_to_zero(dut):
     """Instructions handled outside ALU must return zero from ALU block."""
     non_alu_instrs = [
         _instr_id("INSTR_FENCE_I"),
+        _instr_id("INSTR_PAUSE"),
         _instr_id("INSTR_LR_W"),
         _instr_id("INSTR_SC_W"),
         _instr_id("INSTR_AMOADD_W"),
