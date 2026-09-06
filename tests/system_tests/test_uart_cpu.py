@@ -134,7 +134,7 @@ def run_uart_hello_test():
         # Loop until not busy
         0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
         0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009de3,  # bne x1, x0, -6        # Branch back if still busy
+        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
         
         # Send 'e' (0x65)
         0x06500093,  # addi x1, x0, 101      # x1 = 'e' (101 = 0x65)
@@ -143,7 +143,7 @@ def run_uart_hello_test():
         # Wait until not busy
         0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
         0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009de3,  # bne x1, x0, -6        # Branch back if still busy
+        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
         
         # Send 'l' (0x6C)
         0x06c00093,  # addi x1, x0, 108      # x1 = 'l' (108 = 0x6C)
@@ -152,7 +152,7 @@ def run_uart_hello_test():
         # Wait until not busy
         0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
         0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009de3,  # bne x1, x0, -6        # Branch back if still busy
+        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
         
         # Send 'l' (0x6C)
         0x06c00093,  # addi x1, x0, 108      # x1 = 'l'
@@ -161,7 +161,7 @@ def run_uart_hello_test():
         # Wait until not busy
         0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
         0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009de3,  # bne x1, x0, -6        # Branch back if still busy
+        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
         
         # Send 'o' (0x6F)
         0x06f00093,  # addi x1, x0, 111      # x1 = 'o' (111 = 0x6F)
@@ -170,7 +170,7 @@ def run_uart_hello_test():
         # Wait until not busy
         0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
         0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009de3,  # bne x1, x0, -6        # Branch back if still busy
+        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
         
         # Send ' ' (0x20)
         0x02000093,  # addi x1, x0, 32       # x1 = ' ' (32 = 0x20)
@@ -179,7 +179,7 @@ def run_uart_hello_test():
         # Wait until not busy
         0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
         0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009de3,  # bne x1, x0, -6        # Branch back if still busy
+        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
         
         # Send 'U' (0x55)
         0x05500093,  # addi x1, x0, 85       # x1 = 'U' (85 = 0x55)
@@ -188,7 +188,7 @@ def run_uart_hello_test():
         # Wait until not busy
         0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
         0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009de3,  # bne x1, x0, -6        # Branch back if still busy
+        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
         
         # Send 'A' (0x41)
         0x04100093,  # addi x1, x0, 65       # x1 = 'A' (65 = 0x41)
@@ -197,7 +197,7 @@ def run_uart_hello_test():
         # Wait until not busy
         0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
         0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009de3,  # bne x1, x0, -6        # Branch back if still busy
+        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
         
         # Send 'R' (0x52)
         0x05200093,  # addi x1, x0, 82       # x1 = 'R' (82 = 0x52)
@@ -206,7 +206,7 @@ def run_uart_hello_test():
         # Wait until not busy
         0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
         0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009de3,  # bne x1, x0, -6        # Branch back if still busy
+        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
         
         # Send 'T' (0x54)
         0x05400093,  # addi x1, x0, 84       # x1 = 'T' (84 = 0x54)
@@ -215,7 +215,7 @@ def run_uart_hello_test():
         # Wait until not busy
         0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
         0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009de3,  # bne x1, x0, -6        # Branch back if still busy
+        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
         
         # Send '!' (0x21)
         0x02100093,  # addi x1, x0, 33       # x1 = '!' (33 = 0x21)
@@ -224,7 +224,7 @@ def run_uart_hello_test():
         # Wait until not busy
         0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
         0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009de3,  # bne x1, x0, -6        # Branch back if still busy
+        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
         
         # Send '\r' (0x0D)
         0x00d00093,  # addi x1, x0, 13       # x1 = '\r' (13 = 0x0D)
@@ -233,7 +233,7 @@ def run_uart_hello_test():
         # Wait until not busy
         0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
         0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009de3,  # bne x1, x0, -6        # Branch back if still busy
+        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
         
         # Send '\n' (0x0A)
         0x00a00093,  # addi x1, x0, 10       # x1 = '\n' (10 = 0x0A)
@@ -242,7 +242,7 @@ def run_uart_hello_test():
         # Wait until not busy
         0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
         0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009de3,  # bne x1, x0, -6        # Branch back if still busy
+        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
         
         # Store completion flag
         0x00100093,  # addi x1, x0, 1        # x1 = 1 (completion marker)
@@ -294,7 +294,7 @@ def run_uart_status_test():
         # Loop to wait for UART ready
         0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS
         0x0040f093,  # andi x1, x1, 4        # x1 = x1 & 4 (isolate busy bit)
-        0xfe009de3,  # bne x1, x0, -6        # Branch back if still busy
+        0xfe009ce3,  # bne x1, x0, -8        # Branch back if still busy
         
         # Read final status (should not be busy)
         0x00412083,  # lw x1, 4(x2)          # x1 = UART_STATUS

@@ -22,3 +22,8 @@ __pycache__
 *.log
 sim_build*/
 build/
+
+#agent files 
+
+.codex
+.claude

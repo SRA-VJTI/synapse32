@@ -4,6 +4,8 @@ Synapse-32 is a 32-bit RISC-V CPU core written in Verilog, supporting RV32I inst
 
 ## Processor Architecture
 
+Detailed block diagrams are available in [docs/system_diagram.md](docs/system_diagram.md).
+
 ### 5-Stage Pipeline
 This processor implements a classic 5-stage RISC pipeline:
 

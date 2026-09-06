@@ -65,7 +65,9 @@ localparam [6:0] INSTR_LUI   = 7'h24;
 localparam [6:0] INSTR_AUIPC = 7'h25;
 
 // System instructions
+localparam [6:0] INSTR_FENCE   = 7'h3A;
 localparam [6:0] INSTR_FENCE_I = 7'h26;
+localparam [6:0] INSTR_PAUSE   = 7'h3C;
 
 // CSR instructions
 localparam [6:0] INSTR_CSRRW  = 7'h27;
@@ -80,6 +82,8 @@ localparam [6:0] INSTR_MRET    = 7'h2D;
 localparam [6:0] INSTR_ECALL   = 7'h2E;
 localparam [6:0] INSTR_EBREAK  = 7'h2F;
 localparam [6:0] INSTR_WFI     = 7'h38;
+localparam [6:0] INSTR_SRET    = 7'h39;
+localparam [6:0] INSTR_SFENCE_VMA = 7'h3B;
 
 // RV32A instruction IDs
 localparam [6:0] INSTR_LR_W       = 7'h40;

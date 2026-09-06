@@ -6,10 +6,10 @@
 // ============================================================================
 
 // Program Memory (Instruction Memory)
-// 512KB - Should be enough for most programs
-`define INSTR_MEM_BASE      32'h00000000
-`define INSTR_MEM_SIZE      32'h00080000  // 512KB
-`define INSTR_MEM_END       32'h0007FFFF
+// 64MB — fits OpenSBI + Zephyr (at 0x80200000) + eventual Linux kernel
+`define INSTR_MEM_BASE      32'h80000000
+`define INSTR_MEM_SIZE      32'h04000000  // 64MB
+`define INSTR_MEM_END       32'h83FFFFFF
 
 // Machine-mode Timer (RISC-V Standard)
 // Standard RISC-V timer addresses
@@ -42,6 +42,11 @@
 `define UART_SIZE           32'h00001000  // 4KB region
 `define UART_END            32'h20000FFF
 
+// Platform-Level Interrupt Controller (PLIC)
+`define PLIC_BASE           32'h0C000000
+`define PLIC_SIZE           32'h00400000
+`define PLIC_END            32'h0C3FFFFF
+
 // UART Register Offsets
 `define UART_DATA           32'h20000000  // Data register (write to transmit)
 `define UART_STATUS         32'h20000004  // Status register
@@ -49,10 +54,11 @@
 `define UART_BAUD           32'h2000000C  // Baud rate divisor
 
 // Memory access helper macros
-`define IS_INSTR_MEM(addr)  ((addr) <= `INSTR_MEM_END)
+`define IS_INSTR_MEM(addr)  ((addr) >= `INSTR_MEM_BASE && (addr) <= `INSTR_MEM_END)
 `define IS_TIMER_MEM(addr)  ((addr) >= `TIMER_BASE && (addr) <= `TIMER_END)
 `define IS_DATA_MEM(addr)   ((addr) >= `DATA_MEM_BASE && (addr) <= `DATA_MEM_END)
 `define IS_PERIPH_MEM(addr) ((addr) >= `PERIPH_BASE && (addr) <= `PERIPH_END)
 `define IS_UART_MEM(addr)   ((addr) >= `UART_BASE && (addr) <= `UART_END)
+`define IS_PLIC_MEM(addr)   ((addr) >= `PLIC_BASE && (addr) <= `PLIC_END)
 
 `endif // MEMORY_MAP_VH
