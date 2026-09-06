@@ -5,9 +5,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Keep CI/devcontainer setup fast and reproducible by using distro packages.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+        binutils-riscv64-linux-gnu \
         binutils-riscv64-unknown-elf \
         ca-certificates \
+        device-tree-compiler \
         g++ \
+        gcc-riscv64-linux-gnu \
         gcc-riscv64-unknown-elf \
         git \
         iverilog \
