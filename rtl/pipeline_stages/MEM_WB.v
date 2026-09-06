@@ -14,7 +14,7 @@ module MEM_WB (
     input wire [31:0] exec_output_in,
     input wire jump_signal_in,
     input wire [31:0] jump_addr_in,
-    input wire [5:0] instr_id_in,
+    input wire [6:0] instr_id_in,
     input wire rd_valid_in,
     input wire [31:0] mem_data_in,  // Data from memory
     
@@ -33,7 +33,7 @@ module MEM_WB (
     output reg [31:0] exec_output_out,
     output reg jump_signal_out,
     output reg [31:0] jump_addr_out,
-    output reg [5:0] instr_id_out,
+    output reg [6:0] instr_id_out,
     output reg rd_valid_out,
     output reg [31:0] mem_data_out   // Data going to the writeback stage
 );
@@ -51,7 +51,7 @@ module MEM_WB (
             exec_output_out <= 32'b0;
             jump_signal_out <= 1'b0;
             jump_addr_out <= 32'b0;
-            instr_id_out <= 6'b0;
+            instr_id_out <= 7'b0;
             rd_valid_out <= 1'b0;
             mem_data_out <= 32'b0;
         end

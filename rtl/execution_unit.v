@@ -7,7 +7,7 @@ module execution_unit(
     input wire [4:0] rs1_addr,
     input wire [4:0] rs2_addr,
     input wire [6:0] opcode,
-    input wire [5:0] instr_id,
+    input wire [6:0] instr_id,
     input wire rs1_valid,
     input wire rs2_valid,
     input wire [31:0] pc_input,
@@ -46,7 +46,8 @@ module execution_unit(
     output reg interrupt_taken,
     output reg mret_instruction,
     output reg ecall_exception,
-    output reg ebreak_exception
+    output reg ebreak_exception,
+    output reg wfi_instruction
 );
 
 // Internal signals for forwarded values
@@ -128,6 +129,7 @@ always @(*) begin
     mret_instruction = 0;
     ecall_exception = 0;
     ebreak_exception = 0;
+    wfi_instruction = 0;
     
     // Handle interrupts first (highest priority)
     if (interrupt_pending) begin
@@ -149,44 +151,47 @@ always @(*) begin
             7'b0100011: begin // Store instructions
             mem_addr = rs1_value + imm;
             end
+            7'b0101111: begin // AMO/LR/SC instructions
+            mem_addr = rs1_value;
+            end
             7'b1100011: begin // Branch instructions
             case (instr_id)
-                6'h1C: begin // BEQ
+                INSTR_BEQ: begin
                     if (rs1_value == rs2_value) begin
                         jump_signal = 1;
                         jump_addr = pc_input + imm;
                         flush_pipeline = 1;
                     end
                 end
-                6'h1D: begin // BNE
+                INSTR_BNE: begin
                     if (rs1_value != rs2_value) begin
                         jump_signal = 1;
                         jump_addr = pc_input + imm;
                         flush_pipeline = 1;
                     end
                 end
-                6'h1E: begin // BLT
+                INSTR_BLT: begin
                     if ($signed(rs1_value) < $signed(rs2_value)) begin
                         jump_signal = 1;
                         jump_addr = pc_input + imm;
                         flush_pipeline = 1;
                     end
                 end
-                6'h1F: begin // BGE
+                INSTR_BGE: begin
                     if ($signed(rs1_value) >= $signed(rs2_value)) begin
                         jump_signal = 1;
                         jump_addr = pc_input + imm;
                         flush_pipeline = 1;
                     end
                 end
-                6'h20: begin // BLTU
+                INSTR_BLTU: begin
                     if (rs1_value < rs2_value) begin
                         jump_signal = 1;
                         jump_addr = pc_input + imm;
                         flush_pipeline = 1;
                     end
                 end
-                6'h21: begin // BGEU
+                INSTR_BGEU: begin
                     if (rs1_value >= rs2_value) begin
                         jump_signal = 1;
                         jump_addr = pc_input + imm;
@@ -234,6 +239,14 @@ always @(*) begin
                     jump_addr = mtvec;  // Jump to trap handler
                     flush_pipeline = 1;
                     ebreak_exception = 1;
+                end
+                INSTR_WFI: begin
+                    // Enter sleep after retiring WFI and stay stalled in CPU
+                    // until an interrupt becomes pending.
+                    jump_signal = 1;
+                    jump_addr = pc_input + 4;
+                    flush_pipeline = 1;
+                    wfi_instruction = 1;
                 end
                 default: begin
                     exec_output = csr_rd_value;  // CSR instructions

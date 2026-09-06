@@ -12,12 +12,13 @@ module decoder (
     output wire rd_valid,
 
     output wire [6:0] opcode,
-    output reg  [5:0] instr_id  // changed from 32-bit one-hot to 6-bit IDIs
+    output reg  [6:0] instr_id  // changed from 32-bit one-hot to compact ID
 );
 
-    wire is_r_instr, is_u_instr, is_s_instr, is_b_instr, is_j_instr, is_i_instr, is_csr_instr;
+    wire is_r_instr, is_u_instr, is_s_instr, is_b_instr, is_j_instr, is_i_instr, is_csr_instr, is_amo_instr;
     wire [2:0] func3;
     wire [6:0] func7;
+    wire [4:0] funct5;
 
     assign opcode = instr[6:0];
 
@@ -28,19 +29,22 @@ module decoder (
     assign is_s_instr = (opcode == 7'b0100011) ? 1'b1 : 1'b0;
     assign is_r_instr = (opcode == 7'b0110011) || (opcode == 7'b0100111) || (opcode == 7'b1010011) ? 1'b1 : 1'b0;
     assign is_csr_instr = (opcode == 7'b1110011) ? 1'b1 : 1'b0;  // CSR instructions
+    assign is_amo_instr = (opcode == 7'b0101111) ? 1'b1 : 1'b0;
 
-    assign rs2 = (is_r_instr || is_s_instr || is_b_instr) ? instr[24:20] : 5'b0;
-    assign rs1 = (is_r_instr || is_s_instr || is_b_instr || is_i_instr || is_csr_instr) ? instr[19:15] : 5'b0;
-    assign rd = (is_r_instr || is_u_instr || is_j_instr || is_i_instr || is_csr_instr) ? instr[11:7] : 5'b0;
+    assign rs2 = (is_r_instr || is_s_instr || is_b_instr || is_amo_instr) ? instr[24:20] : 5'b0;
+    assign rs1 = (is_r_instr || is_s_instr || is_b_instr || is_i_instr || is_csr_instr || is_amo_instr) ? instr[19:15] : 5'b0;
+    assign rd = (is_r_instr || is_u_instr || is_j_instr || is_i_instr || is_csr_instr || is_amo_instr) ? instr[11:7] : 5'b0;
 
     assign func3 = instr[14:12];
     assign func7 = is_r_instr ? instr[31:25] : 7'b0;
+    assign funct5 = instr[31:27];
 
     // Validity signals - CSR instructions use rs1 and rd, but rs1 validity depends on instruction type
     assign rs1_valid = is_r_instr || is_i_instr || is_s_instr || is_b_instr || 
-                      (is_csr_instr && (func3[2] == 1'b0));  // CSRRW/CSRRS/CSRRC use rs1, immediate versions don't
-    assign rs2_valid = is_r_instr || is_s_instr || is_b_instr;  // CSR instructions don't use rs2
-    assign rd_valid = is_r_instr || is_u_instr || is_j_instr || is_i_instr || is_csr_instr;  // CSR instructions write to rd
+                      (is_csr_instr && (func3[2] == 1'b0)) || is_amo_instr;  // Atomics use rs1
+    assign rs2_valid = is_r_instr || is_s_instr || is_b_instr ||
+                      (is_amo_instr && (funct5 != 5'b00010));  // LR.W has no rs2 operand
+    assign rd_valid = is_r_instr || is_u_instr || is_j_instr || is_i_instr || is_csr_instr || is_amo_instr;
     
     assign imm = 
         is_i_instr ? { {21{instr[31]}}, instr[30:20] } :
@@ -127,6 +131,26 @@ module decoder (
             7'b1100111: instr_id = INSTR_JALR;
             7'b0110111: instr_id = INSTR_LUI;
             7'b0010111: instr_id = INSTR_AUIPC;
+            7'b0101111: begin
+                if (func3 != 3'b010) begin
+                    instr_id = INSTR_INVALID;
+                end else begin
+                    case (funct5)
+                        5'b00010: instr_id = (instr[24:20] == 5'b0) ? INSTR_LR_W : INSTR_INVALID;
+                        5'b00011: instr_id = INSTR_SC_W;
+                        5'b00001: instr_id = INSTR_AMOSWAP_W;
+                        5'b00000: instr_id = INSTR_AMOADD_W;
+                        5'b01100: instr_id = INSTR_AMOAND_W;
+                        5'b01000: instr_id = INSTR_AMOOR_W;
+                        5'b00100: instr_id = INSTR_AMOXOR_W;
+                        5'b10100: instr_id = INSTR_AMOMAX_W;
+                        5'b10000: instr_id = INSTR_AMOMIN_W;
+                        5'b11100: instr_id = INSTR_AMOMAXU_W;
+                        5'b11000: instr_id = INSTR_AMOMINU_W;
+                        default:            instr_id = INSTR_INVALID;
+                    endcase
+                end
+            end
             7'b0001111: begin
                 case (func3)
                     3'h1: instr_id = INSTR_FENCE_I;
@@ -136,6 +160,8 @@ module decoder (
             7'b1110011: begin  // System instructions
                 if (instr == 32'h30200073) begin      // MRET
                     instr_id = INSTR_MRET;
+                end else if (instr == 32'h10500073) begin  // WFI
+                    instr_id = INSTR_WFI;
                 end else if (instr == 32'h00000073) begin  // ECALL
                     instr_id = INSTR_ECALL;
                 end else if (instr == 32'h00100073) begin  // EBREAK

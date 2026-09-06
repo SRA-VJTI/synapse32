@@ -9,7 +9,7 @@ module load_use_detector (
     input wire rs2_valid_id,
     
     // Previous instruction in EX stage
-    input wire [5:0] instr_id_ex,
+    input wire [6:0] instr_id_ex,
     input wire [4:0] rd_ex,
     input wire rd_valid_ex,
     
@@ -26,7 +26,17 @@ module load_use_detector (
                            (instr_id_ex == INSTR_LH) || 
                            (instr_id_ex == INSTR_LW) || 
                            (instr_id_ex == INSTR_LBU) || 
-                           (instr_id_ex == INSTR_LHU);
+                           (instr_id_ex == INSTR_LHU) ||
+                           (instr_id_ex == INSTR_LR_W) ||
+                           (instr_id_ex == INSTR_AMOSWAP_W) ||
+                           (instr_id_ex == INSTR_AMOADD_W) ||
+                           (instr_id_ex == INSTR_AMOAND_W) ||
+                           (instr_id_ex == INSTR_AMOOR_W) ||
+                           (instr_id_ex == INSTR_AMOXOR_W) ||
+                           (instr_id_ex == INSTR_AMOMAX_W) ||
+                           (instr_id_ex == INSTR_AMOMIN_W) ||
+                           (instr_id_ex == INSTR_AMOMAXU_W) ||
+                           (instr_id_ex == INSTR_AMOMINU_W);
     
     // Detect if current instruction depends on loaded value
     always @(*) begin
