@@ -1,9 +1,4 @@
 {
   "name": "Synapse32 CI",
-  "build": {
-    "dockerfile": "Dockerfile",
-    "args": {
-      "BUILD_RV32_LINUX_TOOLCHAIN": "0"
-    }
-  }
+  "image": "ghcr.io/5iri/synapse32-dev:linux"
 }
