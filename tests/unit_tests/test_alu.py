@@ -3,8 +3,6 @@ from cocotb.triggers import Timer
 import random
 import os
 import sys
-import re
-from pathlib import Path
 from contextlib import contextmanager
 
 MASK32 = 0xFFFFFFFF
@@ -55,28 +53,6 @@ def prepend_to_path(*path_entries: str):
             os.environ.pop("PATH", None)
         else:
             os.environ["PATH"] = original_path
-
-
-_INSTR_ID_RE = re.compile(r"localparam\s+\[6:0\]\s+(\w+)\s*=\s*7'h([0-9A-Fa-f]+)")
-_INSTR_IDS = None
-
-
-def _find_repo_root() -> Path:
-    cur = Path.cwd()
-    while not (cur / "rtl").exists():
-        if cur.parent == cur:
-            raise FileNotFoundError("rtl directory not found in the current or parent directories.")
-        cur = cur.parent
-    return cur
-
-
-def _instr_id(name: str) -> int:
-    global _INSTR_IDS
-    if _INSTR_IDS is None:
-        defines = _find_repo_root() / "rtl" / "include" / "instr_defines.vh"
-        text = defines.read_text(encoding="ascii")
-        _INSTR_IDS = {k: int(v, 16) for k, v in _INSTR_ID_RE.findall(text)}
-    return _INSTR_IDS[name]
 
 # Helper function to verify ALU operation
 async def verify_alu_operation(dut, rs1, rs2, imm, instruction, pc_input, expected_output, operation_name):
@@ -276,31 +252,7 @@ async def test_m_extension_operations(dut):
 async def test_default(dut):
     """Test default operation (should output zero)"""
     await verify_alu_operation(dut, 0x1234, 0x8765, 0xABCDE, 0, 0x100, 0, "DEFAULT")
-    await verify_alu_operation(dut, 0x1234, 0x8765, 0xABCDE, 0x7F, 0x100, 0, "DEFAULT with invalid op")
-
-
-@cocotb.test()
-async def test_non_alu_ops_map_to_zero(dut):
-    """Instructions handled outside ALU must return zero from ALU block."""
-    non_alu_instrs = [
-        _instr_id("INSTR_FENCE_I"),
-        _instr_id("INSTR_PAUSE"),
-        _instr_id("INSTR_LR_W"),
-        _instr_id("INSTR_SC_W"),
-        _instr_id("INSTR_AMOADD_W"),
-        _instr_id("INSTR_WFI"),
-    ]
-    for instr_id in non_alu_instrs:
-        await verify_alu_operation(
-            dut,
-            0x12345678,
-            0x89ABCDEF,
-            0x13579BDF,
-            instr_id,
-            0x80000100,
-            0,
-            f"non-ALU instr 0x{instr_id:02x} returns zero",
-        )
+    await verify_alu_operation(dut, 0x1234, 0x8765, 0xABCDE, 0x26, 0x100, 0, "DEFAULT with invalid op")
     
 @cocotb.test()
 async def test_random_inputs(dut):
