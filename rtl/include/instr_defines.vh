@@ -25,16 +25,6 @@ localparam [6:0] INSTR_DIVU   = 7'h35;
 localparam [6:0] INSTR_REM    = 7'h36;
 localparam [6:0] INSTR_REMU   = 7'h37;
 
-// R-type M extension
-localparam [5:0] INSTR_MUL    = 6'h30;
-localparam [5:0] INSTR_MULH   = 6'h31;
-localparam [5:0] INSTR_MULHSU = 6'h32;
-localparam [5:0] INSTR_MULHU  = 6'h33;
-localparam [5:0] INSTR_DIV    = 6'h34;
-localparam [5:0] INSTR_DIVU   = 6'h35;
-localparam [5:0] INSTR_REM    = 6'h36;
-localparam [5:0] INSTR_REMU   = 6'h37;
-
 // I-type arithmetic
 localparam [6:0] INSTR_ADDI  = 7'h0B;
 localparam [6:0] INSTR_XORI  = 7'h0C;
