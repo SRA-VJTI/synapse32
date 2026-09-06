@@ -2,7 +2,7 @@ name: Publish development container
 
 on:
   push:
-    branches: ["main", "linux-sra-pr"]
+    branches: ["main"]
     paths:
       - ".devcontainer/Dockerfile"
       - ".devcontainer/devcontainer.json"
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE_NAME: ghcr.io/5iri/synapse32-dev
+  IMAGE_NAME: ghcr.io/sra-vjti/synapse32-dev
 
 jobs:
   publish:
@@ -36,8 +36,8 @@ jobs:
       - name: Build and publish image
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: .devcontainer/Dockerfile
+          context: .devcontainer
+          file: Dockerfile
           push: true
           tags: |
             ${{ env.IMAGE_NAME }}:linux
