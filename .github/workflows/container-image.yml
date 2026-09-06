@@ -36,8 +36,8 @@ jobs:
       - name: Build and publish image
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: .devcontainer/Dockerfile
+          context: .devcontainer
+          file: Dockerfile
           push: true
           tags: |
             ${{ env.IMAGE_NAME }}:linux
