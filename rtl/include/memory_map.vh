@@ -49,7 +49,7 @@
 `define UART_BAUD           32'h2000000C  // Baud rate divisor
 
 // Memory access helper macros
-`define IS_INSTR_MEM(addr)  ((addr) <= `INSTR_MEM_SIZE)
+`define IS_INSTR_MEM(addr)  ((addr) <= `INSTR_MEM_END)
 `define IS_TIMER_MEM(addr)  ((addr) >= `TIMER_BASE && (addr) <= `TIMER_END)
 `define IS_DATA_MEM(addr)   ((addr) >= `DATA_MEM_BASE && (addr) <= `DATA_MEM_END)
 `define IS_PERIPH_MEM(addr) ((addr) >= `PERIPH_BASE && (addr) <= `PERIPH_END)

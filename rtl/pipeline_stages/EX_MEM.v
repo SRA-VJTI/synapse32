@@ -11,7 +11,7 @@ module EX_MEM (
     input wire [31:0] exec_output_in,
     input wire jump_signal_in,
     input wire [31:0] jump_addr_in,
-    input wire [5:0] instr_id_in,
+    input wire [6:0] instr_id_in,
     input wire rd_valid_in,
     output reg [4:0] rs1_addr_out,
     output reg [4:0] rs2_addr_out,
@@ -23,7 +23,7 @@ module EX_MEM (
     output reg [31:0] exec_output_out,
     output reg jump_signal_out,
     output reg [31:0] jump_addr_out,
-    output reg [5:0] instr_id_out,
+    output reg [6:0] instr_id_out,
     output reg rd_valid_out
 );
 
@@ -39,7 +39,7 @@ module EX_MEM (
             exec_output_out <= 32'b0;
             jump_signal_out <= 1'b0;
             jump_addr_out <= 32'b0;
-            instr_id_out <= 6'b0;
+            instr_id_out <= 7'b0;
             rd_valid_out <= 1'b0;
         end else begin
             rs1_addr_out <= rs1_addr_in;

@@ -277,8 +277,81 @@ async def test_csr_invalid_access(dut):
     print(f"Valid CSR read: {valid_csr_value:#x}")
     
     assert invalid_csr_value == 0, "Invalid CSR should return 0"
-    
+
     print("Invalid CSR access test passed!")
+
+@cocotb.test()
+async def test_csr_mret(dut):
+    """Test trap entry via ecall and return via mret.
+
+    Validates the trap spine RTOS ports depend on:
+      - ecall sets mcause = 11 (env call from M-mode) and saves mepc
+      - trap entry saves MIE -> MPIE, clears MIE, jumps to mtvec
+      - mret restores MIE from MPIE (and jumps to mepc)
+    """
+    print("Starting mret test...")
+
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+
+    # Reset
+    dut.module_instr_in.value = 0
+    dut.module_read_data_in.value = 0
+    dut.rst.value = 1
+    await Timer(20, units="ns")
+    dut.rst.value = 0
+    await RisingEdge(dut.clk)
+
+    # Pad instruction memory so the handler at PC=0x40 (word index 16)
+    # lands in a valid slot. run_csr_test_program fetches via pc//4.
+    NOP = 0x00000013
+    instr_mem = [NOP] * 32
+
+    # 0x00: addi x1, x0, 0x40              # handler address
+    instr_mem[0] = 0x04000093
+    # 0x04: csrrw x0, mtvec, x1            # mtvec = 0x40
+    instr_mem[1] = 0x30509073
+    # 0x08: csrrsi x0, mstatus, 8          # set MIE = 1
+    instr_mem[2] = 0x30046073
+    # 0x0C: addi x5, x0, 0xAA              # pre-ecall sentinel
+    instr_mem[3] = 0x0AA00293
+    # 0x10: ecall                          # trap to mtvec
+    instr_mem[4] = 0x00000073
+    # 0x14: addi x6, x0, 0xBB              # executes only if mret returned here
+    instr_mem[5] = 0x0BB00313
+
+    # Handler at 0x40 (word index 16):
+    # 0x40: addi x7, x0, 0xCC              # handler sentinel
+    instr_mem[16] = 0x0CC00393
+    # 0x44: mret                           # return from trap
+    instr_mem[17] = 0x30200073
+
+    await run_csr_test_program(dut, instr_mem)
+
+    # Pre-ecall sentinel must have run.
+    x5 = int(dut.rf_inst0.register_file[5].value)
+    print(f"x5 (pre-ecall sentinel): {x5:#x}")
+    assert x5 == 0xAA, f"Pre-ecall path did not execute: x5={x5:#x}"
+
+    # ecall must set mcause = 11 (env call from M-mode).
+    mcause = int(dut.csr_file_inst.mcause.value)
+    mepc   = int(dut.csr_file_inst.mepc.value)
+    print(f"mcause: {mcause:#x}, mepc: {mepc:#x}")
+    assert mcause == 0xB, f"ecall should set mcause=11, got {mcause:#x}"
+
+    # Handler must have executed - proves mtvec redirect worked.
+    x7 = int(dut.rf_inst0.register_file[7].value)
+    print(f"x7 (handler sentinel): {x7:#x}")
+    assert x7 == 0xCC, f"Handler did not execute: x7={x7:#x}"
+
+    # mret must restore MIE from MPIE. MIE was set before ecall, so trap
+    # entry moves MIE(1) -> MPIE, clears MIE; mret must restore MIE = 1.
+    mstatus = int(dut.csr_file_inst.mstatus.value)
+    mie_bit = (mstatus >> 3) & 1
+    print(f"mstatus after mret: {mstatus:#x} (MIE={mie_bit})")
+    assert mie_bit == 1, f"mret did not restore MIE from MPIE: mstatus={mstatus:#x}"
+
+    print("mret test passed!")
 
 from cocotb_test.simulator import run
 import os
@@ -302,9 +375,10 @@ def runCocotbTests():
     # Define the CSR tests
     tests = [
         "test_csr_basic_operations",
-        "test_csr_mstatus_operations", 
+        "test_csr_mstatus_operations",
         "test_csr_cycle_counter",
         "test_csr_invalid_access",
+        "test_csr_mret",
     ]
     
     enable_waves = os.getenv("WAVES", "0") == "1"

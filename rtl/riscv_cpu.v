@@ -23,7 +23,8 @@ module riscv_cpu (
     wire [31:0] pc_inst0_out;
     wire pc_inst0_j_signal;
     wire [31:0] pc_inst0_jump;
-    wire stall_pipeline; // For load-use hazards
+    wire hazard_stall; // For load-use hazards
+    wire pipeline_stall;
     // Branch handling: use EX stage jump signal/address
     assign pc_inst0_j_signal = ex_inst0_jump_signal_out;
     assign pc_inst0_jump = ex_inst0_jump_addr_out;
@@ -32,7 +33,7 @@ module riscv_cpu (
         .rst(rst),
         .j_signal(pc_inst0_j_signal),
         .jump(pc_inst0_jump),
-        .stall(stall_pipeline), // Stall on load-use hazard
+        .stall(pipeline_stall), // Stall on hazard or WFI sleep
         .out(pc_inst0_out)
     );
 
@@ -51,7 +52,9 @@ module riscv_cpu (
         .rst(rst),
         .pc_in(pc_inst0_out),
         .instruction_in(branch_flush ? 32'h13 : module_instr_in),
-        .stall(stall_pipeline), // Stall on load-use hazard
+        // Flush must win over stall, otherwise a stale IF/ID instruction can
+        // survive an interrupt/branch redirect and execute one cycle later.
+        .stall(pipeline_stall && !branch_flush),
         .pc_out(if_id_pc_out),
         .instruction_out(if_id_instr_out)
     );
@@ -65,7 +68,7 @@ module riscv_cpu (
     wire decoder_inst0_rs2_valid_out;
     wire decoder_inst0_rd_valid_out;
     wire [6:0] decoder_inst0_opcode_out;
-    wire [5:0] decoder_inst0_instr_id_out;
+    wire [6:0] decoder_inst0_instr_id_out;
 
     decoder decoder_inst0 (
         .instr(if_id_instr_out),
@@ -89,7 +92,7 @@ module riscv_cpu (
         .instr_id_ex(id_ex_inst0_instr_id_out),
         .rd_ex(id_ex_inst0_rd_addr_out),
         .rd_valid_ex(id_ex_inst0_rd_valid_out),
-        .stall_pipeline(stall_pipeline)
+        .stall_pipeline(hazard_stall)
     );
 
     // Instantiate Register File
@@ -124,7 +127,7 @@ module riscv_cpu (
     wire [4:0] id_ex_inst0_rs2_addr_out;
     wire [4:0] id_ex_inst0_rd_addr_out;
     wire [6:0] id_ex_inst0_opcode_out;
-    wire [5:0] id_ex_inst0_instr_id_out;
+    wire [6:0] id_ex_inst0_instr_id_out;
     wire [31:0] id_ex_inst0_pc_out;
     wire [31:0] id_ex_inst0_rs1_value_out;
     wire [31:0] id_ex_inst0_rs2_value_out;
@@ -151,7 +154,7 @@ module riscv_cpu (
         .pc_in(if_id_pc_out),
         .rs1_value_in(rf_inst0_rs1_value_out),
         .rs2_value_in(rf_inst0_rs2_value_out),
-        .stall(pipeline_flush || stall_pipeline), // Use combined flush
+        .stall(pipeline_flush || pipeline_stall), // Use combined flush and stalls
         .rs1_valid_out(id_ex_inst0_rs1_valid_out),
         .rs2_valid_out(id_ex_inst0_rs2_valid_out),
         .rd_valid_out(id_ex_inst0_rd_valid_out),
@@ -210,6 +213,92 @@ module riscv_cpu (
     wire mret_instruction;
     wire ecall_exception;
     wire ebreak_exception;
+    wire wfi_instruction;
+
+    // LR/SC reservation state (single hart, uncached memory model)
+    reg lr_valid;
+    reg [31:0] lr_addr;
+
+    // WFI sleep state: stall fetch/decode until an interrupt becomes pending.
+    reg wfi_active;
+    wire wfi_stall;
+    assign wfi_stall = wfi_active && !interrupt_pending;
+
+    wire is_lr_w   = (ex_mem_inst0_instr_id_out == INSTR_LR_W);
+    wire is_sc_w   = (ex_mem_inst0_instr_id_out == INSTR_SC_W);
+    wire is_amo_sw = (ex_mem_inst0_instr_id_out == INSTR_AMOSWAP_W);
+    wire is_amo_add= (ex_mem_inst0_instr_id_out == INSTR_AMOADD_W);
+    wire is_amo_and= (ex_mem_inst0_instr_id_out == INSTR_AMOAND_W);
+    wire is_amo_or = (ex_mem_inst0_instr_id_out == INSTR_AMOOR_W);
+    wire is_amo_xor= (ex_mem_inst0_instr_id_out == INSTR_AMOXOR_W);
+    wire is_amo_max= (ex_mem_inst0_instr_id_out == INSTR_AMOMAX_W);
+    wire is_amo_min= (ex_mem_inst0_instr_id_out == INSTR_AMOMIN_W);
+    wire is_amo_maxu=(ex_mem_inst0_instr_id_out == INSTR_AMOMAXU_W);
+    wire is_amo_minu=(ex_mem_inst0_instr_id_out == INSTR_AMOMINU_W);
+    wire is_amo_w = is_amo_sw || is_amo_add || is_amo_and || is_amo_or ||
+                    is_amo_xor || is_amo_max || is_amo_min ||
+                    is_amo_maxu || is_amo_minu;
+    assign pipeline_stall = hazard_stall || wfi_stall;
+
+    wire atomic_word_aligned = (ex_mem_inst0_mem_addr_out[1:0] == 2'b00);
+    wire sc_success = is_sc_w && atomic_word_aligned && lr_valid &&
+                      (lr_addr == ex_mem_inst0_mem_addr_out);
+    wire [31:0] sc_result = sc_success ? 32'h0 : 32'h1;
+
+    wire [31:0] atomic_old_word = module_read_data_in;
+    wire signed [31:0] atomic_old_word_signed = atomic_old_word;
+    wire signed [31:0] atomic_rs2_signed = ex_mem_inst0_rs2_value_out;
+    reg [31:0] atomic_new_word;
+
+    always @(*) begin
+        if (is_amo_sw) begin
+            atomic_new_word = ex_mem_inst0_rs2_value_out;
+        end else if (is_amo_add) begin
+            atomic_new_word = atomic_old_word + ex_mem_inst0_rs2_value_out;
+        end else if (is_amo_and) begin
+            atomic_new_word = atomic_old_word & ex_mem_inst0_rs2_value_out;
+        end else if (is_amo_or) begin
+            atomic_new_word = atomic_old_word | ex_mem_inst0_rs2_value_out;
+        end else if (is_amo_xor) begin
+            atomic_new_word = atomic_old_word ^ ex_mem_inst0_rs2_value_out;
+        end else if (is_amo_max) begin
+            atomic_new_word = ($signed(atomic_old_word_signed) >= $signed(atomic_rs2_signed)) ?
+                              atomic_old_word : ex_mem_inst0_rs2_value_out;
+        end else if (is_amo_min) begin
+            atomic_new_word = ($signed(atomic_old_word_signed) <= $signed(atomic_rs2_signed)) ?
+                              atomic_old_word : ex_mem_inst0_rs2_value_out;
+        end else if (is_amo_maxu) begin
+            atomic_new_word = (atomic_old_word >= ex_mem_inst0_rs2_value_out) ?
+                              atomic_old_word : ex_mem_inst0_rs2_value_out;
+        end else if (is_amo_minu) begin
+            atomic_new_word = (atomic_old_word <= ex_mem_inst0_rs2_value_out) ?
+                              atomic_old_word : ex_mem_inst0_rs2_value_out;
+        end else begin
+            atomic_new_word = 32'h0;
+        end
+    end
+
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            wfi_active <= 1'b0;
+            lr_valid <= 1'b0;
+            lr_addr <= 32'b0;
+        end else if (interrupt_pending) begin
+            wfi_active <= 1'b0;
+        end else if (wfi_instruction) begin
+            wfi_active <= 1'b1;
+        end
+
+        // Reservation tracking.
+        if (is_lr_w && atomic_word_aligned) begin
+            lr_valid <= 1'b1;
+            lr_addr <= ex_mem_inst0_mem_addr_out;
+        end else if (is_sc_w || is_amo_w ||
+                     (mem_unit_inst0_wr_enable_out &&
+                      (mem_unit_inst0_wr_addr_out == lr_addr))) begin
+            lr_valid <= 1'b0;
+        end
+    end
 
     // Instantiate interrupt controller
     interrupt_controller int_ctrl_inst (
@@ -290,7 +379,8 @@ module riscv_cpu (
         .interrupt_taken(interrupt_taken),
         .mret_instruction(mret_instruction),
         .ecall_exception(ecall_exception),
-        .ebreak_exception(ebreak_exception)
+        .ebreak_exception(ebreak_exception),
+        .wfi_instruction(wfi_instruction)
     );
 
     // Memory Stage
@@ -306,7 +396,7 @@ module riscv_cpu (
     wire [31:0] ex_mem_inst0_exec_output_out;
     wire ex_mem_inst0_jump_signal_out;
     wire [31:0] ex_mem_inst0_jump_addr_out;
-    wire [5:0] ex_mem_inst0_instr_id_out;
+    wire [6:0] ex_mem_inst0_instr_id_out;
     wire ex_mem_inst0_rd_valid_out;
 
     EX_MEM ex_mem_inst0 (
@@ -347,13 +437,17 @@ module riscv_cpu (
     wire [3:0] mem_unit_inst0_write_byte_enable_out;  // Write byte enables
     wire [2:0] mem_unit_inst0_load_type_out;          // Load type
 
-    assign module_mem_wr_en = mem_unit_inst0_wr_enable_out;
-    assign module_mem_rd_en = mem_unit_inst0_read_enable_out;
-    assign module_write_addr = mem_unit_inst0_wr_addr_out;
-    assign module_read_addr = mem_unit_inst0_read_addr_out;
-    assign module_wr_data_out = mem_unit_inst0_wr_data_out;
-    assign module_write_byte_enable = mem_unit_inst0_write_byte_enable_out;
-    assign module_load_type = mem_unit_inst0_load_type_out;
+    wire atomic_read_enable = is_lr_w || is_amo_w;
+    wire atomic_write_enable = (is_sc_w && sc_success) || is_amo_w;
+
+    assign module_mem_wr_en = mem_unit_inst0_wr_enable_out || atomic_write_enable;
+    assign module_mem_rd_en = mem_unit_inst0_read_enable_out || atomic_read_enable;
+    assign module_write_addr = atomic_write_enable ? ex_mem_inst0_mem_addr_out : mem_unit_inst0_wr_addr_out;
+    assign module_read_addr = atomic_read_enable ? ex_mem_inst0_mem_addr_out : mem_unit_inst0_read_addr_out;
+    assign module_wr_data_out = is_amo_w ? atomic_new_word :
+                                (is_sc_w ? ex_mem_inst0_rs2_value_out : mem_unit_inst0_wr_data_out);
+    assign module_write_byte_enable = (is_sc_w || is_amo_w) ? 4'b1111 : mem_unit_inst0_write_byte_enable_out;
+    assign module_load_type = (is_lr_w || is_amo_w) ? 3'b010 : mem_unit_inst0_load_type_out;
 
     memory_unit mem_unit_inst0 (
         .instr_id(ex_mem_inst0_instr_id_out),
@@ -379,7 +473,7 @@ module riscv_cpu (
     wire [31:0] mem_wb_inst0_exec_output_out;
     wire mem_wb_inst0_jump_signal_out;
     wire [31:0] mem_wb_inst0_jump_addr_out;
-    wire [5:0] mem_wb_inst0_instr_id_out;
+    wire [6:0] mem_wb_inst0_instr_id_out;
     wire mem_wb_inst0_rd_valid_out;
     wire [31:0] mem_wb_inst0_mem_data_out;
 
@@ -398,6 +492,8 @@ module riscv_cpu (
         .rs2_value(ex_mem_inst0_rs2_value_out)  // Forwarded store data
     );
 
+    wire [31:0] ex_mem_exec_output_to_mem_wb = is_sc_w ? sc_result : ex_mem_inst0_exec_output_out;
+
     MEM_WB mem_wb_inst0 (
         .clk(clk),
         .rst(rst),
@@ -408,7 +504,7 @@ module riscv_cpu (
         .rs2_value_in(ex_mem_inst0_rs2_value_out),
         .pc_in(ex_mem_inst0_pc_out),
         .mem_addr_in(ex_mem_inst0_mem_addr_out),
-        .exec_output_in(ex_mem_inst0_exec_output_out),
+        .exec_output_in(ex_mem_exec_output_to_mem_wb),
         .jump_signal_in(ex_mem_inst0_jump_signal_out),
         .jump_addr_in(ex_mem_inst0_jump_addr_out),
         .instr_id_in(ex_mem_inst0_instr_id_out),
