@@ -354,7 +354,9 @@ module riscv_cpu (
             store_buf_data <= 32'b0;
             store_buf_be <= 4'b0;
         end else begin
-            if (wfi_resume_pending) begin
+            // A fault squashes the younger EX-stage WFI; the handler must run.
+            if (wfi_resume_pending || mem_stage_page_fault_taken ||
+                instr_stage_page_fault_taken) begin
                 wfi_active <= 1'b0;
             end else if (wfi_instruction) begin
                 wfi_active <= 1'b1;

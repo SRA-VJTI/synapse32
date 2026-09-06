@@ -18,6 +18,9 @@ module sv32_data_check (
     localparam PRIV_U = 2'b00;
     localparam PRIV_S = 2'b01;
 
+    // AMOs assert both enables; their faults are store/AMO faults, not loads.
+    wire load_only_req = data_rd_en && !data_wr_req;
+
     reg effective_read_ok;
     reg permission_fault;
 
@@ -31,7 +34,7 @@ module sv32_data_check (
 
         if (translate_enable) begin
             if (!addr_valid_in) begin
-                load_page_fault = data_rd_en;
+                load_page_fault = load_only_req;
                 store_page_fault = data_wr_req;
             end else begin
                 effective_read_ok = leaf_pte[1] || (mxr && leaf_pte[3]);
@@ -41,7 +44,7 @@ module sv32_data_check (
                                    ((data_rd_en && !data_wr_req) && !effective_read_ok) ||
                                    (data_wr_req && !leaf_pte[2]);
                 if (permission_fault) begin
-                    load_page_fault = data_rd_en;
+                    load_page_fault = load_only_req;
                     store_page_fault = data_wr_req;
                 end else begin
                     update_accessed = (data_rd_en || data_wr_req) && !leaf_pte[6];

@@ -279,8 +279,9 @@ module csr_file (
                 end
             end
             
+            // Older memory faults must suppress a younger trap return.
             // Handle MRET
-            else if (mret_instruction) begin
+            else if (mret_instruction && !synchronous_exception) begin
                 mstatus[3] <= mstatus[7];        // Restore MIE from MPIE
                 mstatus[7] <= 1'b1;              // Set MPIE to 1
                 privilege_mode <= mstatus[12:11]; // Return to privilege encoded in MPP
@@ -293,7 +294,7 @@ module csr_file (
             end
 
             // Handle SRET
-            else if (sret_instruction) begin
+            else if (sret_instruction && !synchronous_exception) begin
                 mstatus[1] <= mstatus[5];        // Restore SIE from SPIE
                 mstatus[5] <= 1'b1;              // Set SPIE to 1
                 privilege_mode <= mstatus[8] ? PRIV_S : PRIV_U;
