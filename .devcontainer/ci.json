@@ -1,4 +1,4 @@
 {
   "name": "Synapse32 CI",
-  "image": "ghcr.io/5iri/synapse32-dev:linux"
+  "image": "ghcr.io/sra-vjti/synapse32-dev:linux"
 }
