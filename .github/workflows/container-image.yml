@@ -37,7 +37,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .devcontainer
-          file: Dockerfile
+          file: .devcontainer/Dockerfile
           push: true
           tags: |
             ${{ env.IMAGE_NAME }}:linux
