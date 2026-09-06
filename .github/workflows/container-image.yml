@@ -2,7 +2,7 @@ name: Publish development container
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "linux-sra-pr"]
     paths:
       - ".devcontainer/Dockerfile"
       - ".devcontainer/devcontainer.json"
