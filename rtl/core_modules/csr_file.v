@@ -196,6 +196,7 @@ module csr_file (
                        (csr_addr == CSR_TDATA2) || (csr_addr == CSR_TDATA3) ||
                        (csr_addr == CSR_MVENDORID) || (csr_addr == CSR_MARCHID) ||
                        (csr_addr == CSR_MIMPID) || (csr_addr == CSR_MHARTID) ||
+                       (csr_addr == CSR_MTOPI) || (csr_addr == CSR_SCOVTOVF) ||
                        (csr_addr == CSR_MSTATUSH) || (csr_addr == CSR_MENVCFG) ||
                        (csr_addr == CSR_MENVCFGH) || (csr_addr == CSR_MSECCFG) ||
                        (csr_addr == CSR_MSECCFGH) || (csr_addr == CSR_MCONFIGPTR) ||

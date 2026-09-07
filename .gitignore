@@ -16,12 +16,14 @@ results.xml
 *.pyo
 __pycache__
 .venv*
+venv/
 *.egg-info
 
 #cocotb build files
 *.log
 sim_build*/
 build/
+sim/.out/
 
 #agent files 
 
