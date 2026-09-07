@@ -1,5 +1,5 @@
 import cocotb
-from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge, Timer
+from cocotb.triggers import ClockCycles, FallingEdge, ReadOnly, RisingEdge, Timer
 from cocotb.clock import Clock
 import pytest
 import os
@@ -96,6 +96,9 @@ async def run_csr_test_program(dut, instr_mem):
                 )
             except Exception:
                 pass
+
+    # Allow the final writeback value to reach the clocked register file.
+    await ClockCycles(dut.clk, 15)
             
     # Print final register values
     print("\nFinal register values:")
