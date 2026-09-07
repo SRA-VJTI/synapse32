@@ -1,4 +1,5 @@
 import ctypes.util
+import os
 import sys
 import sysconfig
 from pathlib import Path
@@ -67,3 +68,13 @@ def _safe_find_libpython():
 
 find_libpython.find_libpython = _safe_find_libpython
 cocotb_simulator.find_libpython.find_libpython = _safe_find_libpython
+
+
+def pytest_configure(config):
+    """Keep simulator subprocesses on the same Python as pytest."""
+    python_dir = str(Path(sys.executable).resolve().parent)
+    path = os.environ.get("PATH")
+    entries = path.split(os.pathsep) if path else []
+    if python_dir not in entries:
+        os.environ["PATH"] = os.pathsep.join([python_dir, *entries])
+    os.environ.setdefault("PYTHON3", sys.executable)

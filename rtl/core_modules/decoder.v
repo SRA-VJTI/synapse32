@@ -153,6 +153,7 @@ module decoder (
             end
             7'b0001111: begin
                 case (func3)
+                    3'h0: instr_id = (instr == 32'h0100000f) ? INSTR_PAUSE : INSTR_FENCE;
                     3'h1: instr_id = INSTR_FENCE_I;
                     default: instr_id = INSTR_INVALID;
                 endcase
@@ -160,12 +161,16 @@ module decoder (
             7'b1110011: begin  // System instructions
                 if (instr == 32'h30200073) begin      // MRET
                     instr_id = INSTR_MRET;
+                end else if (instr == 32'h10200073) begin  // SRET
+                    instr_id = INSTR_SRET;
                 end else if (instr == 32'h10500073) begin  // WFI
                     instr_id = INSTR_WFI;
                 end else if (instr == 32'h00000073) begin  // ECALL
                     instr_id = INSTR_ECALL;
                 end else if (instr == 32'h00100073) begin  // EBREAK
                     instr_id = INSTR_EBREAK;
+                end else if ((instr[31:25] == 7'b0001001) && (func3 == 3'b000) && (instr[11:7] == 5'b00000)) begin
+                    instr_id = INSTR_SFENCE_VMA;
                 end else begin
                     case (func3)
                         3'h1: instr_id = INSTR_CSRRW;
