@@ -1177,9 +1177,12 @@ async def test_mpp_set_on_m_mode_illegal_instruction(dut):
 async def test_m_mode_illegal_csr_probe_pattern(dut):
     """OpenSBI-style CSR probe: swap mtvec, probe unknown CSR, restore mtvec.
 
-    OpenSBI probes optional CSRs (e.g. mtopi/0xFB0) by installing a temporary
+    OpenSBI probes optional CSRs (e.g. the AIA CSRs) by installing a temporary
     mtvec, attempting the access, and relying on the trap handler to advance
-    mepc+4 and mret back. Verifies the full round-trip: trap → probe handler →
+    mepc+4 and mret back. The probed CSR must be one this core does not
+    implement: mtopi/0xFB0 reads as 0 here (see csr_valid in csr_file.v), so
+    this probes mtopei/0x35C, which is absent from csr_valid and therefore
+    raises an illegal-instruction trap. Verifies the full round-trip: trap → probe handler →
     mret → M-mode execution resumes at the instruction after the probe.
     """
     print("Starting M-mode illegal CSR probe pattern test...")
@@ -1201,8 +1204,8 @@ async def test_m_mode_illegal_csr_probe_pattern(dut):
     instr_mem[0] = 0x05000093
     # 0x04: csrrw x2, mtvec, x1        # save old mtvec in x2, install probe handler
     instr_mem[1] = 0x30509173
-    # 0x08: csrr x0, 0xFB0             # probe mtopi (AIA ext, unknown → illegal instr)
-    instr_mem[2] = 0xFB002073
+    # 0x08: csrr x0, 0x35C             # probe mtopei (AIA ext, unimplemented → illegal instr)
+    instr_mem[2] = 0x35C02073
     # 0x0C: csrw mtvec, x2             # restore mtvec (reached after probe mret)
     instr_mem[3] = 0x30511073
     # 0x10: addi x5, x0, 0xAA         # sentinel: probe handled, execution continued
@@ -1220,7 +1223,10 @@ async def test_m_mode_illegal_csr_probe_pattern(dut):
     # 0x5C: mret
     instr_mem[23] = 0x30200073
 
-    await run_csr_test_program(dut, instr_mem)
+    # The probe trap plus the handler's CSR ops stall well past the default
+    # one-cycle-per-instruction budget; the jal at 0x14 parks execution, so
+    # spare cycles are harmless.
+    await run_csr_test_program(dut, instr_mem, max_cycles=len(instr_mem) * 4 + 20)
 
     x3 = int(dut.rf_inst0.register_file[3].value)
     x5 = int(dut.rf_inst0.register_file[5].value)
