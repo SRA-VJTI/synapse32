@@ -7,9 +7,9 @@
 
 // Program Memory (Instruction Memory)
 // 512KB - Should be enough for most programs
-`define INSTR_MEM_BASE      32'h80000000
+`define INSTR_MEM_BASE      32'h00000000
 `define INSTR_MEM_SIZE      32'h00080000  // 512KB
-`define INSTR_MEM_END       32'h8007FFFF
+`define INSTR_MEM_END       32'h0007FFFF
 
 // Machine-mode Timer (RISC-V Standard)
 // Standard RISC-V timer addresses
@@ -49,7 +49,7 @@
 `define UART_BAUD           32'h2000000C  // Baud rate divisor
 
 // Memory access helper macros
-`define IS_INSTR_MEM(addr)  ((addr) >= `INSTR_MEM_BASE && (addr) <= `INSTR_MEM_END)
+`define IS_INSTR_MEM(addr)  ((addr) <= `INSTR_MEM_END)
 `define IS_TIMER_MEM(addr)  ((addr) >= `TIMER_BASE && (addr) <= `TIMER_END)
 `define IS_DATA_MEM(addr)   ((addr) >= `DATA_MEM_BASE && (addr) <= `DATA_MEM_END)
 `define IS_PERIPH_MEM(addr) ((addr) >= `PERIPH_BASE && (addr) <= `PERIPH_END)

@@ -443,10 +443,10 @@ def run_timer_interrupt_test():
     
     # Main program - sets up timer and waits for interrupt
     main_program = [
-        # Setup interrupt vector to 0x80000100 where handler is placed.
-        0x80000137,  # lui x2, 0x80000       # Set x2 = 0x80000000
-        0x10010113,  # addi x2, x2, 0x100    # x2 = 0x80000100 (handler at instruction 64, byte 0x100)
-        0x30511073,  # csrw mtvec, x2        # Set mtvec = 0x80000100 (direct mode)
+        # Setup interrupt vector to 0x100 where handler is placed.
+        0x00000137,  # lui x2, 0x0           # Set x2 = 0x00000000
+        0x10010113,  # addi x2, x2, 0x100    # x2 = 0x00000100 (handler at instruction 64, byte 0x100)
+        0x30511073,  # csrw mtvec, x2        # Set mtvec = 0x00000100 (direct mode)
         
         # Enable timer interrupts  
         0x08000093,  # addi x1, x0, 128      # Set x1 = 0x80 (MTIE bit)
@@ -515,8 +515,7 @@ def run_timer_interrupt_test():
 def run_wfi_interrupt_test():
     """Create program that executes WFI and resumes after a SW interrupt."""
     main_program = [
-        0x800000b7,  # lui x1, 0x80000      # x1 = 0x80000000
-        0x10008093,  # addi x1, x1, 0x100   # mtvec = 0x80000100
+        0x10000093,  # addi x1, x0, 0x100   # mtvec = 0x100
         0x30509073,  # csrw mtvec, x1
         0x00800093,  # addi x1, x0, 8       # MSIE
         0x30409073,  # csrw mie, x1
