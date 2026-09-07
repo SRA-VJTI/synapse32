@@ -44,17 +44,12 @@ module top (
     wire [31:0] timer_read_data;
     wire timer_valid;
     wire timer_interrupt;
-    wire uart_interrupt;
-    wire plic_interrupt;
     wire external_interrupt_combined;
     
     // UART module wires
     wire [31:0] uart_read_data;
     wire uart_valid;
     wire uart_access;
-    wire [31:0] plic_read_data;
-    wire plic_valid;
-    wire plic_access;
     
     // Memory address decoding using memory map
     wire data_mem_access;
@@ -84,7 +79,9 @@ module top (
     wire [31:0] mmu_data_pte_update_addr;
     wire [31:0] mmu_data_pte_update_value;
 
-    assign external_interrupt_combined = external_interrupt | plic_interrupt;
+    // The current platform exposes the external interrupt input directly.
+    // Keep this top-level path independent of an optional PLIC implementation.
+    assign external_interrupt_combined = external_interrupt;
 
     // Use memory map macros for clean address decoding
     assign translated_data_access = cpu_data_mmu_enable && (cpu_mem_write_en || cpu_mem_read_en);
@@ -92,10 +89,9 @@ module top (
     assign data_mem_access = !translated_data_access && `IS_DATA_MEM(data_mem_addr);
     assign timer_access    = `IS_TIMER_MEM(phys_data_addr);
     assign uart_access     = `IS_UART_MEM(phys_data_addr);
-    assign plic_access     = `IS_PLIC_MEM(phys_data_addr);
     assign instr_mem_access = !translated_data_access && `IS_INSTR_MEM(data_mem_addr);
     // RAM covers translated accesses that aren't peripheral, plus direct RAM accesses.
-    assign ram_access = (translated_data_access && !timer_access && !uart_access && !plic_access)
+    assign ram_access = (translated_data_access && !timer_access && !uart_access)
                         || data_mem_access || instr_mem_access;
     
     // Select the appropriate address for memory access
@@ -104,7 +100,6 @@ module top (
     // Multiplex read data based on address
     assign mem_read_data = timer_access ? timer_read_data :
                           uart_access ? uart_read_data :
-                          plic_access ? plic_read_data :
                           ram_access ? instr_read_data : 32'h00000000;
     
     // Debug outputs
@@ -243,22 +238,7 @@ module top (
         .read_enable(cpu_mem_read_en && uart_access),
         .read_data(uart_read_data),
         .uart_valid(uart_valid),
-        .interrupt(uart_interrupt),
-        .tx(uart_tx),
-        .rx(uart_rx)
-    );
-
-    plic plic_inst (
-        .clk(clk),
-        .rst(rst),
-        .addr(phys_data_addr),
-        .write_data(cpu_mem_write_data),
-        .write_enable(cpu_mem_write_en && plic_access),
-        .read_enable(cpu_mem_read_en && plic_access),
-        .read_data(plic_read_data),
-        .plic_valid(plic_valid),
-        .source_irq(uart_interrupt),
-        .external_interrupt(plic_interrupt)
+        .tx(uart_tx)
     );
 
 `ifdef COCOTB_SIM
