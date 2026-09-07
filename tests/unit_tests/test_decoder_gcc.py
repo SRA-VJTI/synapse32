@@ -33,7 +33,9 @@ def assemble_riscv_instruction(assembly_code, bin_file="temp.bin"):
         f.write(assembly_code)
 
     subprocess.run([
-        "riscv64-unknown-elf-as", "-march=rv32ima_zalrsc_zaamo_zifencei", "-mabi=ilp32", "-o", "temp.o", "temp.s"
+        # GNU binutils accepts the standard A extension here; its implied
+        # Zalrsc/Zaamo subsets must not be spelled as separate extensions.
+        "riscv64-unknown-elf-as", "-march=rv32ima_zifencei", "-mabi=ilp32", "-o", "temp.o", "temp.s"
     ], check=True)
 
     subprocess.run([
