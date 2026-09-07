@@ -45,29 +45,27 @@ module top (
     wire data_mem_access;
     wire timer_access;
     wire instr_mem_access;
+    wire ram_access;
     
     // Use memory map macros for clean address decoding
     assign data_mem_access = `IS_DATA_MEM(data_mem_addr);
     assign timer_access = `IS_TIMER_MEM(data_mem_addr);
     assign uart_access = `IS_UART_MEM(data_mem_addr);
     assign instr_mem_access = `IS_INSTR_MEM(data_mem_addr);
+    assign ram_access = data_mem_access || instr_mem_access;
     
     // Select the appropriate address for memory access
     assign data_mem_addr = cpu_mem_write_en ? cpu_mem_write_addr : cpu_mem_read_addr;
     
     // Multiplex read data based on address
-    assign mem_read_data = timer_access ? timer_read_data : 
-                          data_mem_access ? data_mem_read_data :
+    assign mem_read_data = timer_access ? timer_read_data :
                           uart_access ? uart_read_data :
-                            instr_mem_access ? instr_read_data : 32'h00000000;
+                          ram_access ? instr_read_data : 32'h00000000;
     
     // Debug outputs
     assign pc_debug = cpu_pc_out;
     assign instr_debug = instr_to_cpu;
     
-    // Data memory read data (separate wire for clarity)
-    wire [31:0] data_mem_read_data;
-
     // Instantiate the RISC-V CPU core
     riscv_cpu cpu_inst (
         .clk(clk),
@@ -87,43 +85,31 @@ module top (
         .module_load_type(cpu_load_type)
     );
 
-    // Instruction memory uses local offsets from INSTR_MEM_BASE.
+    // Unified RAM local address mapping:
+    // - Instruction region maps to [0 .. INSTR_MEM_SIZE-1]
+    // - Data region maps to [INSTR_MEM_SIZE .. INSTR_MEM_SIZE+DATA_MEM_SIZE-1]
     wire [31:0] instr_fetch_addr_local;
     wire [31:0] instr_data_addr_local;
     assign instr_fetch_addr_local = cpu_pc_out - `INSTR_MEM_BASE;
-    assign instr_data_addr_local = data_mem_addr - `INSTR_MEM_BASE;
+    assign instr_data_addr_local = instr_mem_access ? (data_mem_addr - `INSTR_MEM_BASE) :
+                                   data_mem_access ? ((data_mem_addr - `DATA_MEM_BASE) + `INSTR_MEM_SIZE) :
+                                   32'h0;
 
-    // Instantiate instruction memory
-    instr_mem #(
+    // Instantiate unified memory
+    unified_mem #(
         .DATA_WIDTH(32),
         .ADDR_WIDTH(32),
-        .MEM_SIZE(131072)  // 512KB / 4 bytes = 128K words
-    ) instr_mem_inst (
+        .MEM_SIZE(393216)  // (512KB + 1MB) / 4 bytes
+    ) unified_mem_inst (
         .clk(clk),
         .instr_addr(instr_fetch_addr_local),
         .instr_addr_p2(instr_data_addr_local),
-        .wr_en(cpu_mem_write_en && instr_mem_access),
+        .wr_en(cpu_mem_write_en && ram_access),
         .write_byte_enable(cpu_write_byte_enable),
         .wr_data(cpu_mem_write_data),
         .load_type(cpu_load_type),
         .instr(instr_to_cpu),
         .instr_p2(instr_read_data)
-    );
-
-    // Instantiate data memory  
-    data_mem #(
-        .DATA_WIDTH(32),
-        .ADDR_WIDTH(32),
-        .MEM_SIZE(1048576)  // 1MB in bytes
-    ) data_mem_inst (
-        .clk(clk),
-        .wr_en(cpu_mem_write_en && data_mem_access),
-        .rd_en(cpu_mem_read_en && data_mem_access),
-        .write_byte_enable(cpu_write_byte_enable),
-        .load_type(cpu_load_type),
-        .addr(data_mem_addr - `DATA_MEM_BASE),
-        .wr_data(cpu_mem_write_data),
-        .rd_data_out(data_mem_read_data)
     );
     
     // Instantiate timer module
