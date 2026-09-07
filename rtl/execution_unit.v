@@ -47,7 +47,9 @@ module execution_unit(
     output reg mret_instruction,
     output reg ecall_exception,
     output reg ebreak_exception,
-    output reg wfi_instruction
+    output reg wfi_instruction,
+    output reg misaligned_exception,
+    output reg [31:0] misaligned_cause
 );
 
 // Internal signals for forwarded values
@@ -130,6 +132,8 @@ always @(*) begin
     ecall_exception = 0;
     ebreak_exception = 0;
     wfi_instruction = 0;
+    misaligned_exception = 0;
+    misaligned_cause = 32'b0;
     
     // Handle interrupts first (highest priority)
     if (interrupt_pending) begin
@@ -153,6 +157,14 @@ always @(*) begin
             end
             7'b0101111: begin // AMO/LR/SC instructions
             mem_addr = rs1_value;
+            if ((instr_id == INSTR_LR_W || instr_id == INSTR_SC_W) &&
+                (rs1_value[1:0] != 2'b00)) begin
+                jump_signal = 1;
+                jump_addr = mtvec;
+                flush_pipeline = 1;
+                misaligned_exception = 1;
+                misaligned_cause = (instr_id == INSTR_LR_W) ? 32'd4 : 32'd6;
+            end
             end
             7'b1100011: begin // Branch instructions
             case (instr_id)

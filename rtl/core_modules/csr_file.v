@@ -17,6 +17,8 @@ module csr_file (
     input wire mret_instruction,
     input wire ecall_exception,
     input wire ebreak_exception,
+    input wire misaligned_exception,
+    input wire [31:0] misaligned_cause,
     
     // Timer interrupt input
     input wire timer_interrupt,
@@ -106,6 +108,13 @@ module csr_file (
                 mcause <= 32'h00000003;          // Breakpoint
                 mstatus[7] <= mstatus[3];        // Save MIE to MPIE
                 mstatus[3] <= 1'b0;              // Disable interrupts
+            end
+
+            else if (misaligned_exception) begin
+                mepc <= interrupt_pc_in;
+                mcause <= misaligned_cause;
+                mstatus[7] <= mstatus[3];
+                mstatus[3] <= 1'b0;
             end
             
             // Normal CSR writes

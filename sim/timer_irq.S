@@ -70,6 +70,10 @@ hang:
     .global trap_handler
     .type trap_handler, @function
 trap_handler:
+    addi  sp, sp, -8
+    sw    t0, 0(sp)
+    sw    t1, 4(sp)
+
     # Publish sentinel.
     li    t0, HANDLER_MARKER
     li    t1, SENTINEL
@@ -88,4 +92,7 @@ trap_handler:
     li    t0, MTIMECMP_LO
     sw    t1, 0(t0)
 
+    lw    t0, 0(sp)
+    lw    t1, 4(sp)
+    addi  sp, sp, 8
     mret
