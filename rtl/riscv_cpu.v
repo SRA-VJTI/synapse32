@@ -216,6 +216,8 @@ module riscv_cpu (
     wire wfi_instruction;
     wire misaligned_exception;
     wire [31:0] misaligned_cause;
+    wire [31:0] exception_pc;
+    wire [31:0] exception_tval;
 
     // LR/SC reservation state (single hart, uncached memory model)
     reg lr_valid;
@@ -247,9 +249,11 @@ module riscv_cpu (
     wire sc_success = is_sc_w && atomic_word_aligned && lr_valid &&
                       (lr_addr == ex_mem_inst0_mem_addr_out);
     wire [31:0] sc_result = sc_success ? 32'h0 : 32'h1;
-    wire atomic_misaligned = (id_ex_inst0_instr_id_out == INSTR_LR_W ||
-                              id_ex_inst0_instr_id_out == INSTR_SC_W) &&
+    wire atomic_misaligned = (id_ex_inst0_opcode_out == 7'b0101111) &&
+                             (id_ex_inst0_instr_id_out != INSTR_INVALID) &&
                              (ex_inst0_mem_addr_out[1:0] != 2'b00);
+    assign exception_pc = id_ex_inst0_pc_out;
+    assign exception_tval = ex_inst0_mem_addr_out;
 
     wire [31:0] atomic_old_word = module_read_data_in;
     wire signed [31:0] atomic_old_word_signed = atomic_old_word;
@@ -320,7 +324,10 @@ module riscv_cpu (
         .interrupt_wakeup(interrupt_wakeup),
         .interrupt_cause(interrupt_cause),
         .interrupt_taken(interrupt_taken),
-        .current_pc(pc_inst0_out),
+        // Interrupts are taken before the instruction currently in EX is
+        // allowed to retire. WFI is already redirected to PC+4 when it
+        // stalls, so preserve that resume point while sleeping.
+        .current_pc(wfi_active ? pc_inst0_out : id_ex_inst0_pc_out),
         .interrupt_pc(interrupt_pc)
     );
 
@@ -343,6 +350,8 @@ module riscv_cpu (
         .ebreak_exception(ebreak_exception),
         .misaligned_exception(misaligned_exception),
         .misaligned_cause(misaligned_cause),
+        .exception_pc_in(exception_pc),
+        .exception_tval_in(exception_tval),
         .timer_interrupt(timer_interrupt),
         .software_interrupt(software_interrupt),
         .external_interrupt(external_interrupt)

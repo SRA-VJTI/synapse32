@@ -72,6 +72,11 @@ assign csr_read_enable = (instr_id == INSTR_CSRRW) || (instr_id == INSTR_CSRRS) 
                         (instr_id == INSTR_CSRRC) || (instr_id == INSTR_CSRRWI) || 
                         (instr_id == INSTR_CSRRSI) || (instr_id == INSTR_CSRRCI);
 
+wire [31:0] mtvec_base = {mtvec[31:2], 2'b00};
+wire [31:0] interrupt_vector = (mtvec[1:0] == 2'b01) ?
+                                (mtvec_base + ({1'b0, interrupt_cause[30:0]} << 2)) :
+                                mtvec_base;
+
 // CSR execution unit for handling CSR operations
 wire [31:0] csr_rd_value;
 csr_exec csr_exec_inst (
@@ -138,7 +143,7 @@ always @(*) begin
     // Handle interrupts first (highest priority)
     if (interrupt_pending) begin
         jump_signal = 1;
-        jump_addr = mtvec;  // Jump to interrupt handler
+        jump_addr = interrupt_vector;
         flush_pipeline = 1;
         interrupt_taken = 1;
     end else begin
@@ -157,10 +162,10 @@ always @(*) begin
             end
             7'b0101111: begin // AMO/LR/SC instructions
             mem_addr = rs1_value;
-            if ((instr_id == INSTR_LR_W || instr_id == INSTR_SC_W) &&
+            if ((instr_id != INSTR_INVALID) &&
                 (rs1_value[1:0] != 2'b00)) begin
                 jump_signal = 1;
-                jump_addr = mtvec;
+                jump_addr = mtvec_base;
                 flush_pipeline = 1;
                 misaligned_exception = 1;
                 misaligned_cause = (instr_id == INSTR_LR_W) ? 32'd4 : 32'd6;
@@ -242,13 +247,13 @@ always @(*) begin
                 end
                 INSTR_ECALL: begin
                     jump_signal = 1;
-                    jump_addr = mtvec;  // Jump to trap handler
+                    jump_addr = mtvec_base;  // Exceptions always use BASE
                     flush_pipeline = 1;
                     ecall_exception = 1;
                 end
                 INSTR_EBREAK: begin
                     jump_signal = 1;
-                    jump_addr = mtvec;  // Jump to trap handler
+                    jump_addr = mtvec_base;  // Exceptions always use BASE
                     flush_pipeline = 1;
                     ebreak_exception = 1;
                 end

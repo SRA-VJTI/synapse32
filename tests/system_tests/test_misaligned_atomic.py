@@ -1,7 +1,8 @@
 """Regression tests for misaligned RV32A operations.
 
-LR.W and SC.W must trap with causes 4 and 6 respectively and must not
-modify their destination registers before entering the handler.
+LR.W, SC.W, and AMO.W must trap with causes 4, 6, and 6 respectively and
+must not modify their destination registers or memory before entering the
+handler.
 """
 import os
 import shutil
@@ -17,6 +18,9 @@ from cocotb_test.simulator import run
 BASE = 0x10000000
 CAUSE_ADDR = BASE + 0x40
 DEST_ADDR = BASE + 0x44
+MEPC_ADDR = BASE + 0x48
+MTVAL_ADDR = BASE + 0x4C
+EXPECTED_PC_ADDR = BASE + 0x50
 DONE_ADDR = BASE + 0xFF
 DEST_SENTINEL = 0x55
 
@@ -33,7 +37,11 @@ def _find_repo_root() -> Path:
 def compile_misaligned_asm(build_dir: Path, sim_dir: Path, operation: str) -> Path:
     build_dir.mkdir(parents=True, exist_ok=True)
     src = build_dir / f"misaligned_{operation}.S"
-    atomic = "lr.w t3, (t1)" if operation == "lr" else "sc.w t3, t2, (t1)"
+    atomic = {
+        "lr": "lr.w t3, (t1)",
+        "sc": "sc.w t3, t2, (t1)",
+        "amo": "amoadd.w t3, t2, (t1)",
+    }[operation]
     src.write_text(
         f"""
         .section .text
@@ -44,6 +52,11 @@ main:
         csrw  mtvec, t0
         li    t1, 0x10000001
         li    t2, {DEST_SENTINEL}
+        li    t3, {DEST_SENTINEL}
+        la    t4, faulting_atomic
+        li    t5, {BASE}
+        sw    t4, 0x50(t5)
+faulting_atomic:
         {atomic}
         j     .
 
@@ -53,6 +66,10 @@ trap_handler:
         csrr  t1, mcause
         sw    t1, 0x40(t0)
         sw    t3, 0x44(t0)
+        csrr  t1, mepc
+        sw    t1, 0x48(t0)
+        csrr  t1, mtval
+        sw    t1, 0x4c(t0)
         li    t1, 1
         sb    t1, 0xff(t0)
         j     .
@@ -119,6 +136,15 @@ async def _run_misaligned_test(dut, expected_cause: int):
     assert writes.get(DEST_ADDR) == DEST_SENTINEL, (
         "Misaligned atomic modified its destination before trapping"
     )
+    assert BASE + 1 not in writes, (
+        "Misaligned atomic performed a memory write before trapping"
+    )
+    assert writes.get(MEPC_ADDR) == writes.get(EXPECTED_PC_ADDR), (
+        "Trap mepc does not identify the faulting atomic instruction"
+    )
+    assert writes.get(MTVAL_ADDR) == BASE + 1, (
+        "Trap mtval does not contain the misaligned effective address"
+    )
 
 
 @cocotb.test()
@@ -128,6 +154,11 @@ async def test_misaligned_lr(dut):
 
 @cocotb.test()
 async def test_misaligned_sc(dut):
+    await _run_misaligned_test(dut, expected_cause=6)
+
+
+@cocotb.test()
+async def test_misaligned_amo(dut):
     await _run_misaligned_test(dut, expected_cause=6)
 
 
@@ -144,7 +175,7 @@ def runCocotbTests():
     ]
 
     build_dir = Path.cwd() / "build"
-    for operation in ("lr", "sc"):
+    for operation in ("lr", "sc", "amo"):
         hex_file = compile_misaligned_asm(build_dir, sim_dir, operation)
         sim_build = Path.cwd() / "sim_build" / f"sim_build_misaligned_{operation}"
         if sim_build.exists():
