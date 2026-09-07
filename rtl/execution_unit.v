@@ -47,7 +47,9 @@ module execution_unit(
     output reg mret_instruction,
     output reg ecall_exception,
     output reg ebreak_exception,
-    output reg wfi_instruction
+    output reg wfi_instruction,
+    output reg misaligned_exception,
+    output reg [31:0] misaligned_cause
 );
 
 // Internal signals for forwarded values
@@ -69,6 +71,11 @@ assign csr_addr = imm[11:0];  // Extract CSR address from immediate field
 assign csr_read_enable = (instr_id == INSTR_CSRRW) || (instr_id == INSTR_CSRRS) || 
                         (instr_id == INSTR_CSRRC) || (instr_id == INSTR_CSRRWI) || 
                         (instr_id == INSTR_CSRRSI) || (instr_id == INSTR_CSRRCI);
+
+wire [31:0] mtvec_base = {mtvec[31:2], 2'b00};
+wire [31:0] interrupt_vector = (mtvec[1:0] == 2'b01) ?
+                                (mtvec_base + ({1'b0, interrupt_cause[30:0]} << 2)) :
+                                mtvec_base;
 
 // CSR execution unit for handling CSR operations
 wire [31:0] csr_rd_value;
@@ -130,11 +137,13 @@ always @(*) begin
     ecall_exception = 0;
     ebreak_exception = 0;
     wfi_instruction = 0;
+    misaligned_exception = 0;
+    misaligned_cause = 32'b0;
     
     // Handle interrupts first (highest priority)
     if (interrupt_pending) begin
         jump_signal = 1;
-        jump_addr = mtvec;  // Jump to interrupt handler
+        jump_addr = interrupt_vector;
         flush_pipeline = 1;
         interrupt_taken = 1;
     end else begin
@@ -153,6 +162,14 @@ always @(*) begin
             end
             7'b0101111: begin // AMO/LR/SC instructions
             mem_addr = rs1_value;
+            if ((instr_id != INSTR_INVALID) &&
+                (rs1_value[1:0] != 2'b00)) begin
+                jump_signal = 1;
+                jump_addr = mtvec_base;
+                flush_pipeline = 1;
+                misaligned_exception = 1;
+                misaligned_cause = (instr_id == INSTR_LR_W) ? 32'd4 : 32'd6;
+            end
             end
             7'b1100011: begin // Branch instructions
             case (instr_id)
@@ -230,13 +247,13 @@ always @(*) begin
                 end
                 INSTR_ECALL: begin
                     jump_signal = 1;
-                    jump_addr = mtvec;  // Jump to trap handler
+                    jump_addr = mtvec_base;  // Exceptions always use BASE
                     flush_pipeline = 1;
                     ecall_exception = 1;
                 end
                 INSTR_EBREAK: begin
                     jump_signal = 1;
-                    jump_addr = mtvec;  // Jump to trap handler
+                    jump_addr = mtvec_base;  // Exceptions always use BASE
                     flush_pipeline = 1;
                     ebreak_exception = 1;
                 end

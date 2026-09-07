@@ -12,6 +12,7 @@
 
 .equ HANDLER_MARKER,  0x10000000
 .equ HANDLER_COUNT,   0x10000004
+.equ POLL_RESULT,      0x10000008
 .equ CPU_DONE_ADDR,   0x100000FF
 .equ SENTINEL,        0xDEADBEEF
 
@@ -58,6 +59,11 @@ wait_loop:
     lw    t2, 0(t0)
     bne   t2, t1, wait_loop
 
+    # This store also checks that the interrupt handler preserved t0/t1;
+    # otherwise the loop can exit by reading the disarmed timer registers.
+    li    t3, POLL_RESULT
+    sw    t2, 0(t3)
+
     # Handler ran - tell the testbench we're done.
     li    t0, CPU_DONE_ADDR
     li    t1, 1
@@ -70,6 +76,10 @@ hang:
     .global trap_handler
     .type trap_handler, @function
 trap_handler:
+    addi  sp, sp, -8
+    sw    t0, 0(sp)
+    sw    t1, 4(sp)
+
     # Publish sentinel.
     li    t0, HANDLER_MARKER
     li    t1, SENTINEL
@@ -88,4 +98,7 @@ trap_handler:
     li    t0, MTIMECMP_LO
     sw    t1, 0(t0)
 
+    lw    t0, 0(sp)
+    lw    t1, 4(sp)
+    addi  sp, sp, 8
     mret

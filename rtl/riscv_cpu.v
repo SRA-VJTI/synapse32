@@ -214,6 +214,10 @@ module riscv_cpu (
     wire ecall_exception;
     wire ebreak_exception;
     wire wfi_instruction;
+    wire misaligned_exception;
+    wire [31:0] misaligned_cause;
+    wire [31:0] exception_pc;
+    wire [31:0] exception_tval;
 
     // LR/SC reservation state (single hart, uncached memory model)
     reg lr_valid;
@@ -222,7 +226,8 @@ module riscv_cpu (
     // WFI sleep state: stall fetch/decode until an interrupt becomes pending.
     reg wfi_active;
     wire wfi_stall;
-    assign wfi_stall = wfi_active && !interrupt_pending;
+    wire interrupt_wakeup;
+    assign wfi_stall = wfi_active && !interrupt_wakeup;
 
     wire is_lr_w   = (ex_mem_inst0_instr_id_out == INSTR_LR_W);
     wire is_sc_w   = (ex_mem_inst0_instr_id_out == INSTR_SC_W);
@@ -244,6 +249,11 @@ module riscv_cpu (
     wire sc_success = is_sc_w && atomic_word_aligned && lr_valid &&
                       (lr_addr == ex_mem_inst0_mem_addr_out);
     wire [31:0] sc_result = sc_success ? 32'h0 : 32'h1;
+    wire atomic_misaligned = (id_ex_inst0_opcode_out == 7'b0101111) &&
+                             (id_ex_inst0_instr_id_out != INSTR_INVALID) &&
+                             (ex_inst0_mem_addr_out[1:0] != 2'b00);
+    assign exception_pc = id_ex_inst0_pc_out;
+    assign exception_tval = ex_inst0_mem_addr_out;
 
     wire [31:0] atomic_old_word = module_read_data_in;
     wire signed [31:0] atomic_old_word_signed = atomic_old_word;
@@ -283,7 +293,7 @@ module riscv_cpu (
             wfi_active <= 1'b0;
             lr_valid <= 1'b0;
             lr_addr <= 32'b0;
-        end else if (interrupt_pending) begin
+        end else if (interrupt_wakeup) begin
             wfi_active <= 1'b0;
         end else if (wfi_instruction) begin
             wfi_active <= 1'b1;
@@ -311,9 +321,13 @@ module riscv_cpu (
         .mie(csr_file_inst.mie),
         .mip(csr_file_inst.mip),
         .interrupt_pending(interrupt_pending),
+        .interrupt_wakeup(interrupt_wakeup),
         .interrupt_cause(interrupt_cause),
         .interrupt_taken(interrupt_taken),
-        .current_pc(pc_inst0_out),
+        // Interrupts are taken before the instruction currently in EX is
+        // allowed to retire. WFI is already redirected to PC+4 when it
+        // stalls, so preserve that resume point while sleeping.
+        .current_pc(wfi_active ? pc_inst0_out : id_ex_inst0_pc_out),
         .interrupt_pc(interrupt_pc)
     );
 
@@ -334,6 +348,10 @@ module riscv_cpu (
         .mret_instruction(mret_instruction),
         .ecall_exception(ecall_exception),
         .ebreak_exception(ebreak_exception),
+        .misaligned_exception(misaligned_exception),
+        .misaligned_cause(misaligned_cause),
+        .exception_pc_in(exception_pc),
+        .exception_tval_in(exception_tval),
         .timer_interrupt(timer_interrupt),
         .software_interrupt(software_interrupt),
         .external_interrupt(external_interrupt)
@@ -352,7 +370,7 @@ module riscv_cpu (
         .pc_input(id_ex_inst0_pc_out),
         .forward_a(forward_a),
         .forward_b(forward_b),
-        .ex_mem_result(ex_mem_inst0_exec_output_out),
+        .ex_mem_result(is_sc_w ? sc_result : ex_mem_inst0_exec_output_out),
         .mem_wb_result(wb_inst0_rd_value_out),
         
         // CSR interface connections
@@ -380,7 +398,9 @@ module riscv_cpu (
         .mret_instruction(mret_instruction),
         .ecall_exception(ecall_exception),
         .ebreak_exception(ebreak_exception),
-        .wfi_instruction(wfi_instruction)
+        .wfi_instruction(wfi_instruction),
+        .misaligned_exception(misaligned_exception),
+        .misaligned_cause(misaligned_cause)
     );
 
     // Memory Stage
@@ -412,8 +432,8 @@ module riscv_cpu (
         .exec_output_in(ex_inst0_exec_output_out),
         .jump_signal_in(ex_inst0_jump_signal_out),
         .jump_addr_in(ex_inst0_jump_addr_out),
-        .instr_id_in(id_ex_inst0_instr_id_out),
-        .rd_valid_in(id_ex_inst0_rd_valid_out),
+        .instr_id_in(atomic_misaligned ? INSTR_INVALID : id_ex_inst0_instr_id_out),
+        .rd_valid_in(id_ex_inst0_rd_valid_out && !atomic_misaligned),
         .rs1_addr_out(ex_mem_inst0_rs1_addr_out),
         .rs2_addr_out(ex_mem_inst0_rs2_addr_out),
         .rd_addr_out(ex_mem_inst0_rd_addr_out),
