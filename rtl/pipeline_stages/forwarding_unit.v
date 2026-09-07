@@ -10,7 +10,7 @@ module forwarding_unit (
     // Previous instructions (in MEM stage)
     input wire [4:0] rd_addr_mem,
     input wire rd_valid_mem,
-    input wire [5:0] instr_id_mem,
+    input wire [6:0] instr_id_mem,
     
     // Two-stages ago instructions (in WB stage)
     input wire [4:0] rd_addr_wb,
@@ -33,7 +33,17 @@ module forwarding_unit (
                          (instr_id_mem == INSTR_LH) || 
                          (instr_id_mem == INSTR_LW) || 
                          (instr_id_mem == INSTR_LBU) || 
-                         (instr_id_mem == INSTR_LHU);
+                         (instr_id_mem == INSTR_LHU) ||
+                         (instr_id_mem == INSTR_LR_W) ||
+                         (instr_id_mem == INSTR_AMOSWAP_W) ||
+                         (instr_id_mem == INSTR_AMOADD_W) ||
+                         (instr_id_mem == INSTR_AMOAND_W) ||
+                         (instr_id_mem == INSTR_AMOOR_W) ||
+                         (instr_id_mem == INSTR_AMOXOR_W) ||
+                         (instr_id_mem == INSTR_AMOMAX_W) ||
+                         (instr_id_mem == INSTR_AMOMIN_W) ||
+                         (instr_id_mem == INSTR_AMOMAXU_W) ||
+                         (instr_id_mem == INSTR_AMOMINU_W);
     
     always @(*) begin
         // Default: no forwarding

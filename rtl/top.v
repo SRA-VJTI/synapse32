@@ -87,14 +87,24 @@ module top (
         .module_load_type(cpu_load_type)
     );
 
+    // Instruction memory uses local offsets from INSTR_MEM_BASE.
+    wire [31:0] instr_fetch_addr_local;
+    wire [31:0] instr_data_addr_local;
+    assign instr_fetch_addr_local = cpu_pc_out - `INSTR_MEM_BASE;
+    assign instr_data_addr_local = data_mem_addr - `INSTR_MEM_BASE;
+
     // Instantiate instruction memory
     instr_mem #(
         .DATA_WIDTH(32),
         .ADDR_WIDTH(32),
         .MEM_SIZE(131072)  // 512KB / 4 bytes = 128K words
     ) instr_mem_inst (
-        .instr_addr(cpu_pc_out),
-        .instr_addr_p2(data_mem_addr),
+        .clk(clk),
+        .instr_addr(instr_fetch_addr_local),
+        .instr_addr_p2(instr_data_addr_local),
+        .wr_en(cpu_mem_write_en && instr_mem_access),
+        .write_byte_enable(cpu_write_byte_enable),
+        .wr_data(cpu_mem_write_data),
         .load_type(cpu_load_type),
         .instr(instr_to_cpu),
         .instr_p2(instr_read_data)

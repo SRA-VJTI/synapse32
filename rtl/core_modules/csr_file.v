@@ -17,6 +17,10 @@ module csr_file (
     input wire mret_instruction,
     input wire ecall_exception,
     input wire ebreak_exception,
+    input wire misaligned_exception,
+    input wire [31:0] misaligned_cause,
+    input wire [31:0] exception_pc_in,
+    input wire [31:0] exception_tval_in,
     
     // Timer interrupt input
     input wire timer_interrupt,
@@ -94,7 +98,7 @@ module csr_file (
             
             // Handle ECALL exception
             else if (ecall_exception) begin
-                mepc <= interrupt_pc_in;         // Save current PC
+                mepc <= exception_pc_in;
                 mcause <= 32'h0000000B;          // Environment call from M-mode
                 mstatus[7] <= mstatus[3];        // Save MIE to MPIE
                 mstatus[3] <= 1'b0;              // Disable interrupts
@@ -102,10 +106,18 @@ module csr_file (
             
             // Handle EBREAK exception
             else if (ebreak_exception) begin
-                mepc <= interrupt_pc_in;         // Save current PC
+                mepc <= exception_pc_in;
                 mcause <= 32'h00000003;          // Breakpoint
                 mstatus[7] <= mstatus[3];        // Save MIE to MPIE
                 mstatus[3] <= 1'b0;              // Disable interrupts
+            end
+
+            else if (misaligned_exception) begin
+                mepc <= exception_pc_in;
+                mcause <= misaligned_cause;
+                mtval <= exception_tval_in;
+                mstatus[7] <= mstatus[3];
+                mstatus[3] <= 1'b0;
             end
             
             // Normal CSR writes

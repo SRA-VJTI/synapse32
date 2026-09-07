@@ -13,6 +13,7 @@ module interrupt_controller (
     input wire [31:0] mie,
     input wire [31:0] mip,
     output reg interrupt_pending,
+    output reg interrupt_wakeup,
     output reg [31:0] interrupt_cause,
     
     // Control signals
@@ -39,9 +40,14 @@ module interrupt_controller (
     
     always @(*) begin
         interrupt_pending = 1'b0;
+        interrupt_wakeup = 1'b0;
         interrupt_cause = 32'b0;
         interrupt_pc = current_pc;
         
+        if ((meip && meie) || (mtip && mtie) || (msip && msie)) begin
+            interrupt_wakeup = 1'b1;
+        end
+
         if (mie_global) begin
             // Priority: External > Timer > Software
             if (meip && meie) begin

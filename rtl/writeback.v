@@ -6,7 +6,7 @@ module writeback (
     input wire [4:0] rd_addr_in,
     input wire [31:0] rd_value_in,        // ALU result
     input wire [31:0] mem_data_in,        // Data from memory load
-    input wire [5:0] instr_id_in,         // To identify load instructions
+    input wire [6:0] instr_id_in,         // To identify load instructions
     output wire [4:0] rd_addr_out,
     output wire [31:0] rd_value_out,
     output wire wr_en_out
@@ -16,7 +16,17 @@ module writeback (
                            (instr_id_in == INSTR_LH) || 
                            (instr_id_in == INSTR_LW) || 
                            (instr_id_in == INSTR_LBU) || 
-                           (instr_id_in == INSTR_LHU);
+                           (instr_id_in == INSTR_LHU) ||
+                           (instr_id_in == INSTR_LR_W) ||
+                           (instr_id_in == INSTR_AMOSWAP_W) ||
+                           (instr_id_in == INSTR_AMOADD_W) ||
+                           (instr_id_in == INSTR_AMOAND_W) ||
+                           (instr_id_in == INSTR_AMOOR_W) ||
+                           (instr_id_in == INSTR_AMOXOR_W) ||
+                           (instr_id_in == INSTR_AMOMAX_W) ||
+                           (instr_id_in == INSTR_AMOMIN_W) ||
+                           (instr_id_in == INSTR_AMOMAXU_W) ||
+                           (instr_id_in == INSTR_AMOMINU_W);
     
     // Select appropriate data to write back
     assign rd_addr_out = rd_addr_in;

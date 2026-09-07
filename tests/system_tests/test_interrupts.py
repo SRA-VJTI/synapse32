@@ -259,6 +259,110 @@ async def test_timer_interrupt(dut):
     
     print("Timer interrupt test completed!")
 
+@cocotb.test()
+async def test_wfi_interrupt(dut):
+    """Test WFI sleep and wakeup by software interrupt, then mret resume."""
+    print("Starting WFI interrupt wake test...")
+
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+
+    dut.timer_interrupt.value = 0
+    dut.software_interrupt.value = 0
+    dut.external_interrupt.value = 0
+    dut.rst.value = 1
+    await ClockCycles(dut.clk, 5)
+    dut.rst.value = 0
+
+    mem_writes = {}
+    first_write_cycle = {}
+    max_cycles = 400
+
+    irq_armed = False
+    irq_pulse = 0
+
+    for cycle in range(max_cycles):
+        if int(dut.cpu_mem_write_en.value):
+            addr = int(dut.cpu_mem_write_addr.value)
+            data = int(dut.cpu_mem_write_data.value)
+            mem_writes[addr] = data
+            if addr not in first_write_cycle:
+                first_write_cycle[addr] = cycle
+            print(f"Cycle {cycle}: Memory write addr=0x{addr:08x} data=0x{data:08x}")
+
+        # Arm SW interrupt once we know setup reached the pre-WFI marker.
+        if not irq_armed and mem_writes.get(0x02000000) == 0x11:
+            irq_armed = True
+            irq_pulse = 4
+            dut.software_interrupt.value = 1
+            print(f"Cycle {cycle}: Asserting software_interrupt for {irq_pulse} cycles")
+
+        if irq_pulse > 0:
+            irq_pulse -= 1
+            if irq_pulse == 0:
+                dut.software_interrupt.value = 0
+                print(f"Cycle {cycle}: Deasserting software_interrupt")
+
+        if mem_writes.get(0x02000008) == 1:
+            print(f"Cycle {cycle}: Completion flag observed")
+            break
+
+        await RisingEdge(dut.clk)
+
+    assert mem_writes.get(0x02000000) == 0x11, "Pre-WFI marker missing"
+    assert mem_writes.get(0x0200000C) == 0x33, "WFI handler marker missing"
+    assert mem_writes.get(0x02000004) == 0x22, "Post-WFI resume marker missing"
+    assert mem_writes.get(0x02000008) == 1, "Completion flag missing"
+
+    assert first_write_cycle[0x0200000C] < first_write_cycle[0x02000004], (
+        "Post-WFI marker appeared before handler marker; WFI wake/return order is wrong"
+    )
+
+    print("WFI interrupt wake test passed!")
+
+@cocotb.test()
+async def test_wfi_interrupt_with_global_mie_clear(dut):
+    """WFI must resume on an enabled pending interrupt with MIE clear."""
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+
+    dut.timer_interrupt.value = 0
+    dut.software_interrupt.value = 0
+    dut.external_interrupt.value = 0
+    dut.rst.value = 1
+    await ClockCycles(dut.clk, 5)
+    dut.rst.value = 0
+
+    mem_writes = {}
+    irq_armed = False
+    irq_pulse = 0
+
+    for _ in range(400):
+        if int(dut.cpu_mem_write_en.value):
+            addr = int(dut.cpu_mem_write_addr.value)
+            mem_writes[addr] = int(dut.cpu_mem_write_data.value)
+
+        if not irq_armed and mem_writes.get(0x02000000) == 0x11:
+            irq_armed = True
+            irq_pulse = 4
+            dut.software_interrupt.value = 1
+
+        if irq_pulse > 0:
+            irq_pulse -= 1
+            if irq_pulse == 0:
+                dut.software_interrupt.value = 0
+
+        if mem_writes.get(0x02000008) == 1:
+            break
+        await RisingEdge(dut.clk)
+
+    assert mem_writes.get(0x02000000) == 0x11, "Pre-WFI marker missing"
+    assert mem_writes.get(0x02000004) == 0x22, (
+        "WFI did not resume while global MIE was clear"
+    )
+    assert mem_writes.get(0x02000008) == 1, "Completion flag missing"
+    assert 0x0200000C not in mem_writes, "Interrupt was delivered despite MIE=0"
+
 def run_interrupt_setup_test():
     instr_mem = [
         0x10000137,  # lui x2, 0x10000       # Load upper immediate: Set x2 (sp) to point to 0x10000000 (MTVEC base)
@@ -408,6 +512,67 @@ def run_timer_interrupt_test():
     hex_file = create_interrupt_test_hex(test_name, instr_mem)
     return test_name, hex_file
 
+def run_wfi_interrupt_test():
+    """Create program that executes WFI and resumes after a SW interrupt."""
+    main_program = [
+        0x10000093,  # addi x1, x0, 0x100   # mtvec = 0x100
+        0x30509073,  # csrw mtvec, x1
+        0x00800093,  # addi x1, x0, 8       # MSIE
+        0x30409073,  # csrw mie, x1
+        0x00800093,  # addi x1, x0, 8       # MIE global
+        0x30009073,  # csrw mstatus, x1
+        0x02000137,  # lui x2, 0x2000       # data base: 0x02000000
+        0x01100213,  # addi x4, x0, 0x11    # pre-WFI marker
+        0x00412023,  # sw x4, 0(x2)
+        0x10500073,  # wfi
+        0x02200293,  # addi x5, x0, 0x22    # post-WFI marker
+        0x00512223,  # sw x5, 4(x2)
+        0x00100313,  # addi x6, x0, 1       # done
+        0x00612423,  # sw x6, 8(x2)
+        0x0000006F,  # jal x0, 0            # stop here
+    ]
+
+    while len(main_program) < 64:
+        main_program.append(0x00000013)  # nop
+
+    handler = [
+        0x03300393,  # addi x7, x0, 0x33    # handler marker
+        0x00712623,  # sw x7, 12(x2)
+        0x30200073,  # mret
+        0x00000013,  # nop
+    ]
+
+    instr_mem = main_program + handler
+    test_name = "wfi_interrupt"
+    hex_file = create_interrupt_test_hex(test_name, instr_mem)
+    return test_name, hex_file
+
+def run_wfi_interrupt_with_global_mie_clear_test():
+    """Create a WFI program with MSIE set but global MIE deliberately clear."""
+    main_program = [
+        0x10000093,  # addi x1, x0, 0x100       # mtvec = 0x100
+        0x30509073,  # csrw mtvec, x1
+        0x00800093,  # addi x1, x0, 8           # MSIE only
+        0x30409073,  # csrw mie, x1
+        0x02000137,  # lui x2, 0x2000           # data base: 0x02000000
+        0x01100213,  # addi x4, x0, 0x11        # pre-WFI marker
+        0x00412023,  # sw x4, 0(x2)
+        0x10500073,  # wfi
+        0x02200293,  # addi x5, x0, 0x22        # post-WFI marker
+        0x00512223,  # sw x5, 4(x2)
+        0x00100313,  # addi x6, x0, 1
+        0x00612423,  # sw x6, 8(x2)
+        0x0000006F,  # jal x0, 0
+    ]
+
+    while len(main_program) < 64:
+        main_program.append(0x00000013)
+
+    instr_mem = main_program + [0x00000013] * 4
+    test_name = "wfi_interrupt_with_global_mie_clear"
+    hex_file = create_interrupt_test_hex(test_name, instr_mem)
+    return test_name, hex_file
+
 def runCocotbTests():
     # Find RTL directory
     sources = []
@@ -439,6 +604,8 @@ def runCocotbTests():
         ("ebreak_test", run_ebreak_test),
         ("mret_test", run_mret_test),
         ("timer_interrupt", run_timer_interrupt_test),
+        ("wfi_interrupt", run_wfi_interrupt_test),
+        ("wfi_interrupt_with_global_mie_clear", run_wfi_interrupt_with_global_mie_clear_test),
     ]
     
     # Run each test

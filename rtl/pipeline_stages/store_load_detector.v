@@ -2,11 +2,11 @@
 `include "instr_defines.vh"
 module store_load_detector (
     // Current load instruction
-    input wire [5:0] load_instr_id,
+    input wire [6:0] load_instr_id,
     input wire [31:0] load_addr,
     
     // Previous store instructions
-    input wire [5:0] prev_store_instr_id,
+    input wire [6:0] prev_store_instr_id,
     input wire [31:0] prev_store_addr,
     input wire [31:0] rs2_value, // Value to be stored in case of hazard
     

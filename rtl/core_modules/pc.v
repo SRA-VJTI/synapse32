@@ -1,3 +1,4 @@
+`include "memory_map.vh"
 module pc(
    input clk,
    input rst,

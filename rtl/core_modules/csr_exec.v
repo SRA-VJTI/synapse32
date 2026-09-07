@@ -1,7 +1,7 @@
 `default_nettype none
 `include "instr_defines.vh"
 module csr_exec (
-    input wire [5:0] instr_id,
+    input wire [6:0] instr_id,
     input wire [31:0] rs1_value,
     input wire [4:0] rs1_addr,     // For immediate value
     input wire [31:0] csr_read_data,
