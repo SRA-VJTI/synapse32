@@ -235,7 +235,11 @@ always @(*) begin
     target_addr = 0;
     
     // Handle interrupts first (highest priority)
-    if (interrupt_pending && instr_valid) begin
+    // An interrupt must also be accepted while the fetch/decode pipeline is
+    // empty (for example, when WFI has stalled it).  The interrupt controller
+    // supplies the current PC for that case, so requiring a valid EX-stage
+    // instruction here can leave a pending interrupt permanently undelivered.
+    if (interrupt_pending) begin
         jump_signal = 1;
         trap_to_supervisor = interrupt_to_supervisor;
         jump_addr = interrupt_to_supervisor ? stvec : mtvec;  // Jump to interrupt handler
