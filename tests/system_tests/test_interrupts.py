@@ -443,15 +443,19 @@ async def test_arch_cpu_idle_resume(dut):
     await ClockCycles(dut.clk, 5)
 
     sp_base = 0x10000100
-    return_pc = 0x80000018
+    return_pc = 0x80000020
     scratch_base = 0x10002000
+    saved_s0 = 0x12345678
 
     # Seed the stack frame and architectural state while reset is asserted.
+    # Stack addresses are physical here, so they must go through
+    # _phys_word_index(): unified_mem stores the data region *after* the whole
+    # instruction region, not at index 0.
     dut.cpu_inst.rf_inst0.register_file[2].value = sp_base
     dut.cpu_inst.rf_inst0.register_file[8].value = 0xCAFEBABE
     dut.cpu_inst.rf_inst0.register_file[1].value = 0x11111111
-    dut.unified_mem_inst.instr_ram[(sp_base - 0x10000000 + 8) // 4].value = 0x12345678
-    dut.unified_mem_inst.instr_ram[(sp_base - 0x10000000 + 12) // 4].value = return_pc
+    dut.unified_mem_inst.instr_ram[_phys_word_index(sp_base + 8)].value = saved_s0
+    dut.unified_mem_inst.instr_ram[_phys_word_index(sp_base + 12)].value = return_pc
 
     csr = dut.cpu_inst.csr_file_inst
     csr.privilege_mode.value = 0x1
@@ -467,7 +471,7 @@ async def test_arch_cpu_idle_resume(dut):
     mem_writes = {}
     reached_return = False
 
-    for cycle in range(40):
+    for cycle in range(200):
         await RisingEdge(dut.clk)
 
         sample = {
@@ -495,7 +499,6 @@ async def test_arch_cpu_idle_resume(dut):
 
         if sample["pc"] == return_pc:
             reached_return = True
-            break
 
         if int(dut.cpu_mem_write_en.value):
             addr = int(dut.cpu_mem_write_addr.value) & 0xFFFFFFFF
@@ -503,7 +506,24 @@ async def test_arch_cpu_idle_resume(dut):
             mem_writes[addr] = data
             print(f"Cycle {cycle}: Memory write addr=0x{addr:08x} data=0x{data:08x}")
 
-    assert reached_return, "arch_cpu_idle reproducer never reached the return target"
+        if mem_writes.get(scratch_base + 8) == 1:
+            break
+
+    pc_tail = " ".join(f"{s['cycle']}:0x{s['pc']:08x}" for s in observed[-12:])
+    assert mem_writes.get(scratch_base + 8) == 1, (
+        "Return block never ran: the core did not return through the loaded ra "
+        f"(reached_return={reached_return}, last PCs: {pc_tail})"
+    )
+    assert mem_writes.get(scratch_base) == return_pc, (
+        f"ret used the wrong return address: stored ra="
+        f"0x{mem_writes.get(scratch_base, 0):08x}, expected 0x{return_pc:08x}"
+    )
+    assert mem_writes.get(scratch_base + 4) == 0x77, "Marker store missing"
+    assert int(dut.cpu_inst.rf_inst0.register_file[8].value) == saved_s0, (
+        "Post-WFI load of s0 did not retire: s0="
+        f"0x{int(dut.cpu_inst.rf_inst0.register_file[8].value):08x}, "
+        f"expected 0x{saved_s0:08x}"
+    )
 
     stall_at_post_wfi = [
         s for s in observed if s["pc"] == 0x80000008 and s["wfi_stall"] == 1
@@ -541,7 +561,8 @@ async def test_arch_cpu_idle_resume_mmu(dut):
     scratch_pa = 0x10001000
     root_pt_pa = 0x10002000
     l0_pt_pa = 0x10003000
-    return_pc = code_va + 0x18
+    return_pc = code_va + 0x20
+    saved_s0 = 0x12345678
 
     def pte_leaf(ppn, flags):
         return ((ppn & 0xFFFFF) << 10) | flags
@@ -550,7 +571,7 @@ async def test_arch_cpu_idle_resume_mmu(dut):
         return ((ppn & 0xFFFFF) << 10) | 0x001
 
     # Seed stack frame.
-    dut.unified_mem_inst.instr_ram[_phys_word_index(stack_pa + 8)].value = 0x12345678
+    dut.unified_mem_inst.instr_ram[_phys_word_index(stack_pa + 8)].value = saved_s0
     dut.unified_mem_inst.instr_ram[_phys_word_index(stack_pa + 12)].value = return_pc
 
     # Root entry for vpn1=0x200, then leaf entries for vpn0=0/1/2.
@@ -577,7 +598,7 @@ async def test_arch_cpu_idle_resume_mmu(dut):
     mem_writes = {}
     reached_return = False
 
-    for cycle in range(80):
+    for cycle in range(300):
         await RisingEdge(dut.clk)
 
         sample = {
@@ -607,15 +628,33 @@ async def test_arch_cpu_idle_resume_mmu(dut):
 
         if sample["pc"] == return_pc:
             reached_return = True
-            break
 
+        # cpu_mem_write_addr is the pre-translation address, so these keys are
+        # the scratch page's virtual addresses.
         if int(dut.cpu_mem_write_en.value):
             addr = int(dut.cpu_mem_write_addr.value) & 0xFFFFFFFF
             data = int(dut.cpu_mem_write_data.value) & 0xFFFFFFFF
             mem_writes[addr] = data
             print(f"Cycle {cycle}: Memory write addr=0x{addr:08x} data=0x{data:08x}")
 
-    assert reached_return, "MMU arch_cpu_idle reproducer never reached the return target"
+        if mem_writes.get(scratch_va + 8) == 1:
+            break
+
+    pc_tail = " ".join(f"{s['cycle']}:0x{s['pc']:08x}" for s in observed[-12:])
+    assert mem_writes.get(scratch_va + 8) == 1, (
+        "Return block never ran: the core did not return through the loaded ra "
+        f"(reached_return={reached_return}, last PCs: {pc_tail})"
+    )
+    assert mem_writes.get(scratch_va) == return_pc, (
+        f"ret used the wrong return address: stored ra="
+        f"0x{mem_writes.get(scratch_va, 0):08x}, expected 0x{return_pc:08x}"
+    )
+    assert mem_writes.get(scratch_va + 4) == 0x77, "Marker store missing"
+    assert int(dut.cpu_inst.rf_inst0.register_file[8].value) == saved_s0, (
+        "Post-WFI load of s0 did not retire: s0="
+        f"0x{int(dut.cpu_inst.rf_inst0.register_file[8].value):08x}, "
+        f"expected 0x{saved_s0:08x}"
+    )
     assert not any(s["ifault"] or s["lfault"] or s["sfault"] for s in observed), (
         "Unexpected MMU fault during idle reproducer"
     )
@@ -859,13 +898,21 @@ def run_wfi_pending_no_global_test():
     return test_name, hex_file
 
 def run_arch_cpu_idle_resume_test():
-    """Encode Linux arch_cpu_idle() plus a tiny return target.
+    """Encode Linux arch_cpu_idle() plus a return target only `ret` can reach.
 
     0x80000000: fence
     0x80000004: wfi
     0x80000008: lw ra, 12(sp)
-    0x8000000c: ret
-    0x80000018: store loaded RA, store marker, store done, spin
+    0x8000000c: lw s0, 8(sp)
+    0x80000010: addi sp, sp, 0x10
+    0x80000014: ret                -> must land on 0x80000020
+    0x80000018: spin               <- fall-through trap
+    0x8000001c: spin               <- fall-through trap
+    0x80000020: store loaded RA, store marker, store done, spin
+
+    The two spins matter: if the return block sat at 0x80000018 it would be the
+    fall-through address of `ret`, so the core would walk into it in program
+    order and the test would pass without the return address ever being used.
     """
     instr_mem = [
         0x0FF0000F,  # fence
@@ -873,7 +920,9 @@ def run_arch_cpu_idle_resume_test():
         0x00C12083,  # lw ra, 12(sp)
         0x00812403,  # lw s0, 8(sp)
         0x01010113,  # addi sp, sp, 0x10
-        0x00008067,  # ret
+        0x00008067,  # ret                  -> 0x80000020 via the loaded ra
+        0x0000006F,  # jal x0, 0            # trap the fall-through path
+        0x0000006F,  # jal x0, 0
         0x100023B7,  # lui x7, 0x10002      -> 0x10002000
         0x0013A023,  # sw ra, 0(x7)
         0x07700293,  # addi x5, x0, 0x77
@@ -888,14 +937,20 @@ def run_arch_cpu_idle_resume_test():
     return test_name, hex_file
 
 def run_arch_cpu_idle_resume_mmu_test():
-    """Same idle helper, but return target stores into a mapped scratch page."""
+    """Same idle helper, but return target stores into a mapped scratch page.
+
+    Layout matches run_arch_cpu_idle_resume_test: the return block sits at
+    +0x20 behind two spins, so it is reachable only through the loaded ra.
+    """
     instr_mem = [
         0x0FF0000F,  # fence
         0x10500073,  # wfi
         0x00C12083,  # lw ra, 12(sp)
         0x00812403,  # lw s0, 8(sp)
         0x01010113,  # addi sp, sp, 0x10
-        0x00008067,  # ret
+        0x00008067,  # ret                  -> code_va + 0x20 via the loaded ra
+        0x0000006F,  # jal x0, 0            # trap the fall-through path
+        0x0000006F,  # jal x0, 0
         0x800023B7,  # lui x7, 0x80002      -> 0x80002000
         0x0013A023,  # sw ra, 0(x7)
         0x07700293,  # addi x5, x0, 0x77
