@@ -7,11 +7,12 @@
 
 set -euo pipefail
 
-# OpenSBI tags this release as v1.5 rather than v1.5.0.
 OPENSBI_VERSION="v1.4"
 OPENSBI_DIR="/tmp/opensbi-build"
-WORKSPACE="${WORKSPACE:-/workspace}"
-SIM_DIR="$WORKSPACE/sim"
+# Resolve paths from this script's own location so the flow works regardless of
+# where the repo is mounted (the devcontainer uses /workspaces/<repo>, the
+# docker-* targets use /workspace).
+SIM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT_DIR="${SIM_OUT_DIR:-$SIM_DIR/.out/opensbi}"
 OUT_ELF="$OUT_DIR/fw_jump.elf"
 OUT_BIN="$OUT_DIR/fw_jump.bin"
@@ -32,12 +33,29 @@ dtc -O dtb -o "$DTB" "$SIM_DIR/synapse32.dts"
 echo "    $DTB ($(wc -c < "$DTB") bytes)"
 
 # ---- clone / update openSBI ------------------------------------------------
+if [ -d "$OPENSBI_DIR" ] && [ ! -d "$OPENSBI_DIR/.git" ]; then
+    echo "error: $OPENSBI_DIR exists but is not a git clone." >&2
+    echo "       Remove it and re-run: rm -rf $OPENSBI_DIR" >&2
+    exit 1
+fi
+
 if [ ! -d "$OPENSBI_DIR/.git" ]; then
     echo "==> Cloning openSBI $OPENSBI_VERSION..."
     git clone --depth 1 --branch "$OPENSBI_VERSION" \
         https://github.com/riscv-software-src/opensbi.git "$OPENSBI_DIR"
 else
-    echo "==> openSBI already cloned at $OPENSBI_DIR"
+    # An existing clone may be left over from a different version; check the
+    # checked-out tag rather than silently building whatever is there.
+    CURRENT_TAG="$(git -C "$OPENSBI_DIR" describe --tags --exact-match 2>/dev/null || true)"
+    if [ "$CURRENT_TAG" = "$OPENSBI_VERSION" ]; then
+        echo "==> openSBI $OPENSBI_VERSION already cloned at $OPENSBI_DIR"
+    else
+        echo "==> $OPENSBI_DIR is at '${CURRENT_TAG:-unknown}', switching to $OPENSBI_VERSION..."
+        git -C "$OPENSBI_DIR" fetch --depth 1 --force origin \
+            "refs/tags/$OPENSBI_VERSION:refs/tags/$OPENSBI_VERSION"
+        git -C "$OPENSBI_DIR" checkout --force "$OPENSBI_VERSION"
+        make -C "$OPENSBI_DIR" distclean >/dev/null 2>&1 || true
+    fi
 fi
 
 # ---- build -----------------------------------------------------------------

@@ -30,10 +30,14 @@
 		};
 	};
 
-	/* 512KB instruction memory */
+	/*
+	 * 64MB instruction/main memory, matching INSTR_MEM_SIZE in
+	 * rtl/include/memory_map.vh. This must cover FW_JUMP_ADDR
+	 * (0x80200000) and FW_JUMP_FDT_ADDR (0x80050000) in build_opensbi.sh.
+	 */
 	memory@80000000 {
 		device_type = "memory";
-		reg = <0x80000000 0x00080000>;
+		reg = <0x80000000 0x04000000>;
 	};
 
 	/* 1MB data memory */

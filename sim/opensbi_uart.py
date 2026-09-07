@@ -9,6 +9,9 @@ UART_IDLE_CYCLES = int(os.getenv("UART_IDLE_CYCLES", "200000"))
 BOOT_TIMEOUT_CYCLES = int(os.getenv("BOOT_TIMEOUT_CYCLES", "5000000"))
 STATUS_INTERVAL_CYCLES = int(os.getenv("STATUS_INTERVAL_CYCLES", "250000"))
 CLOCK_PERIOD_NS = int(os.getenv("CLOCK_PERIOD_NS", "20"))
+# Reaching UART idle only proves the firmware emitted *something*. Require the
+# banner so a single stray byte followed by a wedged hart fails the test.
+EXPECTED_BANNER = os.getenv("EXPECTED_BANNER", "OpenSBI v")
 
 
 class UartConsole:
@@ -38,6 +41,9 @@ class UartConsole:
 
         self.prev_busy = busy
         return emitted
+
+    def text(self) -> str:
+        return self.received.decode("ascii", errors="replace")
 
 
 def _read_value(handle, default=None):
@@ -85,6 +91,17 @@ def _dump_status(dut, cycle):
     )
 
 
+def _assert_banner(dut, console):
+    text = console.text()
+    if EXPECTED_BANNER not in text:
+        raise AssertionError(
+            f"UART went idle without the expected banner {EXPECTED_BANNER!r} "
+            f"(captured {len(console.received)} bytes, "
+            f"pc=0x{int(dut.pc_debug.value):08x}):\n{text}"
+        )
+    cocotb.log.info("Found expected banner %r in UART output", EXPECTED_BANNER)
+
+
 @cocotb.test()
 async def boot_opensbi(dut):
     cocotb.log.info(
@@ -119,6 +136,7 @@ async def boot_opensbi(dut):
         if last_uart_cycle is not None and (cycle - last_uart_cycle) >= UART_IDLE_CYCLES:
             print("\n\n=== UART idle, stopping simulation ===")
             cocotb.log.info("Captured %d UART bytes", len(console.received))
+            _assert_banner(dut, console)
             return
 
         if cycle and cycle % STATUS_INTERVAL_CYCLES == 0 and last_uart_cycle is None:
@@ -130,7 +148,10 @@ async def boot_opensbi(dut):
             f"(pc=0x{int(dut.pc_debug.value):08x})"
         )
 
+    # The idle path returned above, so UART was still active at the deadline:
+    # this is BOOT_TIMEOUT_CYCLES running out, not UART_IDLE_CYCLES.
     raise AssertionError(
-        f"Timed out {UART_IDLE_CYCLES} cycles after last UART byte "
-        f"(captured {len(console.received)} bytes, pc=0x{int(dut.pc_debug.value):08x})"
+        f"Still emitting UART output when BOOT_TIMEOUT_CYCLES ({BOOT_TIMEOUT_CYCLES}) "
+        f"expired (captured {len(console.received)} bytes, "
+        f"pc=0x{int(dut.pc_debug.value):08x})"
     )
