@@ -64,34 +64,35 @@ module interrupt_controller (
         interrupt_to_supervisor = 1'b0;
         interrupt_pc = current_pc;
 
-        if (s_interrupts_enabled) begin
-            // Priority: External > Timer > Software
+        // Interrupts targeting a higher-privilege mode win, and within a
+        // mode the priority is External > Software > Timer
+        // (privileged spec §3.1.14 / §4.1.3).
+        if (m_interrupts_enabled) begin
+            if (meip && meie) begin
+                interrupt_pending = 1'b1;
+                interrupt_cause = MACHINE_EXTERNAL_INTERRUPT;
+            end else if (msip && msie) begin
+                interrupt_pending = 1'b1;
+                interrupt_cause = MACHINE_SOFTWARE_INTERRUPT;
+            end else if (mtip && mtie) begin
+                interrupt_pending = 1'b1;
+                interrupt_cause = MACHINE_TIMER_INTERRUPT;
+            end
+        end
+
+        if (!interrupt_pending && s_interrupts_enabled) begin
             if (seip && seie && mideleg[9]) begin
                 interrupt_pending = 1'b1;
                 interrupt_cause = SUPERVISOR_EXTERNAL_INTERRUPT;
-                interrupt_to_supervisor = 1'b1;
-            end else if (stip && stie && mideleg[5]) begin
-                interrupt_pending = 1'b1;
-                interrupt_cause = SUPERVISOR_TIMER_INTERRUPT;
                 interrupt_to_supervisor = 1'b1;
             end else if (ssip && ssie && mideleg[1]) begin
                 interrupt_pending = 1'b1;
                 interrupt_cause = SUPERVISOR_SOFTWARE_INTERRUPT;
                 interrupt_to_supervisor = 1'b1;
-            end
-        end
-
-        if (!interrupt_pending && m_interrupts_enabled) begin
-            // Priority: External > Timer > Software
-            if (meip && meie) begin
+            end else if (stip && stie && mideleg[5]) begin
                 interrupt_pending = 1'b1;
-                interrupt_cause = MACHINE_EXTERNAL_INTERRUPT;
-            end else if (mtip && mtie) begin
-                interrupt_pending = 1'b1;
-                interrupt_cause = MACHINE_TIMER_INTERRUPT;
-            end else if (msip && msie) begin
-                interrupt_pending = 1'b1;
-                interrupt_cause = MACHINE_SOFTWARE_INTERRUPT;
+                interrupt_cause = SUPERVISOR_TIMER_INTERRUPT;
+                interrupt_to_supervisor = 1'b1;
             end
         end
     end

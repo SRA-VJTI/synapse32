@@ -18,6 +18,11 @@ module sv32_page_walker (
 
     wire [9:0] vpn0 = virtual_addr[21:12];
 
+    // NOTE: PTE bits [33:32] (ppn[1] high bits) are not modeled — PTE[31:30]
+    // must be zero, so physical addresses are effectively capped at 4 GB.
+    // Sv32 nominally allows 34-bit PAs; any PTE encoding PA >= 4 GB is
+    // treated as an invalid (non-leaf) entry and faults.
+
     always @(*) begin
         phys_addr     = virtual_addr;
         addr_valid    = 1'b1;

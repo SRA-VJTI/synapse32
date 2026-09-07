@@ -9,6 +9,26 @@ import find_libpython
 
 _ORIG_FIND_LIBPYTHON = find_libpython.find_libpython
 
+# These diagnostics extract instructions from a locally built Linux Image and
+# compare execution at compiler-version-specific addresses.  The image lives
+# under sim/.out (which is intentionally ignored), so collecting these tests in
+# the default CI suite either fails on a fresh checkout or silently exercises a
+# different binary.  Keep the deterministic, self-contained Linux tests in the
+# normal suite and make only the generated-image diagnostics opt-in.
+_LINUX_IMAGE_SLICE_TESTS = {
+    "test_linux_caller_phase_checkpoint.py",
+    "test_linux_caller_prestop.py",
+    "test_linux_caller_round_checkpoint.py",
+    "test_linux_caller_stitch.py",
+    "test_linux_helper_second_call.py",
+    "test_linux_memset_tail.py",
+    "test_linux_preloop_helper_return.py",
+    "test_linux_round_loop_two_iter.py",
+    "test_linux_tail_transition.py",
+    "test_round_loop_two_iter_ret_helper.py",
+    "test_round_loop_two_iter_stub_helper.py",
+}
+
 
 def _candidate_libpython_paths():
     libdir = sysconfig.get_config_var("LIBDIR")
@@ -78,3 +98,12 @@ def pytest_configure(config):
     if python_dir not in entries:
         os.environ["PATH"] = os.pathsep.join([python_dir, *entries])
     os.environ.setdefault("PYTHON3", sys.executable)
+
+
+def pytest_ignore_collect(collection_path, config):
+    del config
+    if os.environ.get("RUN_LINUX_IMAGE_SLICE_TESTS") == "1":
+        return None
+    if collection_path.name in _LINUX_IMAGE_SLICE_TESTS:
+        return True
+    return None

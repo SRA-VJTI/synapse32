@@ -1,31 +1,35 @@
-#build files
+# Build files
+*.bin
+*.elf
 *.hex
 *.lss
 *.o
-%.elf
-%.bin
 
-#verilog build files
+# Verilog build files
+*.fst
+*.log
 *.vcd
 *.vvp
-*.fst
 results.xml
-
-#python build files
-*.pyc
-*.pyo
-__pycache__
-.venv*
-venv/
-*.egg-info
-
-#cocotb build files
-*.log
 sim_build*/
 build/
 sim/.out/
 
-#agent files 
+# Python build files
+*.pyc
+*.pyo
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
 
-.codex
-.claude
+# Generated Linux configuration
+sim/.config
+
+# Local agent files
+/.codex/
+/.claude/
+
+# macOS metadata
+.DS_Store

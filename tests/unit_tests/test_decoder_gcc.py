@@ -145,6 +145,7 @@ async def test_decoder_exhaustive(dut):
         ("jal x15, 16", {"opcode": 0b1101111, "rs1": 0, "rs2": 0, "rd": 15, "instr_id": _instr_id("INSTR_JAL"), "imm": 16, "rs1_valid": 0, "rs2_valid": 0, "rd_valid": 1}),
         ("lui x16, 0x12345", {"opcode": 0b0110111, "rs1": 0, "rs2": 0, "rd": 16, "instr_id": _instr_id("INSTR_LUI"), "imm": 0x12345000, "rs1_valid": 0, "rs2_valid": 0, "rd_valid": 1}),
         ("fence.i", {"opcode": 0b0001111, "rs1": 0, "rs2": 0, "rd": 0, "instr_id": _instr_id("INSTR_FENCE_I"), "imm": 0, "rs1_valid": 0, "rs2_valid": 0, "rd_valid": 0}),
+        (".word 0x0100000f", {"opcode": 0b0001111, "rs1": 0, "rs2": 0, "rd": 0, "instr_id": _instr_id("INSTR_PAUSE"), "imm": 0, "rs1_valid": 0, "rs2_valid": 0, "rd_valid": 0}),
         ("mul x1, x2, x3", {"opcode": 0b0110011, "rs1": 2, "rs2": 3, "rd": 1, "instr_id": _instr_id("INSTR_MUL"), "rs1_valid": 1, "rs2_valid": 1, "rd_valid": 1}),
         ("mulh x4, x5, x6", {"opcode": 0b0110011, "rs1": 5, "rs2": 6, "rd": 4, "instr_id": _instr_id("INSTR_MULH"), "rs1_valid": 1, "rs2_valid": 1, "rd_valid": 1}),
         ("mulhsu x7, x8, x9", {"opcode": 0b0110011, "rs1": 8, "rs2": 9, "rd": 7, "instr_id": _instr_id("INSTR_MULHSU"), "rs1_valid": 1, "rs2_valid": 1, "rd_valid": 1}),

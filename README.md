@@ -1,6 +1,6 @@
 # Synapse-32
 
-Synapse-32 is a 32-bit RISC-V CPU core written in Verilog, supporting RV32I instructions, along with Zicsr and Zifencei extensions.
+Synapse-32 is a 32-bit RISC-V CPU core written in Verilog, supporting RV32IMA instructions, along with Zicsr, Zifencei, and Zihintpause.
 
 ## Processor Architecture
 
@@ -48,6 +48,11 @@ The CPU implements several techniques to handle pipeline hazards:
    - Handles branch and jump instructions
    - Flushes the pipeline when branches are taken
    - Supports efficient control flow
+
+### MMU Organization
+
+MMU-specific RTL now lives under [`rtl/mmu/`](rtl/mmu). The current Sv32 page-walk
+and unified backing-memory implementation is in [`rtl/mmu/unified_mem.v`](rtl/mmu/unified_mem.v).
 
 ## Running Code on the CPU
 
@@ -129,6 +134,68 @@ Useful overrides:
 ```bash
 make uart-run IMAGE=$PWD/.out/opensbi/opensbi.hex BOOT_TIMEOUT_CYCLES=8000000 UART_IDLE_CYCLES=300000
 ```
+
+## Booting Linux In Simulation
+
+The Linux image flow lives under [`sim/`](sim). It builds:
+
+- a Linux kernel image
+- a BusyBox-based initramfs
+- an OpenSBI `fw_payload`
+
+The initramfs now hands off to BusyBox `init` and respawns a shell on `ttyS0`.
+
+```bash
+cd sim
+make linux-build
+make linux-run
+```
+
+`make linux-build` uses the local toolchain when it is available on a Linux host.
+On macOS or on hosts without the required RISC-V/Linux build dependencies, it
+falls back to the existing Docker image automatically and writes the generated
+artifacts back into `sim/.out/linux/`.
+
+### Interactive Linux Console
+
+For normal interactive use, prefer the PTY-backed serial flow instead of the
+older stdin bridge:
+
+```bash
+cd sim
+make docker-linux-build   # or: make linux-build
+make linux-pty-local
+```
+
+That starts the simulator on the host and exposes the guest UART as a host PTY
+symlink at `sim/.out/synapse32-tty`.
+
+Attach from a second terminal with:
+
+```bash
+picocom -q -b 115200 sim/.out/synapse32-tty
+```
+
+or:
+
+```bash
+screen sim/.out/synapse32-tty 115200
+```
+
+Use `Ctrl-A d` to detach from `screen` without stopping the simulator. `Ctrl-]`
+terminates the simulator session.
+
+The PTY flow also keeps raw UART logs under `sim/.out/`:
+
+- `linux-pty-uart.log` for guest TX output
+- `linux-pty-input.log` for host-to-guest input
+
+Useful targets:
+
+- `make docker-linux-build` rebuilds the Linux/OpenSBI payload in Docker
+- `make linux-pty-local` runs the current Linux image with a host PTY
+- `make linux-pty` rebuilds Linux if needed, then runs the PTY flow
+- `make docker-linux-clean` removes the persistent Linux build container
 
 ### Available Tests
 

@@ -1,6 +1,6 @@
 ## Synapse-32 Architecture
 
-5-stage in-order RISC-V pipeline (RV32IA + Zicsr + Machine-mode interrupts) with a unified instruction/data RAM, MMIO timer + UART, a 1-entry store buffer with store→load byte-merge, and an atomic LSU for LR/SC and AMO.* operations.
+5-stage in-order RISC-V pipeline (RV32IMA + Zicsr + Zifencei + Zihintpause, with machine/supervisor traps and interrupts) with a unified instruction/data RAM, MMIO timer + UART + PLIC, a 1-entry store buffer with store→load byte-merge, and an atomic LSU for LR/SC and AMO.* operations.
 
 ### Full system
 
@@ -60,7 +60,10 @@ flowchart TB
         RMUX[read-data mux]:::ctrl
         UMEM[(unified_mem\ndual-port\ninstr port + data port)]:::mem
         TIMER[timer\nmtime / mtimecmp]:::mmio
-        UART[uart\nTX]:::mmio
+        UART[uart\nTX/RX]:::mmio
+        PLIC[plic]:::mmio
+        IRQ_OR[external IRQ OR]:::ctrl
+        EXT_IRQ[external_interrupt input]:::ctrl
     end
 
     %% --- IF flow ---
@@ -111,9 +114,16 @@ flowchart TB
     DECMAP -- ram region  --> UMEM
     DECMAP -- timer region --> TIMER
     DECMAP -- uart region --> UART
+    DECMAP -- plic region --> PLIC
     UMEM  -- read --> RMUX
     TIMER -- read --> RMUX
     UART  -- read --> RMUX
+    PLIC  -- plic_read_data --> RMUX
+    UART -. uart_interrupt .-> PLIC
+    PLIC -. plic_interrupt .-> IRQ_OR
+    EXT_IRQ --> IRQ_OR
+    IRQ_OR -. external_interrupt_combined .-> INTC
+    IRQ_OR -. external_interrupt_combined .-> CSR
     TIMER -. timer_interrupt .-> INTC
 ```
 
@@ -121,15 +131,16 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    A["0x8000_0000 – 0x8007_FFFF<br/>Instruction RAM (512 KB)"]:::mem
+    A["0x8000_0000 – 0x83FF_FFFF<br/>Instruction RAM (64 MB)"]:::mem
     B["0x1000_0000 – 0x100F_FFFF<br/>Data RAM (1 MB)"]:::mem
     C["0x0200_4000 – 0x0200_BFFF<br/>Timer (mtime, mtimecmp)"]:::mmio
     D["0x2000_0000 – 0x2000_0FFF<br/>UART"]:::mmio
+    E["0x0C00_0000 – 0x0C3F_FFFF<br/>PLIC"]:::mmio
     classDef mem  fill:#064e3b,stroke:#34d399,color:#ecfdf5
     classDef mmio fill:#7c2d12,stroke:#fb923c,color:#fff7ed
 ```
 
-Both RAM regions are backed by a single `unified_mem` (393 216 × 32-bit words). The instruction port serves the fetch path; the data port is shared by loads/stores after address translation in `top.v` (instr region → `[0 .. INSTR_MEM_SIZE-1]`, data region → `[INSTR_MEM_SIZE ..]`).
+Both RAM regions are backed by a single `unified_mem`, instantiated in `rtl/top.v` with `MEM_SIZE(17039360)`: 17,039,360 × 32-bit words, or 64 MB of instruction RAM plus 1 MB of data RAM. The instruction port serves fetches; the data port serves loads/stores after address translation. `rtl/mmu/unified_mem.v` maps the instruction region to local byte offsets `[0 .. INSTR_MEM_SIZE-1]` and the data region to `[INSTR_MEM_SIZE .. INSTR_MEM_SIZE+DATA_MEM_SIZE-1]`. Dividing these byte offsets by four gives instruction word indices `0..16,777,215` and data word indices `16,777,216..17,039,359`.
 
 ### Memory-port arbitration (MEM stage)
 
@@ -167,6 +178,6 @@ A standard RAM store is parked in the 1-entry store buffer for one cycle and com
 | LSU | `rtl/memory_unit.v`, `rtl/core_modules/atomic_lsu.v` |
 | Writeback | `rtl/writeback.v` |
 | CSR / IRQ | `rtl/core_modules/{csr_file,csr_exec,interrupt_controller}.v` |
-| MMIO | `rtl/core_modules/{timer,uart}.v` |
-| Memory | `rtl/unified_mem.v` |
+| MMIO | `rtl/core_modules/{timer,uart,plic}.v` |
+| Memory | `rtl/mmu/unified_mem.v` (17,039,360 × 32-bit words) |
 | Address map | `rtl/include/memory_map.vh` |
