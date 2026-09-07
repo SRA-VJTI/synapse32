@@ -44,6 +44,22 @@ main:
         sc.w t4, t3, (t0)
         lr.w t5, (t0)
 
+        # Force a failed reservation, then consume SC.W immediately. The
+        # branch must see the EX/MEM SC result, not the old register value.
+        li s2, 0x10000010
+        li s3, 7
+        sw s3, 0(s2)
+        lr.w s4, (s2)
+        sw s3, 0(s2)
+        sc.w s5, s3, (s2)
+        bnez s5, 1f
+        li s6, 0
+        j 2f
+1:
+        li s6, 1
+2:
+        sw s6, 0x38(t0)
+
         li t6, 3
         amoadd.w s0, t6, (t0)
         amoxor.w s1, t6, (t0)
@@ -173,6 +189,7 @@ async def test_atomic_smoke(dut):
         BASE + 0x2C: 9,   # amoadd.w returns old value
         BASE + 0x30: 12,  # amoxor.w returns old value
         BASE + 0x34: 15,  # final memory word
+        BASE + 0x38: 1,   # failed SC.W result was forwarded to bnez
     }
 
     for addr, exp in expected.items():

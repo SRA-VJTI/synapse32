@@ -14,6 +14,7 @@ from cocotb_test.simulator import run
 
 HANDLER_MARKER_ADDR = 0x10000000
 HANDLER_COUNT_ADDR  = 0x10000004
+POLL_RESULT_ADDR    = 0x10000008
 CPU_DONE_ADDR       = 0x100000FF
 SENTINEL            = 0xDEADBEEF
 
@@ -143,6 +144,9 @@ async def test_timer_irq(dut):
     handler_count = mem_writes.get(HANDLER_COUNT_ADDR, 0)
     print(f"Handler fired {handler_count} time(s). Done at cycle {done_cycle}.")
     assert handler_count >= 1, f"handler count counter = {handler_count}"
+    assert mem_writes.get(POLL_RESULT_ADDR) == SENTINEL, (
+        "Polling loop did not retain its registers across the timer handler"
+    )
 
 
 def runCocotbTests():

@@ -289,7 +289,7 @@ module riscv_cpu (
             wfi_active <= 1'b0;
             lr_valid <= 1'b0;
             lr_addr <= 32'b0;
-        end else if (interrupt_pending) begin
+        end else if (interrupt_wakeup) begin
             wfi_active <= 1'b0;
         end else if (wfi_instruction) begin
             wfi_active <= 1'b1;
