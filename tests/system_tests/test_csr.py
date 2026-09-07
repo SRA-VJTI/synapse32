@@ -8,8 +8,12 @@ RESET_PC_BASE = 0x80000000
 NOP = 0x00000013
 
 
-async def run_csr_test_program(dut, instr_mem):
-    """Helper function to run a CSR test program"""
+async def run_csr_test_program(dut, instr_mem, max_cycles=None):
+    """Helper function to run a CSR test program.
+
+    ``max_cycles`` overrides the default budget for programs that stall long
+    enough that one cycle per instruction is not enough to retire them.
+    """
     # Dictionary to track register values
     reg_values = {i: 0 for i in range(32)}
     trace_pipeline = os.getenv("TRACE_PIPELINE", "0") == "1"
@@ -35,7 +39,9 @@ async def run_csr_test_program(dut, instr_mem):
     cocotb.start_soon(drive_instruction_memory())
     
     # Feed instructions and track CSR operations
-    for cycle in range(len(instr_mem) + 10):  # Run for enough cycles
+    if max_cycles is None:
+        max_cycles = len(instr_mem) + 10
+    for cycle in range(max_cycles):
         await RisingEdge(dut.clk)
         await ReadOnly()
         
@@ -366,7 +372,9 @@ async def test_csr_machine_mode_riscv_tests_sequence(dut):
         0x34002573,  # csrr   a0,  mscratch
     ]
 
-    await run_csr_test_program(dut, instr_mem)
+    # Every CSR op here stalls the pipeline for several cycles, so the default
+    # one-cycle-per-instruction budget retires only part of the program.
+    await run_csr_test_program(dut, instr_mem, max_cycles=len(instr_mem) * 8 + 20)
 
     a0 = int(dut.rf_inst0.register_file[10].value)
     a1 = int(dut.rf_inst0.register_file[11].value)
@@ -1173,6 +1181,11 @@ async def test_csr_mret(dut):
     instr_mem[4] = 0x00000073
     # 0x14: addi x6, x0, 0xBB              # executes only if mret returned here
     instr_mem[5] = 0x0BB00313
+    # 0x18: jal x0, 0                      # park here; without this the PC keeps
+    #                                      # walking through the NOP padding into
+    #                                      # the handler and re-executes it in
+    #                                      # U-mode, trapping and clobbering mcause
+    instr_mem[6] = 0x0000006F
 
     # Handler at 0x40 (word index 16):
     # 0x40: addi x7, x0, 0xCC              # handler sentinel
