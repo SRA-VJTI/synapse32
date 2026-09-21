@@ -172,6 +172,8 @@ m_trap:
         ori     t3, t3, {D:#x}
 2:
         sw      t3, 0(t1)
+        # Software changed a PTE, so it must fence before the access is retried.
+        sfence.vma
         j       m_ret
 m_skip:
         csrr    t2, mepc
@@ -320,7 +322,7 @@ def _load(dut, image: bytes) -> None:
         _poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(image[offset:offset + 4], "little"))
 
 
-async def run_case(dut, config, limit=4000):
+async def run_case(dut, config, limit=20000):
     dut.rst.value = 1
     dut.software_interrupt.value = 0
     dut.external_interrupt.value = 0
