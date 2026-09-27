@@ -25,6 +25,8 @@ module riscv_cpu (
     input wire module_data_rvalid_in,
     // The MMU treats a whole AMO as a write, its read transaction included.
     output wire module_data_write_intent_out,
+    // SFENCE.VMA or a write to satp: the TLB may hold stale translations.
+    output wire module_tlb_flush_out,
     output wire module_data_mmu_enable_out,
     output wire [1:0] module_data_privilege_out,
     output wire [31:0] module_satp_out,
@@ -200,6 +202,8 @@ module riscv_cpu (
         .instr_in(if_id_instr_out),
         .rs1_value_in(rf_inst0_rs1_value_out),
         .rs2_value_in(rf_inst0_rs2_value_out),
+        .rs1_value_resolved_in(ex_inst0_rs1_value_out),
+        .rs2_value_resolved_in(ex_inst0_rs2_value_out),
         .instr_valid_in(if_id_instr_valid_out),
         .instr_page_fault_in(if_id_instr_page_fault_out),
         .flush(pipeline_flush),
@@ -851,6 +855,10 @@ module riscv_cpu (
                                       (ex_mem_std_store_direct_req ? ex_mem_store_be : store_buf_be);
     assign module_load_type = ex_mem_read_type;
     assign module_data_write_intent_out = module_mem_wr_en || is_amo_w;
+    assign module_tlb_flush_out =
+        ex_stage_active && id_ex_inst0_instr_valid_out &&
+        ((id_ex_inst0_instr_id_out == INSTR_SFENCE_VMA) ||
+         (csr_write_enable && (csr_addr == 12'h180)));
     assign mem_stage_load_page_fault = module_load_page_fault_in && ex_mem_read_req;
     // An AMO's read half takes its store/AMO page fault, or MEM would wait on a blocked write.
     assign mem_stage_store_page_fault = module_store_page_fault_in && module_data_write_intent_out;

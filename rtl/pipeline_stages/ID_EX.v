@@ -15,6 +15,9 @@ module ID_EX(
     input wire [31:0] instr_in,
     input wire [31:0] rs1_value_in,
     input wire [31:0] rs2_value_in,
+    // Operands EX resolved this cycle; decode's copy can go stale while EX is held.
+    input wire [31:0] rs1_value_resolved_in,
+    input wire [31:0] rs2_value_resolved_in,
     input wire instr_valid_in,
     input wire instr_page_fault_in,
     input wire flush,
@@ -82,8 +85,8 @@ module ID_EX(
             instr_id_out <= instr_id_out;
             pc_out <= pc_out;
             instr_out <= instr_out;
-            rs1_value_out <= rs1_value_out;
-            rs2_value_out <= rs2_value_out;
+            rs1_value_out <= rs1_value_resolved_in;
+            rs2_value_out <= rs2_value_resolved_in;
             instr_valid_out <= instr_valid_out;
             instr_page_fault_out <= instr_page_fault_out;
         end else if (stall) begin

@@ -78,6 +78,10 @@ loop:
         add     s0, s0, t5
         sw      s0, 0(t6)
         jal     ra, tail
+        # Prologue shape: the second store's base comes from the instruction just before it.
+        addi    a4, a1, 32
+        sw      s0, 0(a4)
+        sw      s0, 4(a4)
         addi    s1, s1, -1
         bnez    s1, loop
         lw      t0, 0(a2)
@@ -263,6 +267,9 @@ async def run_program(dut, inject_cycle=None, limit=20000):
     await RisingEdge(dut.clk)
     result.memory = [_peek(dut, RESULT_LO + 4 * i) for i in range(RESULT_WORDS)]
     result.memory += [_peek(dut, SCRATCH), _peek(dut, ATOMIC), _peek(dut, AMO)]
+    # The prologue-shaped pair must land next to each other, both with the loop's value.
+    result.memory += [_peek(dut, SCRATCH + 32), _peek(dut, SCRATCH + 36),
+                      _peek(dut, SCRATCH + 48), _peek(dut, SCRATCH + 52)]
     result.instret = int(dut.cpu_inst.csr_file_inst.instret_counter.value)
     dut.software_interrupt.value = 0
     return result
