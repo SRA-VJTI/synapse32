@@ -1,7 +1,9 @@
 `default_nettype none
 `include "memory_map.vh"
 
-module top (
+module top #(
+    parameter MEM_LATENCY = 0  // Cycles to answer an access; 0 is today's combinational memory
+) (
     input wire clk,
     input wire rst,
     
@@ -27,6 +29,7 @@ module top (
     wire [31:0] mem_read_data;
     wire cpu_mem_write_en;
     wire cpu_mem_read_en;
+    wire cpu_data_write_intent;
     wire [31:0] data_mem_addr;
     wire [3:0] cpu_write_byte_enable;  // Write byte enables
     wire [2:0] cpu_load_type;          // Load type
@@ -39,6 +42,21 @@ module top (
     wire cpu_data_sum;
     wire cpu_data_mxr;
     wire [31:0] instr_read_data;
+    // Memory interface: the core's requests and the adapters' responses.
+    wire cpu_instr_gnt;
+    wire cpu_instr_rvalid;
+    wire cpu_data_req;
+    wire cpu_data_gnt;
+    wire cpu_data_rvalid;
+    wire [31:0] cpu_data_rdata;
+    wire [31:0] instr_store_addr;
+    wire [31:0] instr_store_rdata;
+    wire [31:0] data_store_addr;
+    wire [3:0] data_store_be;
+    wire [31:0] data_store_wdata;
+    wire data_store_we;
+    wire data_write_fire;
+    wire data_read_fire;
     
     // Timer module wires
     wire [31:0] timer_read_data;
@@ -89,11 +107,11 @@ module top (
     // Use memory map macros for clean address decoding
     assign translated_data_access = cpu_data_mmu_enable && (cpu_mem_write_en || cpu_mem_read_en);
     assign cpu_page_fault_addr = mmu_data_fault_addr;
-    assign data_mem_access = !translated_data_access && `IS_DATA_MEM(data_mem_addr);
-    assign timer_access    = `IS_TIMER_MEM(phys_data_addr);
-    assign uart_access     = `IS_UART_MEM(phys_data_addr);
-    assign plic_access     = `IS_PLIC_MEM(phys_data_addr);
-    assign instr_mem_access = !translated_data_access && `IS_INSTR_MEM(data_mem_addr);
+    assign data_mem_access = !translated_data_access && `IS_DATA_MEM(data_store_addr);
+    assign timer_access    = `IS_TIMER_MEM(data_store_addr);
+    assign uart_access     = `IS_UART_MEM(data_store_addr);
+    assign plic_access     = `IS_PLIC_MEM(data_store_addr);
+    assign instr_mem_access = !translated_data_access && `IS_INSTR_MEM(data_store_addr);
     // RAM covers translated accesses that aren't peripheral, plus direct RAM accesses.
     assign ram_access = (translated_data_access && !timer_access && !uart_access && !plic_access)
                         || data_mem_access || instr_mem_access;
@@ -111,6 +129,51 @@ module top (
     assign pc_debug = cpu_pc_out;
     assign instr_debug = instr_to_cpu;
     
+    // Memory adapters: the core presents a physical address and waits for the response.
+    // A faulting access is never accepted, or it would commit after the trap.
+    assign cpu_data_req = (cpu_mem_read_en || cpu_mem_write_en) &&
+                          !cpu_load_page_fault && !cpu_store_page_fault;
+
+    mem_adapter #(.RESPONSE_LATENCY(MEM_LATENCY)) instr_adapter (
+        .clk(clk),
+        .rst(rst),
+        .req(1'b1),
+        .addr(phys_instr_addr),
+        .we(1'b0),
+        .be(4'b0),
+        .wdata(32'b0),
+        .gnt(cpu_instr_gnt),
+        .rvalid(cpu_instr_rvalid),
+        .rdata(instr_to_cpu),
+        .store_addr(instr_store_addr),
+        .store_we(),
+        .store_be(),
+        .store_wdata(),
+        .write_fire(),
+        .read_fire(),
+        .store_rdata(instr_store_rdata)
+    );
+
+    mem_adapter #(.RESPONSE_LATENCY(MEM_LATENCY)) data_adapter (
+        .clk(clk),
+        .rst(rst),
+        .req(cpu_data_req),
+        .addr(phys_data_addr),
+        .we(cpu_mem_write_en),
+        .be(cpu_write_byte_enable),
+        .wdata(cpu_mem_write_data),
+        .gnt(cpu_data_gnt),
+        .rvalid(cpu_data_rvalid),
+        .rdata(cpu_data_rdata),
+        .store_addr(data_store_addr),
+        .store_we(data_store_we),
+        .store_be(data_store_be),
+        .store_wdata(data_store_wdata),
+        .write_fire(data_write_fire),
+        .read_fire(data_read_fire),
+        .store_rdata(mem_read_data)
+    );
+
     // Instantiate the RISC-V CPU core
     riscv_cpu cpu_inst (
         .clk(clk),
@@ -119,7 +182,7 @@ module top (
         .software_interrupt(software_interrupt),
         .external_interrupt(external_interrupt_combined),
         .module_instr_in(instr_to_cpu),
-        .module_read_data_in(mem_read_data),
+        .module_read_data_in(cpu_data_rdata),
         .module_pc_out(cpu_pc_out),
         .module_wr_data_out(cpu_mem_write_data),
         .module_mem_wr_en(cpu_mem_write_en),
@@ -132,6 +195,11 @@ module top (
         .module_store_page_fault_in(cpu_store_page_fault),
         .module_page_fault_addr_in(cpu_page_fault_addr),
         .module_instr_page_fault_in(cpu_instr_page_fault),
+        .module_instr_gnt_in(cpu_instr_gnt),
+        .module_instr_rvalid_in(cpu_instr_rvalid),
+        .module_data_gnt_in(cpu_data_gnt),
+        .module_data_rvalid_in(cpu_data_rvalid),
+        .module_data_write_intent_out(cpu_data_write_intent),
         .module_data_mmu_enable_out(cpu_data_mmu_enable),
         .module_data_privilege_out(cpu_data_privilege),
         .module_satp_out(cpu_satp),
@@ -151,7 +219,7 @@ module top (
         .instr_priv_mode(cpu_instr_privilege),
         .data_translate_enable(translated_data_access),
         .data_virtual_addr(data_mem_addr),
-        .data_wr_req(cpu_mem_write_en),
+        .data_wr_req(cpu_data_write_intent),
         .data_rd_en(cpu_mem_read_en),
         .data_priv_mode(cpu_data_privilege),
         .satp(cpu_satp),
@@ -190,13 +258,14 @@ module top (
         .MEM_SIZE(17039360)  // (64MB + 1MB) / 4 words
     ) unified_mem_inst (
         .clk(clk),
-        .instr_addr(phys_instr_addr),
-        .instr_addr_p2(phys_data_addr),
+        .instr_addr(instr_store_addr),
+        .instr_addr_p2(data_store_addr),
         .data_wr_req(cpu_mem_write_en && ram_access),
         .data_rd_en(cpu_mem_read_en && ram_access),
-        .wr_en(cpu_mem_write_en && ram_access && !cpu_store_page_fault),
-        .write_byte_enable(cpu_write_byte_enable),
-        .wr_data(cpu_mem_write_data),
+        // A write lands once, in the cycle the adapter commits it.
+        .wr_en(data_write_fire && ram_access && !cpu_store_page_fault),
+        .write_byte_enable(data_store_be),
+        .wr_data(data_store_wdata),
         .load_type(cpu_load_type),
         .pte_wr_en_a(mmu_instr_pte_update_req),
         .pte_wr_addr_a(mmu_instr_pte_update_addr),
@@ -208,7 +277,7 @@ module top (
         .pte_rd_addr_b(mmu_instr_l0_pte_addr),
         .pte_rd_addr_c(mmu_data_l1_pte_addr),
         .pte_rd_addr_d(mmu_data_l0_pte_addr),
-        .instr(instr_to_cpu),
+        .instr(instr_store_rdata),
         .instr_p2(instr_read_data),
         .pte_rd_value_a(mmu_instr_l1_pte_value),
         .pte_rd_value_b(mmu_instr_l0_pte_value),
@@ -224,10 +293,10 @@ module top (
     timer timer_inst (
         .clk(clk),
         .rst(rst),
-        .addr(phys_data_addr),
-        .write_data(cpu_mem_write_data),
-        .write_enable(cpu_mem_write_en && timer_access),
-        .read_enable(cpu_mem_read_en && timer_access),
+        .addr(data_store_addr),
+        .write_data(data_store_wdata),
+        .write_enable(data_write_fire && timer_access),
+        .read_enable(data_read_fire && timer_access),
         .read_data(timer_read_data),
         .timer_valid(timer_valid),
         .timer_interrupt(timer_interrupt)
@@ -237,10 +306,10 @@ module top (
     uart uart_inst (
         .clk(clk),
         .rst(rst),
-        .addr(phys_data_addr),
-        .write_data(cpu_mem_write_data),
-        .write_enable(cpu_mem_write_en && uart_access),
-        .read_enable(cpu_mem_read_en && uart_access),
+        .addr(data_store_addr),
+        .write_data(data_store_wdata),
+        .write_enable(data_write_fire && uart_access),
+        .read_enable(data_read_fire && uart_access),
         .read_data(uart_read_data),
         .uart_valid(uart_valid),
         .interrupt(uart_interrupt),
@@ -251,10 +320,10 @@ module top (
     plic plic_inst (
         .clk(clk),
         .rst(rst),
-        .addr(phys_data_addr),
-        .write_data(cpu_mem_write_data),
-        .write_enable(cpu_mem_write_en && plic_access),
-        .read_enable(cpu_mem_read_en && plic_access),
+        .addr(data_store_addr),
+        .write_data(data_store_wdata),
+        .write_enable(data_write_fire && plic_access),
+        .read_enable(data_read_fire && plic_access),
         .read_data(plic_read_data),
         .plic_valid(plic_valid),
         .source_irq(uart_interrupt),

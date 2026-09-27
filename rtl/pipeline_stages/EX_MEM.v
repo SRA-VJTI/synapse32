@@ -2,6 +2,7 @@ module EX_MEM (
     input wire clk,
     input wire rst,
     input wire flush,
+    input wire hold,
     input wire [4:0] rs1_addr_in,
     input wire [4:0] rs2_addr_in,
     input wire [4:0] rd_addr_in,
@@ -55,6 +56,20 @@ module EX_MEM (
             jump_addr_out <= 32'b0;
             instr_id_out <= 7'b0;
             rd_valid_out <= 1'b0;
+        end else if (hold) begin
+            // MEM is waiting for memory: keep the access in place.
+            rs1_addr_out <= rs1_addr_out;
+            rs2_addr_out <= rs2_addr_out;
+            rd_addr_out <= rd_addr_out;
+            rs1_value_out <= rs1_value_out;
+            rs2_value_out <= rs2_value_out;
+            pc_out <= pc_out;
+            mem_addr_out <= mem_addr_out;
+            exec_output_out <= exec_output_out;
+            jump_signal_out <= jump_signal_out;
+            jump_addr_out <= jump_addr_out;
+            instr_id_out <= instr_id_out;
+            rd_valid_out <= rd_valid_out;
         end else begin
             rs1_addr_out <= rs1_addr_in;
             rs2_addr_out <= rs2_addr_in;

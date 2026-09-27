@@ -11,6 +11,8 @@ module execution_unit(
     input wire rs1_valid,
     input wire rs2_valid,
     input wire instr_valid,
+    // Low while MEM waits for memory: EX is held and must not take its effects twice.
+    input wire stage_enable,
     input wire [31:0] pc_input,
     input wire [31:0] instr,
     
@@ -161,7 +163,7 @@ wire is_atomic_load = (instr_id == INSTR_LR_W);
 wire is_atomic_store = (instr_id == INSTR_SC_W);
 wire is_atomic_rmw = (opcode == 7'b0101111) && !is_atomic_load && !is_atomic_store;
 wire [31:0] trigger_data_addr = (opcode == 7'b0101111) ? rs1_value : (rs1_value + imm);
-assign execute_trigger_hit = instr_valid &&
+assign execute_trigger_hit = stage_enable && instr_valid &&
                              trigger_match(trigger_enabled, trigger_execute, pc_input, trigger_tdata2);
 wire load_trigger_hit = instr_valid && (is_atomic_load || is_atomic_rmw) &&
                         trigger_match(trigger_enabled, trigger_load, trigger_data_addr, trigger_tdata2);
@@ -600,6 +602,24 @@ always @(*) begin
             default: begin
             end
         endcase
+    end
+
+    // While EX is held, the instruction has not retired: take none of its effects yet.
+    if (!stage_enable) begin
+        jump_signal = 0;
+        flush_pipeline = 0;
+        interrupt_taken = 0;
+        mret_instruction = 0;
+        sret_instruction = 0;
+        trap_to_supervisor = 0;
+        ecall_exception = 0;
+        ebreak_exception = 0;
+        illegal_instruction_exception = 0;
+        instruction_address_misaligned_exception = 0;
+        load_address_misaligned_exception = 0;
+        store_address_misaligned_exception = 0;
+        breakpoint_trigger_exception = 0;
+        wfi_instruction = 0;
     end
 
     // mtval/stval may hold the faulting instruction (privileged spec 3.1.16); report it, as Spike does.

@@ -126,6 +126,10 @@ async def test_csr_basic_operations(dut):
     # Reset
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0
@@ -196,6 +200,10 @@ async def test_csr_mstatus_operations(dut):
     # Reset
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0
@@ -252,6 +260,10 @@ async def test_csr_cycle_counter(dut):
     # Reset
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0
@@ -300,6 +312,10 @@ async def test_csr_machine_mode_same_reg_hazard(dut):
 
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0
@@ -340,6 +356,10 @@ async def test_csr_machine_mode_riscv_tests_sequence(dut):
 
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0
@@ -403,6 +423,10 @@ async def test_counteren_allows_user_cycle_read(dut):
 
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0
@@ -461,6 +485,10 @@ async def test_sfence_vma_executes_without_trapping_in_machine_mode(dut):
 
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0
@@ -498,6 +526,10 @@ async def test_mret_enters_supervisor_mode(dut):
 
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0
@@ -554,6 +586,10 @@ async def test_supervisor_ecall_traps_to_machine_mode(dut):
 
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0
@@ -625,6 +661,10 @@ async def test_supervisor_ecall_machine_mret_returns_to_supervisor(dut):
 
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0
@@ -710,6 +750,10 @@ async def test_delegated_supervisor_timer_interrupt_sret(dut):
 
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0
@@ -796,6 +840,10 @@ async def test_delegated_supervisor_ebreak_sret(dut):
 
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0
@@ -889,6 +937,10 @@ async def test_delegated_user_ecall_sret(dut):
 
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0
@@ -968,6 +1020,10 @@ async def test_delegated_user_illegal_instruction_sret(dut):
 
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0
@@ -1046,6 +1102,10 @@ async def test_delegated_user_timer_interrupt_sret(dut):
 
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0
@@ -1119,6 +1179,10 @@ async def test_mpp_set_on_m_mode_illegal_instruction(dut):
 
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0
@@ -1192,6 +1256,10 @@ async def test_m_mode_illegal_csr_probe_pattern(dut):
 
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0
@@ -1259,6 +1327,10 @@ async def test_csr_invalid_access(dut):
     # Reset
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0
@@ -1303,6 +1375,10 @@ async def test_csr_mret(dut):
     # Reset
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0

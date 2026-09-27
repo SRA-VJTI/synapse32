@@ -274,7 +274,7 @@ def _peek(dut, addr: int) -> int:
     return int(dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value) & 0xFFFF_FFFF
 
 
-async def run_case(dut, config, limit=3000):
+async def run_case(dut, config, limit=20000):
     dut.rst.value = 1
     dut.software_interrupt.value = 0
     dut.external_interrupt.value = 0
@@ -349,28 +349,30 @@ def runCocotbTests():
     build_dir = _build_dir()
     assemble(build_dir)
 
-    sim_build = Path.cwd() / "sim_build" / "sim_build_atomic_page_fault_cause"
-    if sim_build.exists():
-        shutil.rmtree(sim_build)
-
-    run(
-        verilog_sources=sources,
-        toplevel="top",
-        module="test_atomic_page_fault_cause",
-        includes=[str(rtl_dir / "include")],
-        simulator="verilator",
-        timescale="1ns/1ps",
-        defines=[f'INSTR_HEX_FILE="{build_dir / "nop.hex"}"'],
-        sim_build=str(sim_build),
-        force_compile=True,
-        extra_env={
-            "TOPLEVEL": "top",
-            "MODULE": "test_atomic_page_fault_cause",
-            "COCOTB_TOPLEVEL": "top",
-            "COCOTB_TEST_MODULES": "test_atomic_page_fault_cause",
-            "ATOMIC_PF_BUILD": str(build_dir.resolve()),
-        },
-    )
+    # At latency 2 a faulting store would still be in flight when the trap is taken.
+    for latency in (0, 2):
+        sim_build = Path.cwd() / "sim_build" / f"sim_build_atomic_page_fault_cause_lat{latency}"
+        if sim_build.exists():
+            shutil.rmtree(sim_build)
+        run(
+            verilog_sources=sources,
+            toplevel="top",
+            module="test_atomic_page_fault_cause",
+            parameters={"MEM_LATENCY": latency},
+            includes=[str(rtl_dir / "include")],
+            simulator="verilator",
+            timescale="1ns/1ps",
+            defines=[f'INSTR_HEX_FILE="{build_dir / "nop.hex"}"'],
+            sim_build=str(sim_build),
+            force_compile=True,
+            extra_env={
+                "TOPLEVEL": "top",
+                "MODULE": "test_atomic_page_fault_cause",
+                "COCOTB_TOPLEVEL": "top",
+                "COCOTB_TEST_MODULES": "test_atomic_page_fault_cause",
+                "ATOMIC_PF_BUILD": str(build_dir.resolve()),
+            },
+        )
 
 
 if __name__ == "__main__":

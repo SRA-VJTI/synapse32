@@ -17,6 +17,10 @@ async def test_riscv_cpu_raw_hazards(dut):
     # Reset
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0
@@ -68,6 +72,10 @@ async def test_riscv_cpu_control_hazards(dut):
     # Reset
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0
@@ -115,6 +123,10 @@ async def test_riscv_cpu_memory_hazards(dut):
     # Reset
     dut.module_instr_in.value = 0
     dut.module_read_data_in.value = 0
+    dut.module_instr_gnt_in.value = 1
+    dut.module_instr_rvalid_in.value = 1
+    dut.module_data_gnt_in.value = 1
+    dut.module_data_rvalid_in.value = 1
     dut.rst.value = 1
     await Timer(20, units="ns")
     dut.rst.value = 0

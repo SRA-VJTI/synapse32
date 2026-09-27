@@ -18,6 +18,13 @@ module riscv_cpu (
     input wire module_store_page_fault_in,
     input wire [31:0] module_page_fault_addr_in,
     input wire module_instr_page_fault_in,
+    // Memory interface: a request is outstanding until its response arrives.
+    input wire module_instr_gnt_in,
+    input wire module_instr_rvalid_in,
+    input wire module_data_gnt_in,
+    input wire module_data_rvalid_in,
+    // The MMU treats a whole AMO as a write, its read transaction included.
+    output wire module_data_write_intent_out,
     output wire module_data_mmu_enable_out,
     output wire [1:0] module_data_privilege_out,
     output wire [31:0] module_satp_out,
@@ -38,6 +45,10 @@ module riscv_cpu (
     wire [31:0] pc_inst0_jump;
     wire hazard_stall; // For load-use hazards
     wire pipeline_stall;
+    wire fetch_wait;
+    wire fetch_response_valid;
+    wire mem_wait;
+    wire ex_stage_active;
     wire mem_stage_page_fault_taken;
     wire mem_stage_load_page_fault;
     wire mem_stage_store_page_fault;
@@ -56,7 +67,7 @@ module riscv_cpu (
         .rst(rst),
         .j_signal(pc_inst0_j_signal),
         .jump(pc_inst0_jump),
-        .stall(pipeline_stall), // Stall on hazard or WFI sleep
+        .stall(pipeline_stall || fetch_wait), // Stall on hazard, WFI sleep or a waiting memory
         .out(pc_inst0_out)
     );
 
@@ -80,7 +91,8 @@ module riscv_cpu (
         .pc_in(pc_inst0_out),
         .instruction_in(module_instr_in),
         .instr_page_fault_in(module_instr_page_fault_in),
-        .flush(if_id_flush),
+        // A fetch still in flight delivers a bubble; while stalled, IF/ID keeps what it holds.
+        .flush(if_id_flush || (fetch_wait && !pipeline_stall)),
         // Flush must win over stall, otherwise a stale IF/ID instruction can
         // survive an interrupt/branch redirect and execute one cycle later.
         .stall(pipeline_stall && !if_id_flush),
@@ -282,6 +294,7 @@ module riscv_cpu (
                                          load_address_misaligned_exception ||
                                          store_address_misaligned_exception;
     assign instret_increment = id_ex_inst0_instr_valid_out &&
+                               ex_stage_active &&
                                (id_ex_inst0_instr_id_out != INSTR_INVALID) &&
                                !interrupt_taken &&
                                !synchronous_exception_taken &&
@@ -343,6 +356,8 @@ module riscv_cpu (
     // Trap delivery still uses interrupt_pending below; this only controls
     // whether WFI can resume.
     reg wfi_active;
+    reg fetch_outstanding;
+    reg fetch_discard;
     wire wfi_stall;
     wire wfi_resume_pending;
     localparam [31:0] WFI_WAKE_INTERRUPT_MASK = 32'h00000AAA;
@@ -372,6 +387,11 @@ module riscv_cpu (
     wire store_buf_commit_fire;
     wire atomic_clobbers_store_buf;
 
+    // An AMO is a read then a write, since the value written depends on the value read.
+    reg amo_write_phase;
+    reg [31:0] amo_read_data;
+    wire amo_read_phase;
+
     // Atomic LSU signals (produced by atomic_lsu module in MEM stage).
     wire is_lr_w;
     wire is_sc_w;
@@ -384,27 +404,61 @@ module riscv_cpu (
     // FENCE must wait for any queued store to drain.
     wire store_buf_busy_stall = 1'b0;
     wire fence_drain_stall = (id_ex_inst0_instr_id_out == INSTR_FENCE) && store_buf_valid;
-    wire pipeline_hold = wfi_stall || store_buf_busy_stall || fence_drain_stall;
+    // A page-faulting access never reaches memory, so it is not waited for.
+    // A fetch accepted before a redirect answers for the old PC, so its response is dropped.
+    assign fetch_response_valid = module_instr_rvalid_in && !fetch_discard;
+    assign fetch_wait = !fetch_response_valid && !module_instr_page_fault_in;
+    // Outstanding until rvalid; an AMO's read response still leaves its write to issue.
+    assign mem_wait = (module_mem_rd_en || module_mem_wr_en) &&
+                      !(module_data_rvalid_in && !amo_read_phase) &&
+                      !mem_stage_page_fault_taken;
+    assign ex_stage_active = !mem_wait;
+    wire pipeline_hold = wfi_stall || store_buf_busy_stall || fence_drain_stall || mem_wait;
     assign pipeline_stall = hazard_stall || pipeline_hold;
 
     always @(posedge clk or posedge rst) begin
         if (rst) begin
+            amo_write_phase <= 1'b0;
+            amo_read_data <= 32'b0;
+            fetch_outstanding <= 1'b0;
+            fetch_discard <= 1'b0;
             wfi_active <= 1'b0;
             store_buf_valid <= 1'b0;
             store_buf_addr <= 32'b0;
             store_buf_data <= 32'b0;
             store_buf_be <= 4'b0;
         end else begin
+            if (module_instr_rvalid_in) begin
+                fetch_outstanding <= 1'b0;
+                fetch_discard <= 1'b0;
+            end else if (module_instr_gnt_in) begin
+                fetch_outstanding <= 1'b1;
+            end
+            if (pc_inst0_j_signal && (fetch_outstanding || module_instr_gnt_in) &&
+                !module_instr_rvalid_in) begin
+                fetch_discard <= 1'b1;
+            end
+
             if (wfi_resume_pending) begin
                 wfi_active <= 1'b0;
             end else if (wfi_instruction) begin
                 wfi_active <= 1'b1;
             end
 
-            // One-entry store buffer update.
+            // AMO phase: capture the value read, then let the write go out.
+            if (amo_read_phase && module_data_rvalid_in) begin
+                amo_read_data <= mem_read_data_effective;
+                amo_write_phase <= 1'b1;
+            end else if (amo_write_phase && module_data_rvalid_in) begin
+                amo_write_phase <= 1'b0;
+            end
+
+            // One-entry store buffer update. Frozen while MEM waits for memory.
             // If a store is committed and no new store is entering, clear valid.
             // If a new store enters, capture it (and replace any just-committed entry).
-            if (ex_mem_std_store_req) begin
+            if (mem_wait) begin
+                store_buf_valid <= store_buf_valid;
+            end else if (ex_mem_std_store_req) begin
                 store_buf_valid <= 1'b1;
                 store_buf_addr <= ex_mem_store_addr;
                 store_buf_data <= ex_mem_store_data;
@@ -448,7 +502,7 @@ module riscv_cpu (
         .rst(rst),
         .csr_addr(csr_addr),
         .write_data(csr_write_data),
-        .write_enable(csr_write_enable),
+        .write_enable(csr_write_enable && ex_stage_active),
         .read_enable(csr_read_enable),
         .read_data(csr_read_data),
         .csr_valid(csr_valid),
@@ -496,6 +550,7 @@ module riscv_cpu (
         .rs1_valid(id_ex_inst0_rs1_valid_out),
         .rs2_valid(id_ex_inst0_rs2_valid_out),
         .instr_valid(id_ex_inst0_instr_valid_out),
+        .stage_enable(ex_stage_active),
         .pc_input(id_ex_inst0_pc_out),
         .instr(id_ex_inst0_instr_out),
         .forward_a(forward_a),
@@ -573,6 +628,7 @@ module riscv_cpu (
     EX_MEM ex_mem_inst0 (
         .clk(clk),
         .rst(rst),
+        .hold(mem_wait),
         .flush(mem_stage_page_fault_taken ||
                instr_stage_page_fault_taken ||
                synchronous_exception_taken ||
@@ -631,7 +687,9 @@ module riscv_cpu (
         .instr_id_mem(ex_mem_inst0_instr_id_out),
         .mem_addr_mem(ex_mem_inst0_mem_addr_out),
         .rs2_value_mem(ex_mem_inst0_rs2_value_out),
-        .mem_read_data(mem_read_data_effective),
+        // In the write phase the new word is computed from the value the read returned.
+        .mem_read_data(amo_write_phase ? amo_read_data : mem_read_data_effective),
+        .mem_hold(mem_wait),
         .non_atomic_store_write_enable(non_atomic_store_write_enable),
         .non_atomic_store_write_addr(non_atomic_store_write_addr),
         .is_lr_w(is_lr_w),
@@ -656,7 +714,9 @@ module riscv_cpu (
     assign ex_mem_std_store_direct_req = ex_mem_std_store_raw_req;
 
     // Read request for loads/LR/AMO.
-    assign ex_mem_read_req = mem_unit_inst0_read_enable_out || atomic_read_enable;
+    assign amo_read_phase = is_amo_w && !amo_write_phase;
+    assign ex_mem_read_req = mem_unit_inst0_read_enable_out ||
+                             (atomic_read_enable && !(is_amo_w && amo_write_phase));
     assign ex_mem_read_addr = atomic_read_enable ? ex_mem_inst0_mem_addr_out : mem_unit_inst0_read_addr_out;
     assign ex_mem_read_type = (is_lr_w || is_amo_w) ? 3'b010 : mem_unit_inst0_load_type_out;
 
@@ -778,7 +838,8 @@ module riscv_cpu (
     // - Standard stores are buffered then committed from store_buf.
     // - AMO/SC writes are driven directly.
     // - Loads/LR/AMO reads use memory only when needed; otherwise bypass from store_buf.
-    assign module_mem_wr_en = atomic_write_enable || ex_mem_std_store_direct_req || store_buf_commit_fire;
+    assign module_mem_wr_en = (atomic_write_enable && (!is_amo_w || amo_write_phase)) ||
+                              ex_mem_std_store_direct_req || store_buf_commit_fire;
     assign module_mem_rd_en = read_needs_memory;
     assign module_write_addr = atomic_write_enable ? ex_mem_inst0_mem_addr_out :
                                (ex_mem_std_store_direct_req ? ex_mem_store_addr : store_buf_addr);
@@ -789,8 +850,10 @@ module riscv_cpu (
     assign module_write_byte_enable = atomic_write_enable ? 4'b1111 :
                                       (ex_mem_std_store_direct_req ? ex_mem_store_be : store_buf_be);
     assign module_load_type = ex_mem_read_type;
+    assign module_data_write_intent_out = module_mem_wr_en || is_amo_w;
     assign mem_stage_load_page_fault = module_load_page_fault_in && ex_mem_read_req;
-    assign mem_stage_store_page_fault = module_store_page_fault_in && module_mem_wr_en;
+    // An AMO's read half takes its store/AMO page fault, or MEM would wait on a blocked write.
+    assign mem_stage_store_page_fault = module_store_page_fault_in && module_data_write_intent_out;
     assign mem_stage_page_fault_taken = mem_stage_load_page_fault || mem_stage_store_page_fault;
     assign mem_stage_trap_to_supervisor =
         (csr_file_inst.privilege_mode != PRIV_M) &&
@@ -836,7 +899,8 @@ module riscv_cpu (
     MEM_WB mem_wb_inst0 (
         .clk(clk),
         .rst(rst),
-        .flush(1'b0),
+        // While MEM waits, WB takes a bubble: the access has not completed.
+        .flush(mem_wait),
         .rs1_addr_in(ex_mem_inst0_rs1_addr_out),
         .rs2_addr_in(ex_mem_inst0_rs2_addr_out),
         .rd_addr_in(ex_mem_inst0_rd_addr_out),
@@ -849,7 +913,8 @@ module riscv_cpu (
         .jump_addr_in(ex_mem_inst0_jump_addr_out),
         .instr_id_in(mem_stage_page_fault_taken ? 7'b0000000 : ex_mem_inst0_instr_id_out),
         .rd_valid_in(mem_stage_page_fault_taken ? 1'b0 : ex_mem_inst0_rd_valid_out),
-        .mem_data_in(mem_read_data_effective),  // Memory data with store-buffer merge
+        // An AMO writes back the value it read, not what memory holds after its write.
+        .mem_data_in(amo_write_phase ? amo_read_data : mem_read_data_effective),
 
         // Outputs
         .rs1_addr_out(mem_wb_inst0_rs1_addr_out),

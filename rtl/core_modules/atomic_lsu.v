@@ -8,6 +8,8 @@ module atomic_lsu (
     input wire [31:0] mem_addr_mem,
     input wire [31:0] rs2_value_mem,
     input wire [31:0] mem_read_data,
+    // High while MEM waits for memory: the access has not happened, so the reservation holds.
+    input wire mem_hold,
     input wire non_atomic_store_write_enable,
     input wire [31:0] non_atomic_store_write_addr,
 
@@ -94,7 +96,7 @@ module atomic_lsu (
         if (rst) begin
             lr_valid <= 1'b0;
             lr_addr <= 32'b0;
-        end else begin
+        end else if (!mem_hold) begin
             if (is_lr_w && atomic_word_aligned) begin
                 lr_valid <= 1'b1;
                 lr_addr <= mem_addr_mem;
