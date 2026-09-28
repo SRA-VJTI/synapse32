@@ -43,6 +43,9 @@ LOOPS = 8
 AMO_COUNT = LOOPS
 LATENCIES = [0, 1, 2, 4]
 SWEEP_LATENCY = 2
+# Extra build with fast fetch and slow data, so instructions arrive back to back behind a waiting store.
+FAST_FETCH = os.environ.get("MEMORY_WAIT_FAST_FETCH") == "1"
+PROLOGUE_STORE = 0x00872223  # sw s0, 4(a4)
 
 PROGRAM = f"""
         .section .text.init, "ax"
@@ -62,6 +65,7 @@ _start:
         li      a3, {AMO:#x}
         li      s0, 0
         li      s1, {LOOPS}
+        addi    a4, a1, 16
 loop:
         sw      s0, 0(a1)
         lw      t0, 0(a1)
@@ -78,8 +82,8 @@ loop:
         add     s0, s0, t5
         sw      s0, 0(t6)
         jal     ra, tail
-        # Prologue shape: the second store's base comes from the instruction just before it.
-        addi    a4, a1, 32
+        # Prologue shape: both stores use the base the addi just advanced, so a stale copy is wrong.
+        addi    a4, a4, 8
         sw      s0, 0(a4)
         sw      s0, 4(a4)
         addi    s1, s1, -1
@@ -218,6 +222,7 @@ class Run:
         self.cycles = None
         self.instret = None
         self.wait_cycles = 0
+        self.prologue_hold = 0
 
 
 async def run_program(dut, inject_cycle=None, limit=20000):
@@ -236,6 +241,7 @@ async def run_program(dut, inject_cycle=None, limit=20000):
     dut.rst.value = 0
 
     result = Run()
+    held = 0
     pin_high = False
     lower_pin = False
     for cycle in range(limit):
@@ -250,6 +256,11 @@ async def run_program(dut, inject_cycle=None, limit=20000):
         await ReadOnly()
         if int(dut.cpu_inst.mem_wait.value) or int(dut.cpu_inst.fetch_wait.value):
             result.wait_cycles += 1
+        if int(dut.cpu_inst.mem_wait.value) and int(dut.cpu_inst.id_ex_inst0_instr_out.value) == PROLOGUE_STORE:
+            held += 1
+            result.prologue_hold = max(result.prologue_hold, held)
+        else:
+            held = 0
         if int(dut.cpu_mem_write_en.value) and not int(dut.cpu_store_page_fault.value):
             addr = int(dut.cpu_mem_write_addr.value)
             # Count the write once, in the cycle the memory port accepts it.
@@ -267,9 +278,8 @@ async def run_program(dut, inject_cycle=None, limit=20000):
     await RisingEdge(dut.clk)
     result.memory = [_peek(dut, RESULT_LO + 4 * i) for i in range(RESULT_WORDS)]
     result.memory += [_peek(dut, SCRATCH), _peek(dut, ATOMIC), _peek(dut, AMO)]
-    # The prologue-shaped pair must land next to each other, both with the loop's value.
-    result.memory += [_peek(dut, SCRATCH + 32), _peek(dut, SCRATCH + 36),
-                      _peek(dut, SCRATCH + 48), _peek(dut, SCRATCH + 52)]
+    # Every prologue slot: a pair per iteration, each at the base that iteration computed.
+    result.memory += [_peek(dut, SCRATCH + offset) for offset in range(24, 16 + 8 * LOOPS + 8, 4)]
     result.instret = int(dut.cpu_inst.csr_file_inst.instret_counter.value)
     dut.software_interrupt.value = 0
     return result
@@ -282,6 +292,8 @@ def _reference_path(latency: int) -> Path:
 @cocotb.test()
 async def test_program_is_latency_independent(dut):
     latency = int(os.environ["MEMORY_WAIT_LATENCY"])
+    if FAST_FETCH:
+        return
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     _load_image(dut, _build_dir())
 
@@ -322,7 +334,7 @@ async def test_program_is_latency_independent(dut):
 async def test_interrupt_during_wait_is_transparent(dut):
     """With a waiting memory, an interrupt at any cycle must not disturb the program."""
     latency = int(os.environ["MEMORY_WAIT_LATENCY"])
-    if latency != SWEEP_LATENCY:
+    if latency != SWEEP_LATENCY or FAST_FETCH:
         return
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     _load_image(dut, _build_dir())
@@ -342,6 +354,23 @@ async def test_interrupt_during_wait_is_transparent(dut):
             failures.append(f"interrupt at cycle {inject}: final memory differs")
     dut._log.info(f"latency {latency}: swept {reference.cycles + 1} interrupt cycles, {len(failures)} failures")
     assert not failures, f"{len(failures)} interrupt cycles not transparent; first: {failures[0]}"
+
+
+@cocotb.test()
+async def test_held_store_keeps_forwarded_operand(dut):
+    """The prologue's second store waits in EX while the addi that produced its base leaves WB."""
+    if not FAST_FETCH:
+        return
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    _load_image(dut, _build_dir())
+
+    result = await run_program(dut)
+    base = json.loads(_reference_path(0).read_text())
+    assert result.cycles is not None, "the program did not finish"
+    assert result.prologue_hold >= 2, (
+        f"the second prologue store was held in EX for at most {result.prologue_hold} cycle(s); "
+        "its producer never left WB while it waited, so this run proves nothing")
+    assert result.memory == base["memory"], f"final memory differs: {result.memory} vs {base['memory']}"
 
 
 async def _send_byte(dut, value: int) -> None:
@@ -389,15 +418,17 @@ def runCocotbTests():
     build_dir = _build_dir()
     assemble(build_dir)
 
-    for latency in LATENCIES:
-        sim_build = Path.cwd() / "sim_build" / f"sim_build_memory_wait_lat{latency}"
+    builds = [(f"lat{latency}", latency, latency) for latency in LATENCIES]
+    builds.append(("fast_fetch", SWEEP_LATENCY, 0))
+    for name, latency, fetch_latency in builds:
+        sim_build = Path.cwd() / "sim_build" / f"sim_build_memory_wait_{name}"
         if sim_build.exists():
             shutil.rmtree(sim_build)
         run(
             verilog_sources=sources,
             toplevel="top",
             module="test_memory_wait",
-            parameters={"MEM_LATENCY": latency},
+            parameters={"MEM_LATENCY": latency, "FETCH_LATENCY": fetch_latency},
             includes=[str(rtl_dir / "include")],
             simulator="verilator",
             timescale="1ns/1ps",
@@ -411,9 +442,9 @@ def runCocotbTests():
                 "COCOTB_TEST_MODULES": "test_memory_wait",
                 "MEMORY_WAIT_BUILD": str(build_dir.resolve()),
                 "MEMORY_WAIT_LATENCY": str(latency),
+                "MEMORY_WAIT_FAST_FETCH": "1" if fetch_latency != latency else "0",
             },
         )
-
 
 if __name__ == "__main__":
     runCocotbTests()

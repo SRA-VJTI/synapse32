@@ -2,7 +2,8 @@
 `include "memory_map.vh"
 
 module top #(
-    parameter MEM_LATENCY = 0  // Cycles to answer an access; 0 is today's combinational memory
+    parameter MEM_LATENCY = 0,  // Cycles to answer an access; 0 is today's combinational memory
+    parameter FETCH_LATENCY = MEM_LATENCY  // Fetch side only, when it should differ
 ) (
     input wire clk,
     input wire rst,
@@ -134,7 +135,7 @@ module top #(
     assign cpu_data_req = (cpu_mem_read_en || cpu_mem_write_en) &&
                           !cpu_load_page_fault && !cpu_store_page_fault;
 
-    mem_adapter #(.RESPONSE_LATENCY(MEM_LATENCY)) instr_adapter (
+    mem_adapter #(.RESPONSE_LATENCY(FETCH_LATENCY)) instr_adapter (
         .clk(clk),
         .rst(rst),
         .req(1'b1),
