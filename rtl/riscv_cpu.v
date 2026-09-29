@@ -200,6 +200,8 @@ module riscv_cpu (
         .instr_in(if_id_instr_out),
         .rs1_value_in(rf_inst0_rs1_value_out),
         .rs2_value_in(rf_inst0_rs2_value_out),
+        .rs1_value_resolved_in(ex_inst0_rs1_value_out),
+        .rs2_value_resolved_in(ex_inst0_rs2_value_out),
         .instr_valid_in(if_id_instr_valid_out),
         .instr_page_fault_in(if_id_instr_page_fault_out),
         .flush(pipeline_flush),
