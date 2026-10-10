@@ -53,7 +53,8 @@ async def test_riscv_isa_image(dut):
                     f"x {int(dut.cpu_inst.mem_wb_inst0_pc_out.value):08x} {int(dut.cpu_inst.rf_inst0_rd_in.value)} "
                     f"{int(dut.cpu_inst.rf_inst0_rd_value_in.value) & 0xFFFFFFFF:08x}\n"
                 )
-            if int(dut.cpu_mem_write_en.value) and not int(dut.cpu_store_page_fault.value):
+            # data_write_fire marks the one cycle a waiting store actually commits.
+            if int(dut.data_write_fire.value) and not int(dut.cpu_store_page_fault.value):
                 store_pc = int(dut.cpu_inst.ex_mem_inst0_pc_out.value)
                 store_addr = int(dut.cpu_mem_write_addr.value)
                 store_data = int(dut.cpu_mem_write_data.value)

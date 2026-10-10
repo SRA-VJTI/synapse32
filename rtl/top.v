@@ -96,12 +96,21 @@ module top #(
     wire mmu_instr_l0_pte_backed;
     wire mmu_data_l1_pte_backed;
     wire mmu_data_l0_pte_backed;
-    wire mmu_instr_pte_update_req;
-    wire [31:0] mmu_instr_pte_update_addr;
-    wire [31:0] mmu_instr_pte_update_value;
-    wire mmu_data_pte_update_req;
-    wire [31:0] mmu_data_pte_update_addr;
-    wire [31:0] mmu_data_pte_update_value;
+    // Sequential walker: the MMU reads PTEs over the data memory interface.
+    wire mmu_instr_ready;
+    wire mmu_data_ready;
+    wire mmu_walk_req;
+    wire [31:0] mmu_walk_addr;
+    wire mmu_walk_gnt;
+    wire mmu_walk_rvalid;
+    wire cpu_tlb_flush;
+    wire data_bus_walk_sel;
+    wire data_bus_walk_owns;
+    reg data_bus_walk_owner_q;
+    wire data_store_req;
+    wire adapter_data_gnt;
+    wire adapter_data_rvalid;
+    wire cpu_data_bus_req;
 
     assign external_interrupt_combined = external_interrupt | plic_interrupt;
 
@@ -134,11 +143,31 @@ module top #(
     // A faulting access is never accepted, or it would commit after the trap.
     assign cpu_data_req = (cpu_mem_read_en || cpu_mem_write_en) &&
                           !cpu_load_page_fault && !cpu_store_page_fault;
+    // The core may only go to memory once its translation is available.
+    assign cpu_data_bus_req = cpu_data_req && mmu_data_ready;
+    // One master at a time on the data interface; the core goes first, as its instruction is older.
+    assign data_bus_walk_sel = mmu_walk_req && !cpu_data_bus_req;
+    assign data_bus_walk_owns = data_bus_walk_owner_q || (data_bus_walk_sel && adapter_data_gnt);
+    assign mmu_walk_gnt = adapter_data_gnt && data_bus_walk_sel;
+    assign mmu_walk_rvalid = adapter_data_rvalid && data_bus_walk_owns;
+    assign cpu_data_gnt = adapter_data_gnt && !data_bus_walk_sel;
+    assign cpu_data_rvalid = adapter_data_rvalid && !data_bus_walk_owns;
+
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            data_bus_walk_owner_q <= 1'b0;
+        end else if (adapter_data_rvalid) begin
+            data_bus_walk_owner_q <= 1'b0;
+        end else if (data_bus_walk_sel && adapter_data_gnt) begin
+            data_bus_walk_owner_q <= 1'b1;
+        end
+    end
 
     mem_adapter #(.RESPONSE_LATENCY(FETCH_LATENCY)) instr_adapter (
         .clk(clk),
         .rst(rst),
-        .req(1'b1),
+        // A fetch goes to memory only once translated; a fetch that faults never does.
+        .req(mmu_instr_ready && !cpu_instr_page_fault),
         .addr(phys_instr_addr),
         .we(1'b0),
         .be(4'b0),
@@ -146,6 +175,7 @@ module top #(
         .gnt(cpu_instr_gnt),
         .rvalid(cpu_instr_rvalid),
         .rdata(instr_to_cpu),
+        .store_req(),
         .store_addr(instr_store_addr),
         .store_we(),
         .store_be(),
@@ -158,14 +188,15 @@ module top #(
     mem_adapter #(.RESPONSE_LATENCY(MEM_LATENCY)) data_adapter (
         .clk(clk),
         .rst(rst),
-        .req(cpu_data_req),
-        .addr(phys_data_addr),
-        .we(cpu_mem_write_en),
-        .be(cpu_write_byte_enable),
-        .wdata(cpu_mem_write_data),
-        .gnt(cpu_data_gnt),
-        .rvalid(cpu_data_rvalid),
+        .req(data_bus_walk_sel ? 1'b1 : cpu_data_bus_req),
+        .addr(data_bus_walk_sel ? mmu_walk_addr : phys_data_addr),
+        .we(data_bus_walk_sel ? 1'b0 : cpu_mem_write_en),
+        .be(data_bus_walk_sel ? 4'b1111 : cpu_write_byte_enable),
+        .wdata(data_bus_walk_sel ? 32'b0 : cpu_mem_write_data),
+        .gnt(adapter_data_gnt),
+        .rvalid(adapter_data_rvalid),
         .rdata(cpu_data_rdata),
+        .store_req(data_store_req),
         .store_addr(data_store_addr),
         .store_we(data_store_we),
         .store_be(data_store_be),
@@ -201,6 +232,7 @@ module top #(
         .module_data_gnt_in(cpu_data_gnt),
         .module_data_rvalid_in(cpu_data_rvalid),
         .module_data_write_intent_out(cpu_data_write_intent),
+        .module_tlb_flush_out(cpu_tlb_flush),
         .module_data_mmu_enable_out(cpu_data_mmu_enable),
         .module_data_privilege_out(cpu_data_privilege),
         .module_satp_out(cpu_satp),
@@ -215,41 +247,33 @@ module top #(
     wire cpu_instr_page_fault;
 
     sv32_mmu mmu_inst (
-        .instr_translate_enable(cpu_instr_mmu_enable),
-        .instr_virtual_addr(cpu_pc_out),
-        .instr_priv_mode(cpu_instr_privilege),
-        .data_translate_enable(translated_data_access),
-        .data_virtual_addr(data_mem_addr),
-        .data_wr_req(cpu_data_write_intent),
-        .data_rd_en(cpu_mem_read_en),
-        .data_priv_mode(cpu_data_privilege),
+        .clk(clk),
+        .rst(rst),
+        .flush_tlb(cpu_tlb_flush),
         .satp(cpu_satp),
         .data_sum(cpu_data_sum),
         .data_mxr(cpu_data_mxr),
-        .instr_l1_pte_value(mmu_instr_l1_pte_value),
-        .instr_l1_pte_backed(mmu_instr_l1_pte_backed),
-        .instr_l0_pte_value(mmu_instr_l0_pte_value),
-        .instr_l0_pte_backed(mmu_instr_l0_pte_backed),
-        .data_l1_pte_value(mmu_data_l1_pte_value),
-        .data_l1_pte_backed(mmu_data_l1_pte_backed),
-        .data_l0_pte_value(mmu_data_l0_pte_value),
-        .data_l0_pte_backed(mmu_data_l0_pte_backed),
-        .instr_l1_pte_addr(mmu_instr_l1_pte_addr),
-        .instr_l0_pte_addr(mmu_instr_l0_pte_addr),
-        .data_l1_pte_addr(mmu_data_l1_pte_addr),
-        .data_l0_pte_addr(mmu_data_l0_pte_addr),
+        .instr_translate_enable(cpu_instr_mmu_enable),
+        .instr_virtual_addr(cpu_pc_out),
+        .instr_priv_mode(cpu_instr_privilege),
         .instr_phys_addr(phys_instr_addr),
+        .instr_ready(mmu_instr_ready),
         .instr_page_fault(cpu_instr_page_fault),
+        .data_translate_enable(translated_data_access),
+        .data_virtual_addr(data_mem_addr),
+        .data_rd_en(cpu_mem_read_en),
+        .data_wr_req(cpu_data_write_intent),
+        .data_priv_mode(cpu_data_privilege),
         .data_phys_addr(phys_data_addr),
+        .data_ready(mmu_data_ready),
         .data_load_page_fault(cpu_load_page_fault),
         .data_store_page_fault(cpu_store_page_fault),
         .data_fault_addr(mmu_data_fault_addr),
-        .instr_pte_update_req(mmu_instr_pte_update_req),
-        .instr_pte_update_addr(mmu_instr_pte_update_addr),
-        .instr_pte_update_value(mmu_instr_pte_update_value),
-        .data_pte_update_req(mmu_data_pte_update_req),
-        .data_pte_update_addr(mmu_data_pte_update_addr),
-        .data_pte_update_value(mmu_data_pte_update_value)
+        .walk_req(mmu_walk_req),
+        .walk_addr(mmu_walk_addr),
+        .walk_gnt(mmu_walk_gnt),
+        .walk_rvalid(mmu_walk_rvalid),
+        .walk_rdata(cpu_data_rdata)
     );
 
     // Instantiate unified memory
@@ -261,23 +285,25 @@ module top #(
         .clk(clk),
         .instr_addr(instr_store_addr),
         .instr_addr_p2(data_store_addr),
-        .data_wr_req(cpu_mem_write_en && ram_access),
-        .data_rd_en(cpu_mem_read_en && ram_access),
+        .data_wr_req(data_store_req && data_store_we && ram_access),
+        .data_rd_en(data_store_req && !data_store_we && ram_access),
         // A write lands once, in the cycle the adapter commits it.
         .wr_en(data_write_fire && ram_access && !cpu_store_page_fault),
         .write_byte_enable(data_store_be),
         .wr_data(data_store_wdata),
-        .load_type(cpu_load_type),
-        .pte_wr_en_a(mmu_instr_pte_update_req),
-        .pte_wr_addr_a(mmu_instr_pte_update_addr),
-        .pte_wr_value_a(mmu_instr_pte_update_value),
-        .pte_wr_en_b(mmu_data_pte_update_req),
-        .pte_wr_addr_b(mmu_data_pte_update_addr),
-        .pte_wr_value_b(mmu_data_pte_update_value),
-        .pte_rd_addr_a(mmu_instr_l1_pte_addr),
-        .pte_rd_addr_b(mmu_instr_l0_pte_addr),
-        .pte_rd_addr_c(mmu_data_l1_pte_addr),
-        .pte_rd_addr_d(mmu_data_l0_pte_addr),
+        // A walk reads a whole PTE word; the core's load type applies to its own accesses.
+        .load_type(data_bus_walk_owns ? 3'b010 : cpu_load_type),
+        // The walker reads PTEs over the data interface now, so the side channel is unused.
+        .pte_wr_en_a(1'b0),
+        .pte_wr_addr_a(32'b0),
+        .pte_wr_value_a(32'b0),
+        .pte_wr_en_b(1'b0),
+        .pte_wr_addr_b(32'b0),
+        .pte_wr_value_b(32'b0),
+        .pte_rd_addr_a(32'b0),
+        .pte_rd_addr_b(32'b0),
+        .pte_rd_addr_c(32'b0),
+        .pte_rd_addr_d(32'b0),
         .instr(instr_store_rdata),
         .instr_p2(instr_read_data),
         .pte_rd_value_a(mmu_instr_l1_pte_value),

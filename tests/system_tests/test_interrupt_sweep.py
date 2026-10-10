@@ -218,6 +218,7 @@ m_ad:
         ori     t2, t2, 0x80
 1:
         sw      t2, 0(t1)
+        sfence.vma
         j       m_ret
 m_skip:
         csrr    t0, mepc
@@ -590,8 +591,8 @@ async def run_trial(dut, scenario_index, variant, entry_addr, inject_cycle, limi
         await ReadOnly()
         if want_entry and trial.entry_cycle is None and int(dut.pc_debug.value) == entry_addr:
             trial.entry_cycle = cycle
-        # A store that raises a page fault is not committed (it is retried after the handler).
-        if int(dut.cpu_mem_write_en.value) and not int(dut.cpu_store_page_fault.value):
+        # Count a store once, when memory accepts it; a page-faulting store is not committed.
+        if int(dut.data_write_fire.value) and not int(dut.cpu_store_page_fault.value):
             addr = int(dut.cpu_mem_write_addr.value)
             if RESULT_LO <= addr < RESULT_HI:
                 trial.stores.append((addr, int(dut.cpu_mem_write_data.value), int(dut.cpu_write_byte_enable.value)))

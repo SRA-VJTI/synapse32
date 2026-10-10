@@ -1,4 +1,4 @@
-"""Page-fault causes of atomic and ordinary memory accesses under Sv32 (BUGS B15).
+"""Page-fault causes of atomic and ordinary memory accesses under Sv32.
 
 An access that writes reports a store/AMO page fault (15), including an AMO, which also reads; LR and
 loads report a load page fault (13). The faulting instruction leaves memory and rd unchanged. The
