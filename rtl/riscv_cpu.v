@@ -870,8 +870,10 @@ module riscv_cpu (
     assign mem_stage_jump_addr = mem_stage_trap_to_supervisor ? stvec_base : mtvec_base;
 
     // An execute trigger is higher priority than the fetch page fault of the same instruction.
+    // Like every EX exception, it waits while an older access is outstanding in MEM.
     assign instr_stage_page_fault_taken = id_ex_inst0_instr_page_fault_out &&
                                           id_ex_inst0_instr_valid_out &&
+                                          ex_stage_active &&
                                           !execute_trigger_hit;
     assign instr_stage_trap_to_supervisor =
         (csr_file_inst.privilege_mode != PRIV_M) && csr_file_inst.medeleg[12];
