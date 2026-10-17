@@ -237,13 +237,15 @@ always @(*) begin
     endcase
 end
 
+wire [31:0] alu_result;
+
 alu alu_inst(
     .rs1(rs1_value),
     .rs2(rs2_value),
     .imm(imm),
     .instr_id(instr_id),
     .pc_input(jump_addr),
-    .ALUoutput()
+    .ALUoutput(alu_result)
 );
 
 // For all R-type instructions, the exec_output is the output of the ALU
@@ -305,10 +307,10 @@ always @(*) begin
     end else begin
         case (opcode)
             7'b0110011: begin // R-type instructions
-            exec_output = alu_inst.ALUoutput;
+            exec_output = alu_result;
             end
             7'b0010011: begin // I-type instructions
-            exec_output = alu_inst.ALUoutput;
+            exec_output = alu_result;
             end
             7'b0000011: begin // Load instructions
             effective_addr = rs1_value + imm;

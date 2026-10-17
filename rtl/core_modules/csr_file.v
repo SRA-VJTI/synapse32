@@ -36,6 +36,21 @@ module csr_file (
     output wire [27:0] trigger_control,
     output wire [127:0] trigger_tdata2,
 
+    // State the pipeline reads outside CSR instructions.
+    output wire [31:0] mstatus_out,
+    output wire [31:0] medeleg_out,
+    output wire [31:0] mideleg_out,
+    output wire [31:0] mie_out,
+    output wire [31:0] mip_out,
+    output wire [31:0] mtvec_out,
+    output wire [31:0] stvec_out,
+    output wire [31:0] mepc_out,
+    output wire [31:0] sepc_out,
+    output wire [31:0] satp_out,
+    output wire [31:0] mcounteren_out,
+    output wire [31:0] scounteren_out,
+    output wire [1:0] privilege_mode_out,
+
     // Timer interrupt input
     input wire timer_interrupt,
     input wire software_interrupt,
@@ -142,6 +157,20 @@ module csr_file (
     reg [31:0] satp;
     reg [31:0] pmpcfg0;
     reg [31:0] pmpaddr0;
+
+    assign mstatus_out = mstatus;
+    assign medeleg_out = medeleg;
+    assign mideleg_out = mideleg;
+    assign mie_out = mie;
+    assign mip_out = mip;
+    assign mtvec_out = mtvec;
+    assign stvec_out = stvec;
+    assign mepc_out = mepc;
+    assign sepc_out = sepc;
+    assign satp_out = satp;
+    assign mcounteren_out = mcounteren;
+    assign scounteren_out = scounteren;
+    assign privilege_mode_out = privilege_mode;
     // Sdtrig state: tdata1 holds only the supported fields, so a write of 0 disables the trigger.
     reg [1:0] tselect;
     reg [6:0] trigger_ctl [0:3];   // {m, 0, s, u, execute, store, load}
