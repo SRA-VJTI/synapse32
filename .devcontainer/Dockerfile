@@ -60,6 +60,13 @@ RUN git clone --depth 1 https://github.com/riscv-collab/riscv-gnu-toolchain /tmp
 
 ENV PATH="/opt/riscv32/bin:${PATH}"
 
+# Yosys checks that the RTL synthesizes; a separate layer keeps the toolchain layer cached.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends yosys && \
+    yosys -V && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 # Set up a working directory
 WORKDIR /workspace
 
