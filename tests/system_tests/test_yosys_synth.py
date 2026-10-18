@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 
 CORE = "riscv_cpu"
-PERIPHERALS = ["sv32_mmu", "mem_adapter", "uart", "plic", "timer"]
+PERIPHERALS = ["sv32_mmu", "mem_adapter", "store_buffer", "uart", "plic", "timer"]
 
 
 def _find_repo_root() -> Path:

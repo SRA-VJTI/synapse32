@@ -3,7 +3,8 @@
 
 module top #(
     parameter MEM_LATENCY = 0,  // Cycles to answer an access; 0 is today's combinational memory
-    parameter FETCH_LATENCY = MEM_LATENCY  // Fetch side only, when it should differ
+    parameter FETCH_LATENCY = MEM_LATENCY,  // Fetch side only, when it should differ
+    parameter STORE_BUFFER_DEPTH = 4
 ) (
     input wire clk,
     input wire rst,
@@ -111,6 +112,31 @@ module top #(
     wire adapter_data_gnt;
     wire adapter_data_rvalid;
     wire cpu_data_bus_req;
+    // Store buffer: translated writes wait there, so the core does not wait for memory to take them.
+    wire cpu_ram_access;
+    wire cpu_device_access;
+    wire cpu_load_go;
+    wire sb_push_req;
+    wire sb_push;
+    wire sb_pop;
+    wire sb_empty;
+    wire sb_full;
+    wire sb_drained;
+    wire sb_match;
+    wire [31:0] sb_head_addr;
+    wire [3:0] sb_head_be;
+    wire [31:0] sb_head_data;
+    wire sb_head_ram;
+    wire drain_req;
+    wire data_bus_drain_sel;
+    wire data_bus_drain_owns;
+    reg data_bus_drain_owner_q;
+    wire drain_done;
+    wire [31:0] drain_addr;
+    wire [3:0] drain_be;
+    wire [31:0] drain_data;
+    wire drain_ram;
+    wire bus_ram_access;
 
     assign external_interrupt_combined = external_interrupt | plic_interrupt;
 
@@ -126,6 +152,14 @@ module top #(
     assign ram_access = (translated_data_access && !timer_access && !uart_access && !plic_access)
                         || data_mem_access || instr_mem_access;
     
+    // Decode of the core's own access, kept with a buffered write because it drains later.
+    assign cpu_device_access = `IS_TIMER_MEM(phys_data_addr) || `IS_UART_MEM(phys_data_addr) ||
+                               `IS_PLIC_MEM(phys_data_addr);
+    assign cpu_ram_access = (translated_data_access && !cpu_device_access) ||
+                            (!translated_data_access &&
+                             (`IS_DATA_MEM(phys_data_addr) || `IS_INSTR_MEM(phys_data_addr)));
+    assign bus_ram_access = data_bus_drain_owns ? drain_ram : ram_access;
+
     // Select the appropriate address for memory access
     assign data_mem_addr = cpu_mem_write_en ? cpu_mem_write_addr : cpu_mem_read_addr;
     
@@ -145,23 +179,65 @@ module top #(
                           !cpu_load_page_fault && !cpu_store_page_fault;
     // The core may only go to memory once its translation is available.
     assign cpu_data_bus_req = cpu_data_req && mmu_data_ready;
-    // One master at a time on the data interface; the core goes first, as its instruction is older.
-    assign data_bus_walk_sel = mmu_walk_req && !cpu_data_bus_req;
+    // A write is done for the core once the buffer takes it. A load waits for buffered writes to
+    // its word, and a device load for all of them, so it never passes an older write it depends on.
+    assign sb_push_req = cpu_data_bus_req && cpu_mem_write_en && !sb_full;
+    assign cpu_load_go = cpu_data_bus_req && !cpu_mem_write_en && !sb_match &&
+                         !(cpu_device_access && !sb_empty);
+    // An empty buffer issues the entering write at once; at latency 0 it completes in that cycle.
+    assign drain_req = !sb_empty || sb_push_req;
+    assign drain_addr = sb_empty ? phys_data_addr : sb_head_addr;
+    assign drain_be = sb_empty ? cpu_write_byte_enable : sb_head_be;
+    assign drain_data = sb_empty ? cpu_mem_write_data : sb_head_data;
+    assign drain_ram = sb_empty ? cpu_ram_access : sb_head_ram;
+    assign drain_done = adapter_data_rvalid && data_bus_drain_owns;
+    assign sb_push = sb_push_req && !(sb_empty && drain_done);
+    assign sb_pop = drain_done && !sb_empty;
+
+    // One master at a time on the data interface: the core's load, then the buffer, then the walker,
+    // which starts only once every earlier write (a page-table update among them) is in memory.
+    assign data_bus_drain_sel = drain_req && !cpu_load_go;
+    assign data_bus_walk_sel = mmu_walk_req && !cpu_load_go && !drain_req;
     assign data_bus_walk_owns = data_bus_walk_owner_q || (data_bus_walk_sel && adapter_data_gnt);
+    assign data_bus_drain_owns = data_bus_drain_owner_q || (data_bus_drain_sel && adapter_data_gnt);
     assign mmu_walk_gnt = adapter_data_gnt && data_bus_walk_sel;
     assign mmu_walk_rvalid = adapter_data_rvalid && data_bus_walk_owns;
-    assign cpu_data_gnt = adapter_data_gnt && !data_bus_walk_sel;
-    assign cpu_data_rvalid = adapter_data_rvalid && !data_bus_walk_owns;
+    assign cpu_data_gnt = cpu_mem_write_en ? sb_push_req : (adapter_data_gnt && cpu_load_go);
+    assign cpu_data_rvalid = cpu_mem_write_en ? sb_push_req :
+                             (adapter_data_rvalid && !data_bus_walk_owns && !data_bus_drain_owns);
 
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             data_bus_walk_owner_q <= 1'b0;
+            data_bus_drain_owner_q <= 1'b0;
         end else if (adapter_data_rvalid) begin
             data_bus_walk_owner_q <= 1'b0;
-        end else if (data_bus_walk_sel && adapter_data_gnt) begin
-            data_bus_walk_owner_q <= 1'b1;
+            data_bus_drain_owner_q <= 1'b0;
+        end else if (adapter_data_gnt) begin
+            data_bus_walk_owner_q <= data_bus_walk_sel;
+            data_bus_drain_owner_q <= data_bus_drain_sel;
         end
     end
+
+    store_buffer #(.DEPTH(STORE_BUFFER_DEPTH)) store_buffer_inst (
+        .clk(clk),
+        .rst(rst),
+        .push(sb_push),
+        .push_addr(phys_data_addr),
+        .push_be(cpu_write_byte_enable),
+        .push_data(cpu_mem_write_data),
+        .push_ram(cpu_ram_access),
+        .pop(sb_pop),
+        .empty(sb_empty),
+        .full(sb_full),
+        .drained(sb_drained),
+        .head_addr(sb_head_addr),
+        .head_be(sb_head_be),
+        .head_data(sb_head_data),
+        .head_ram(sb_head_ram),
+        .match_addr(phys_data_addr),
+        .match(sb_match)
+    );
 
     mem_adapter #(.RESPONSE_LATENCY(FETCH_LATENCY)) instr_adapter (
         .clk(clk),
@@ -188,11 +264,11 @@ module top #(
     mem_adapter #(.RESPONSE_LATENCY(MEM_LATENCY)) data_adapter (
         .clk(clk),
         .rst(rst),
-        .req(data_bus_walk_sel ? 1'b1 : cpu_data_bus_req),
-        .addr(data_bus_walk_sel ? mmu_walk_addr : phys_data_addr),
-        .we(data_bus_walk_sel ? 1'b0 : cpu_mem_write_en),
-        .be(data_bus_walk_sel ? 4'b1111 : cpu_write_byte_enable),
-        .wdata(data_bus_walk_sel ? 32'b0 : cpu_mem_write_data),
+        .req(data_bus_walk_sel || data_bus_drain_sel || cpu_load_go),
+        .addr(data_bus_walk_sel ? mmu_walk_addr : data_bus_drain_sel ? drain_addr : phys_data_addr),
+        .we(data_bus_drain_sel),
+        .be(data_bus_walk_sel ? 4'b1111 : data_bus_drain_sel ? drain_be : cpu_write_byte_enable),
+        .wdata(data_bus_drain_sel ? drain_data : 32'b0),
         .gnt(adapter_data_gnt),
         .rvalid(adapter_data_rvalid),
         .rdata(cpu_data_rdata),
@@ -231,6 +307,7 @@ module top #(
         .module_instr_rvalid_in(cpu_instr_rvalid),
         .module_data_gnt_in(cpu_data_gnt),
         .module_data_rvalid_in(cpu_data_rvalid),
+        .module_store_buffer_empty_in(sb_drained),
         .module_data_write_intent_out(cpu_data_write_intent),
         .module_tlb_flush_out(cpu_tlb_flush),
         .module_data_mmu_enable_out(cpu_data_mmu_enable),
@@ -285,10 +362,10 @@ module top #(
         .clk(clk),
         .instr_addr(instr_store_addr),
         .instr_addr_p2(data_store_addr),
-        .data_wr_req(data_store_req && data_store_we && ram_access),
-        .data_rd_en(data_store_req && !data_store_we && ram_access),
-        // A write lands once, in the cycle the adapter commits it.
-        .wr_en(data_write_fire && ram_access && !cpu_store_page_fault),
+        .data_wr_req(data_store_req && data_store_we && bus_ram_access),
+        .data_rd_en(data_store_req && !data_store_we && bus_ram_access),
+        // A write lands once, in the cycle the adapter commits it; a faulting write never enters the buffer.
+        .wr_en(data_write_fire && bus_ram_access),
         .write_byte_enable(data_store_be),
         .wr_data(data_store_wdata),
         // A walk reads a whole PTE word; the core's load type applies to its own accesses.
