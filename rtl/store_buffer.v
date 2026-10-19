@@ -65,18 +65,25 @@ module store_buffer #(
             ram_q <= {DEPTH{1'b0}};
             count <= {COUNT_WIDTH{1'b0}};
         end else begin
-            for (i = 0; i < DEPTH; i = i + 1) begin
+            for (i = 0; i < DEPTH - 1; i = i + 1) begin
                 if (push && (i == {{(32-COUNT_WIDTH){1'b0}}, tail})) begin
                     addr_q[i] <= push_addr;
                     be_q[i] <= push_be;
                     data_q[i] <= push_data;
                     ram_q[i] <= push_ram;
-                end else if (pop && (i < DEPTH - 1)) begin
+                end else if (pop) begin
                     addr_q[i] <= addr_q[i + 1];
                     be_q[i] <= be_q[i + 1];
                     data_q[i] <= data_q[i + 1];
                     ram_q[i] <= ram_q[i + 1];
                 end
+            end
+            // The last entry has nothing behind it to shift in.
+            if (push && (tail == DEPTH_COUNT - 1'b1)) begin
+                addr_q[DEPTH-1] <= push_addr;
+                be_q[DEPTH-1] <= push_be;
+                data_q[DEPTH-1] <= push_data;
+                ram_q[DEPTH-1] <= push_ram;
             end
             count <= tail + {{(COUNT_WIDTH-1){1'b0}}, push};
         end
