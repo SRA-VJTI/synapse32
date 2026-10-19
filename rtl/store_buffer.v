@@ -1,6 +1,5 @@
 `default_nettype none
-// FIFO of translated writes waiting for the data port. Entry 0 is the oldest; it leaves when its
-// write's response arrives. A load compares its word against every entry before it may go to memory.
+// FIFO of translated writes waiting for the data port; entry 0 is the oldest and drains first.
 module store_buffer #(
     parameter DEPTH = 4
 ) (

@@ -112,7 +112,7 @@ module top #(
     wire adapter_data_gnt;
     wire adapter_data_rvalid;
     wire cpu_data_bus_req;
-    // Store buffer: translated writes wait there, so the core does not wait for memory to take them.
+    // Store buffer wires
     wire cpu_ram_access;
     wire cpu_device_access;
     wire cpu_load_go;
@@ -152,7 +152,7 @@ module top #(
     assign ram_access = (translated_data_access && !timer_access && !uart_access && !plic_access)
                         || data_mem_access || instr_mem_access;
     
-    // Decode of the core's own access, kept with a buffered write because it drains later.
+    // Kept with each buffered write, which drains after the core has moved on.
     assign cpu_device_access = `IS_TIMER_MEM(phys_data_addr) || `IS_UART_MEM(phys_data_addr) ||
                                `IS_PLIC_MEM(phys_data_addr);
     assign cpu_ram_access = (translated_data_access && !cpu_device_access) ||
@@ -179,12 +179,11 @@ module top #(
                           !cpu_load_page_fault && !cpu_store_page_fault;
     // The core may only go to memory once its translation is available.
     assign cpu_data_bus_req = cpu_data_req && mmu_data_ready;
-    // A write is done for the core once the buffer takes it. A load waits for buffered writes to
-    // its word, and a device load for all of them, so it never passes an older write it depends on.
+    // A load waits for buffered writes to its word; a device load waits for all of them.
     assign store_buf_push_req = cpu_data_bus_req && cpu_mem_write_en && !store_buf_full;
     assign cpu_load_go = cpu_data_bus_req && !cpu_mem_write_en && !store_buf_match &&
                          !(cpu_device_access && !store_buf_empty);
-    // An empty buffer issues the entering write at once; at latency 0 it completes in that cycle.
+    // An empty buffer issues the entering write at once.
     assign drain_req = !store_buf_empty || store_buf_push_req;
     assign drain_addr = store_buf_empty ? phys_data_addr : store_buf_head_addr;
     assign drain_be = store_buf_empty ? cpu_write_byte_enable : store_buf_head_be;
@@ -194,8 +193,8 @@ module top #(
     assign store_buf_push = store_buf_push_req && !(store_buf_empty && drain_done);
     assign store_buf_pop = drain_done && !store_buf_empty;
 
-    // One master at a time on the data interface: the core's load, then the buffer, then the walker,
-    // which starts only once every earlier write (a page-table update among them) is in memory.
+    // One master at a time: the core's load, then the buffer, then the walker, which waits for an
+    // empty buffer so it reads updated page-table entries.
     assign data_bus_drain_sel = drain_req && !cpu_load_go;
     assign data_bus_walk_sel = mmu_walk_req && !cpu_load_go && !drain_req;
     assign data_bus_walk_owns = data_bus_walk_owner_q || (data_bus_walk_sel && adapter_data_gnt);
@@ -364,7 +363,7 @@ module top #(
         .instr_addr_p2(data_store_addr),
         .data_wr_req(data_store_req && data_store_we && bus_ram_access),
         .data_rd_en(data_store_req && !data_store_we && bus_ram_access),
-        // A write lands once, in the cycle the adapter commits it; a faulting write never enters the buffer.
+        // A write lands once, in the cycle the adapter commits it.
         .wr_en(data_write_fire && bus_ram_access),
         .write_byte_enable(data_store_be),
         .wr_data(data_store_wdata),

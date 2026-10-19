@@ -1,19 +1,9 @@
 """Store buffer.
 
-A translated write waits in a buffer in front of the data port, so the core does not wait for memory
-to take it. Every check queues the write behind three others first, so at a non-zero latency it is
-still in the buffer when the next instruction runs:
-
-- a run of stores costs the same cycles as a run of ALU instructions (fast fetch, data latency 2);
-- a load, LR or AMO read of a buffered word returns the buffered value;
-- a load of another word may go first and still returns the right value;
-- a device read waits for an earlier device write (UART LCR.DLAB, then the divisor latch);
-- the instruction written before FENCE.I is the one fetched after it;
-- the page walk after SFENCE.VMA reads the page-table entry written before it;
-- an interrupt handler reads the value of a store that is still buffered (swept over every cycle);
-- a generated run of byte, halfword and word stores and loads over a few words, packed so the buffer
-  fills and loads land on buffered words, matches a model of memory, at buffer depths 1, 2 and 4.
-
+Translated writes wait in front of the data port, so stores cost no more than ALU instructions. Each
+check runs while the write is still buffered: loads, LR and AMOs of that word, a device read after a
+device write, FENCE.I, the page walk after SFENCE.VMA, and an interrupt handler (swept over every
+cycle). A generated mix of stores and loads must match a memory model at buffer depths 1, 2 and 4.
 Every program runs at latency 0, 1, 2 and 4, plus a build with fast fetch and slow data.
 """
 

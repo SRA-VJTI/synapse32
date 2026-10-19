@@ -23,7 +23,7 @@ module riscv_cpu (
     input wire module_instr_rvalid_in,
     input wire module_data_gnt_in,
     input wire module_data_rvalid_in,
-    input wire module_store_buffer_empty_in,  // No buffered write is left once this cycle ends
+    input wire module_store_buffer_empty_in,  // Store buffer empty once this cycle ends
     // The MMU treats a whole AMO as a write, its read transaction included.
     output wire module_data_write_intent_out,
     // SFENCE.VMA or a write to satp: the TLB may hold stale translations.
@@ -420,8 +420,7 @@ module riscv_cpu (
     wire sc_success;
     wire [31:0] sc_result;
     wire [31:0] atomic_new_word;
-    // FENCE and FENCE.I wait in EX until every older write is in memory, so the refetch after
-    // FENCE.I reads the new code.
+    // FENCE and FENCE.I wait for older writes to reach memory, so FENCE.I refetches the new code.
     wire store_buf_busy_stall = 1'b0;
     wire fence_drain_stall = id_ex_inst0_instr_valid_out && !module_store_buffer_empty_in &&
                              ((id_ex_inst0_instr_id_out == INSTR_FENCE) ||
