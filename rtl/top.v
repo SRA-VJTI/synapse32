@@ -116,17 +116,17 @@ module top #(
     wire cpu_ram_access;
     wire cpu_device_access;
     wire cpu_load_go;
-    wire sb_push_req;
-    wire sb_push;
-    wire sb_pop;
-    wire sb_empty;
-    wire sb_full;
-    wire sb_drained;
-    wire sb_match;
-    wire [31:0] sb_head_addr;
-    wire [3:0] sb_head_be;
-    wire [31:0] sb_head_data;
-    wire sb_head_ram;
+    wire store_buf_push_req;
+    wire store_buf_push;
+    wire store_buf_pop;
+    wire store_buf_empty;
+    wire store_buf_full;
+    wire store_buf_drained;
+    wire store_buf_match;
+    wire [31:0] store_buf_head_addr;
+    wire [3:0] store_buf_head_be;
+    wire [31:0] store_buf_head_data;
+    wire store_buf_head_ram;
     wire drain_req;
     wire data_bus_drain_sel;
     wire data_bus_drain_owns;
@@ -181,18 +181,18 @@ module top #(
     assign cpu_data_bus_req = cpu_data_req && mmu_data_ready;
     // A write is done for the core once the buffer takes it. A load waits for buffered writes to
     // its word, and a device load for all of them, so it never passes an older write it depends on.
-    assign sb_push_req = cpu_data_bus_req && cpu_mem_write_en && !sb_full;
-    assign cpu_load_go = cpu_data_bus_req && !cpu_mem_write_en && !sb_match &&
-                         !(cpu_device_access && !sb_empty);
+    assign store_buf_push_req = cpu_data_bus_req && cpu_mem_write_en && !store_buf_full;
+    assign cpu_load_go = cpu_data_bus_req && !cpu_mem_write_en && !store_buf_match &&
+                         !(cpu_device_access && !store_buf_empty);
     // An empty buffer issues the entering write at once; at latency 0 it completes in that cycle.
-    assign drain_req = !sb_empty || sb_push_req;
-    assign drain_addr = sb_empty ? phys_data_addr : sb_head_addr;
-    assign drain_be = sb_empty ? cpu_write_byte_enable : sb_head_be;
-    assign drain_data = sb_empty ? cpu_mem_write_data : sb_head_data;
-    assign drain_ram = sb_empty ? cpu_ram_access : sb_head_ram;
+    assign drain_req = !store_buf_empty || store_buf_push_req;
+    assign drain_addr = store_buf_empty ? phys_data_addr : store_buf_head_addr;
+    assign drain_be = store_buf_empty ? cpu_write_byte_enable : store_buf_head_be;
+    assign drain_data = store_buf_empty ? cpu_mem_write_data : store_buf_head_data;
+    assign drain_ram = store_buf_empty ? cpu_ram_access : store_buf_head_ram;
     assign drain_done = adapter_data_rvalid && data_bus_drain_owns;
-    assign sb_push = sb_push_req && !(sb_empty && drain_done);
-    assign sb_pop = drain_done && !sb_empty;
+    assign store_buf_push = store_buf_push_req && !(store_buf_empty && drain_done);
+    assign store_buf_pop = drain_done && !store_buf_empty;
 
     // One master at a time on the data interface: the core's load, then the buffer, then the walker,
     // which starts only once every earlier write (a page-table update among them) is in memory.
@@ -202,8 +202,8 @@ module top #(
     assign data_bus_drain_owns = data_bus_drain_owner_q || (data_bus_drain_sel && adapter_data_gnt);
     assign mmu_walk_gnt = adapter_data_gnt && data_bus_walk_sel;
     assign mmu_walk_rvalid = adapter_data_rvalid && data_bus_walk_owns;
-    assign cpu_data_gnt = cpu_mem_write_en ? sb_push_req : (adapter_data_gnt && cpu_load_go);
-    assign cpu_data_rvalid = cpu_mem_write_en ? sb_push_req :
+    assign cpu_data_gnt = cpu_mem_write_en ? store_buf_push_req : (adapter_data_gnt && cpu_load_go);
+    assign cpu_data_rvalid = cpu_mem_write_en ? store_buf_push_req :
                              (adapter_data_rvalid && !data_bus_walk_owns && !data_bus_drain_owns);
 
     always @(posedge clk or posedge rst) begin
@@ -222,21 +222,21 @@ module top #(
     store_buffer #(.DEPTH(STORE_BUFFER_DEPTH)) store_buffer_inst (
         .clk(clk),
         .rst(rst),
-        .push(sb_push),
+        .push(store_buf_push),
         .push_addr(phys_data_addr),
         .push_be(cpu_write_byte_enable),
         .push_data(cpu_mem_write_data),
         .push_ram(cpu_ram_access),
-        .pop(sb_pop),
-        .empty(sb_empty),
-        .full(sb_full),
-        .drained(sb_drained),
-        .head_addr(sb_head_addr),
-        .head_be(sb_head_be),
-        .head_data(sb_head_data),
-        .head_ram(sb_head_ram),
+        .pop(store_buf_pop),
+        .empty(store_buf_empty),
+        .full(store_buf_full),
+        .drained(store_buf_drained),
+        .head_addr(store_buf_head_addr),
+        .head_be(store_buf_head_be),
+        .head_data(store_buf_head_data),
+        .head_ram(store_buf_head_ram),
         .match_addr(phys_data_addr),
-        .match(sb_match)
+        .match(store_buf_match)
     );
 
     mem_adapter #(.RESPONSE_LATENCY(FETCH_LATENCY)) instr_adapter (
@@ -307,7 +307,7 @@ module top #(
         .module_instr_rvalid_in(cpu_instr_rvalid),
         .module_data_gnt_in(cpu_data_gnt),
         .module_data_rvalid_in(cpu_data_rvalid),
-        .module_store_buffer_empty_in(sb_drained),
+        .module_store_buffer_empty_in(store_buf_drained),
         .module_data_write_intent_out(cpu_data_write_intent),
         .module_tlb_flush_out(cpu_tlb_flush),
         .module_data_mmu_enable_out(cpu_data_mmu_enable),

@@ -22,7 +22,11 @@ module store_buffer #(
     input wire [31:0] match_addr,
     output reg match
 );
-    localparam COUNT_WIDTH = $clog2(DEPTH + 1);
+    // Wide enough to hold DEPTH itself.
+    localparam COUNT_WIDTH = (DEPTH < 2) ? 1 :
+                             (DEPTH < 4) ? 2 :
+                             (DEPTH < 8) ? 3 :
+                             (DEPTH < 16) ? 4 : 8;
     localparam [31:0] DEPTH_FULL = DEPTH;
     localparam [COUNT_WIDTH-1:0] DEPTH_COUNT = DEPTH_FULL[COUNT_WIDTH-1:0];
 
