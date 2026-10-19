@@ -140,7 +140,7 @@ flowchart LR
     classDef mmio fill:#7c2d12,stroke:#fb923c,color:#fff7ed
 ```
 
-Both RAM regions are backed by a single `unified_mem`, instantiated in `rtl/top.v` with `MEM_SIZE(17039360)`: 17,039,360 × 32-bit words, or 64 MB of instruction RAM plus 1 MB of data RAM. The instruction port serves fetches; the data port serves loads/stores after address translation. `rtl/mmu/unified_mem.v` maps the instruction region to local byte offsets `[0 .. INSTR_MEM_SIZE-1]` and the data region to `[INSTR_MEM_SIZE .. INSTR_MEM_SIZE+DATA_MEM_SIZE-1]`. Dividing these byte offsets by four gives instruction word indices `0..16,777,215` and data word indices `16,777,216..17,039,359`.
+Both RAM regions are backed by a single `unified_mem`, instantiated in `rtl/top.v` with `MEM_SIZE(17039360)`: 17,039,360 × 32-bit words, or 64 MB of instruction RAM plus 1 MB of data RAM. The instruction port serves fetches; the data port serves loads/stores after address translation. `rtl/unified_mem.v` maps the instruction region to local byte offsets `[0 .. INSTR_MEM_SIZE-1]` and the data region to `[INSTR_MEM_SIZE .. INSTR_MEM_SIZE+DATA_MEM_SIZE-1]`. Dividing these byte offsets by four gives instruction word indices `0..16,777,215` and data word indices `16,777,216..17,039,359`.
 
 ### Memory-port arbitration (MEM stage)
 
@@ -179,5 +179,5 @@ A standard RAM store is parked in the 1-entry store buffer for one cycle and com
 | Writeback | `rtl/writeback.v` |
 | CSR / IRQ | `rtl/core_modules/{csr_file,csr_exec,interrupt_controller}.v` |
 | MMIO | `rtl/core_modules/{timer,uart,plic}.v` |
-| Memory | `rtl/mmu/unified_mem.v` (17,039,360 × 32-bit words) |
+| Memory | `rtl/unified_mem.v` (17,039,360 × 32-bit words) |
 | Address map | `rtl/include/memory_map.vh` |
