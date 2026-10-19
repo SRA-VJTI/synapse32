@@ -33,7 +33,6 @@ module store_buffer #(
     reg [3:0] be_q [0:DEPTH-1];
     reg [31:0] data_q [0:DEPTH-1];
     reg [DEPTH-1:0] ram_q;
-    reg [DEPTH-1:0] valid_q;
     reg [COUNT_WIDTH-1:0] count;
 
     wire [COUNT_WIDTH-1:0] tail = pop ? count - 1'b1 : count;
@@ -50,7 +49,7 @@ module store_buffer #(
     always @(*) begin
         match = 1'b0;
         for (i = 0; i < DEPTH; i = i + 1) begin
-            if (valid_q[i] && (addr_q[i][31:2] == match_addr[31:2])) begin
+            if (({{(32-COUNT_WIDTH){1'b0}}, count} > i) && (addr_q[i][31:2] == match_addr[31:2])) begin
                 match = 1'b1;
             end
         end
@@ -64,7 +63,6 @@ module store_buffer #(
                 data_q[i] <= 32'b0;
             end
             ram_q <= {DEPTH{1'b0}};
-            valid_q <= {DEPTH{1'b0}};
             count <= {COUNT_WIDTH{1'b0}};
         end else begin
             for (i = 0; i < DEPTH; i = i + 1) begin
@@ -73,17 +71,11 @@ module store_buffer #(
                     be_q[i] <= push_be;
                     data_q[i] <= push_data;
                     ram_q[i] <= push_ram;
-                    valid_q[i] <= 1'b1;
-                end else if (pop) begin
-                    if (i < DEPTH - 1) begin
-                        addr_q[i] <= addr_q[i + 1];
-                        be_q[i] <= be_q[i + 1];
-                        data_q[i] <= data_q[i + 1];
-                        ram_q[i] <= ram_q[i + 1];
-                        valid_q[i] <= valid_q[i + 1];
-                    end else begin
-                        valid_q[i] <= 1'b0;
-                    end
+                end else if (pop && (i < DEPTH - 1)) begin
+                    addr_q[i] <= addr_q[i + 1];
+                    be_q[i] <= be_q[i + 1];
+                    data_q[i] <= data_q[i + 1];
+                    ram_q[i] <= ram_q[i + 1];
                 end
             end
             count <= tail + {{(COUNT_WIDTH-1){1'b0}}, push};
