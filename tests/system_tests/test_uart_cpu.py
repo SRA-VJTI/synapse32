@@ -367,8 +367,11 @@ def run_uart_fifo_status_test():
         0x01412083,  # lw x1, 20(x2)
         0x0011a023,  # sw x1, 0(x3)
 
-        # Queue one byte and immediately sample LSR again.
+        # Queue two bytes and sample LSR again: the second byte stays queued while the first is sent,
+        # whatever the baud phase at which the first leaves the FIFO.
         0x04100093,  # addi x1, x0, 'A'
+        0x00112023,  # sw x1, 0(x2)
+        0x04200093,  # addi x1, x0, 'B'
         0x00112023,  # sw x1, 0(x2)
         0x01412083,  # lw x1, 20(x2)
         0x0011a223,  # sw x1, 4(x3)

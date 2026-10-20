@@ -355,7 +355,8 @@ async def test_wfi_interrupt_with_global_mie_clear(dut):
             addr = int(dut.cpu_mem_write_addr.value)
             mem_writes[addr] = int(dut.cpu_mem_write_data.value)
 
-        if not irq_armed and mem_writes.get(0x02000000) == 0x11:
+        # Pulse once WFI sleeps: a pulse that ends before WFI executes leaves nothing pending.
+        if not irq_armed and mem_writes.get(0x02000000) == 0x11 and int(dut.cpu_inst.wfi_active.value):
             irq_armed = True
             irq_pulse = 4
             dut.software_interrupt.value = 1
@@ -370,6 +371,7 @@ async def test_wfi_interrupt_with_global_mie_clear(dut):
         await RisingEdge(dut.clk)
 
     assert mem_writes.get(0x02000000) == 0x11, "Pre-WFI marker missing"
+    assert irq_armed, "WFI never slept"
     assert mem_writes.get(0x02000004) == 0x22, (
         "WFI did not resume while global MIE was clear"
     )

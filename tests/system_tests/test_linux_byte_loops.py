@@ -257,7 +257,12 @@ async def test_linux_byte_loops_match_model(dut):
             await _load_trial_state(dut, program, init_regs, init_mem)
             dut.rst.value = 0
 
-            for _ in range(step_count + 32):
+            # Run until every instruction of the loop has retired; fetch may take extra cycles.
+            for _ in range(20 * step_count + 200):
+                await RisingEdge(dut.clk)
+                if int(dut.cpu_inst.csr_file_inst.instret_counter.value) >= step_count:
+                    break
+            for _ in range(8):
                 await RisingEdge(dut.clk)
 
             actual_regs = [

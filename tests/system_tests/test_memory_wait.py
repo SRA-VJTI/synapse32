@@ -223,6 +223,7 @@ class Run:
         self.cycles = None
         self.instret = None
         self.wait_cycles = 0
+        self.mem_wait_cycles = 0
         self.prologue_hold = 0
 
 
@@ -257,6 +258,8 @@ async def run_program(dut, inject_cycle=None, limit=20000):
         await ReadOnly()
         if int(dut.cpu_inst.mem_wait.value) or int(dut.cpu_inst.fetch_wait.value):
             result.wait_cycles += 1
+        if int(dut.cpu_inst.mem_wait.value):
+            result.mem_wait_cycles += 1
         if int(dut.cpu_inst.mem_wait.value) and int(dut.cpu_inst.id_ex_inst0_instr_out.value) == PROLOGUE_STORE:
             held += 1
             result.prologue_hold = max(result.prologue_hold, held)
@@ -308,10 +311,11 @@ async def test_program_is_latency_independent(dut):
     dut._log.info(f"latency {latency}: {result.cycles} cycles, {result.instret} instret, "
                   f"{result.wait_cycles} wait cycles, {len(result.stores)} result stores")
 
+    # Fetch still waits on instruction cache misses at latency 0, so MEM's waits are counted alone.
     if latency == 0:
-        assert result.wait_cycles == AMO_COUNT, (
+        assert result.mem_wait_cycles == AMO_COUNT, (
             f"a memory that answers in the same cycle should only make MEM wait for the write phase of "
-            f"each of the {AMO_COUNT} AMOs, but it waited {result.wait_cycles} cycles")
+            f"each of the {AMO_COUNT} AMOs, but it waited {result.mem_wait_cycles} cycles")
         return
 
     base = json.loads(_reference_path(0).read_text())
