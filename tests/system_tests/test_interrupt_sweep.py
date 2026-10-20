@@ -21,6 +21,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
 from cocotb_test.simulator import run
+from memory_view import read_word
 
 INSTR_MEM_BASE = 0x8000_0000
 INSTR_MEM_SIZE = 0x0400_0000
@@ -522,7 +523,7 @@ def _poke(dut, addr: int, value: int) -> None:
 
 
 def _peek(dut, addr: int) -> int:
-    return int(dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value) & 0xFFFF_FFFF
+    return read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
 
 
 def _load_image(dut, build_dir: Path) -> None:
@@ -591,8 +592,8 @@ async def run_trial(dut, scenario_index, variant, entry_addr, inject_cycle, limi
         await ReadOnly()
         if want_entry and trial.entry_cycle is None and int(dut.pc_debug.value) == entry_addr:
             trial.entry_cycle = cycle
-        # Count a store once, when memory accepts it; a page-faulting store is not committed.
-        if int(dut.data_write_fire.value) and not int(dut.cpu_store_page_fault.value):
+        # Count a store once, when it leaves MEM; a page-faulting store is not committed.
+        if int(dut.cpu_data_gnt.value) and int(dut.cpu_mem_write_en.value) and not int(dut.cpu_store_page_fault.value):
             addr = int(dut.cpu_mem_write_addr.value)
             if RESULT_LO <= addr < RESULT_HI:
                 trial.stores.append((addr, int(dut.cpu_mem_write_data.value), int(dut.cpu_write_byte_enable.value)))

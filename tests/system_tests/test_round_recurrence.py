@@ -18,6 +18,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge
 from cocotb_test.simulator import run
+from memory_view import read_word
 
 
 INSTR_MEM_BASE = 0x8000_0000
@@ -143,7 +144,7 @@ async def test_repeated_state_roundtrip_across_calls(dut):
         done = False
         for _ in range(320):
             await RisingEdge(dut.clk)
-            done_word = int(dut.unified_mem_inst.instr_ram[_phys_word_index(DONE_WORD_ADDR)].value) & 0xFFFF_FFFF
+            done_word = read_word(dut, _phys_word_index(DONE_WORD_ADDR)) & 0xFFFF_FFFF
             if ((done_word >> 24) & 0xFF) == 1:
                 done = True
                 break
@@ -151,11 +152,11 @@ async def test_repeated_state_roundtrip_across_calls(dut):
         assert done, f"Round-recurrence test never completed on seed {seed}"
 
         actual = {
-            DATA_MEM_BASE + 0x00: int(dut.unified_mem_inst.instr_ram[_phys_word_index(DATA_MEM_BASE + 0x00)].value) & 0xFFFF_FFFF,
-            DATA_MEM_BASE + 0x04: int(dut.unified_mem_inst.instr_ram[_phys_word_index(DATA_MEM_BASE + 0x04)].value) & 0xFFFF_FFFF,
-            STATE_ADDR + 0x00: int(dut.unified_mem_inst.instr_ram[_phys_word_index(STATE_ADDR + 0x00)].value) & 0xFFFF_FFFF,
-            STATE_ADDR + 0x04: int(dut.unified_mem_inst.instr_ram[_phys_word_index(STATE_ADDR + 0x04)].value) & 0xFFFF_FFFF,
-            DONE_WORD_ADDR: int(dut.unified_mem_inst.instr_ram[_phys_word_index(DONE_WORD_ADDR)].value) & 0xFFFF_FFFF,
+            DATA_MEM_BASE + 0x00: read_word(dut, _phys_word_index(DATA_MEM_BASE + 0x00)) & 0xFFFF_FFFF,
+            DATA_MEM_BASE + 0x04: read_word(dut, _phys_word_index(DATA_MEM_BASE + 0x04)) & 0xFFFF_FFFF,
+            STATE_ADDR + 0x00: read_word(dut, _phys_word_index(STATE_ADDR + 0x00)) & 0xFFFF_FFFF,
+            STATE_ADDR + 0x04: read_word(dut, _phys_word_index(STATE_ADDR + 0x04)) & 0xFFFF_FFFF,
+            DONE_WORD_ADDR: read_word(dut, _phys_word_index(DONE_WORD_ADDR)) & 0xFFFF_FFFF,
         }
 
         expected = {

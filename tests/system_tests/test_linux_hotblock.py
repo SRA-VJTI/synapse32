@@ -16,6 +16,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge
 from cocotb_test.simulator import run
+from memory_view import read_word
 
 
 INSTR_MEM_BASE = 0x8000_0000
@@ -210,7 +211,12 @@ async def test_linux_hotblock_matches_model(dut):
         await _load_trial_state(dut, init_regs, init_mem)
         dut.rst.value = 0
 
-        for _ in range(MAX_CYCLES_PER_TRIAL):
+        # Run until every instruction of the block has retired; loads and fetches may take extra cycles.
+        for _ in range(20 * MAX_CYCLES_PER_TRIAL):
+            await RisingEdge(dut.clk)
+            if int(dut.cpu_inst.csr_file_inst.instret_counter.value) >= len(HOT_BLOCK):
+                break
+        for _ in range(8):
             await RisingEdge(dut.clk)
 
         actual_regs = [
@@ -225,7 +231,7 @@ async def test_linux_hotblock_matches_model(dut):
         )
 
         for addr in sorted(touched_words):
-            actual = int(dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value) & 0xFFFF_FFFF
+            actual = read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
             expected = expected_mem.get(addr, 0) & 0xFFFF_FFFF
             assert actual == expected, (
                 f"Memory mismatch on seed {seed} at 0x{addr:08x}: "

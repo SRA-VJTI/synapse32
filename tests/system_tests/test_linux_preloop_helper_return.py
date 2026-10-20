@@ -15,6 +15,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge
 from cocotb_test.simulator import run
+from memory_view import read_word
 
 
 HELPER_PATH = Path(__file__).with_name("test_linux_caller_stitch.py")
@@ -270,7 +271,7 @@ async def test_linux_preloop_helper_return_matches_model(dut):
             ra_slot_events.append(
                 f"wb-ra@pc=0x{trace[-1][0]:08x}:0x{int(dut.cpu_inst.wb_inst0_rd_value_out.value) & 0xFFFF_FFFF:08x}"
             )
-        done_word = int(dut.unified_mem_inst.instr_ram[_phys_word_index(DONE_WORD_ADDR)].value) & 0xFFFF_FFFF
+        done_word = read_word(dut, _phys_word_index(DONE_WORD_ADDR)) & 0xFFFF_FFFF
         if ((done_word >> 24) & 0xFF) == 1:
             done = True
             break
@@ -285,7 +286,7 @@ async def test_linux_preloop_helper_return_matches_model(dut):
     ctx = init_regs[18]
     mismatches = []
     for addr in range(ctx + 8, ctx + 8 + STATE_COMPARE_SIZE, 4):
-        actual = int(dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value) & 0xFFFF_FFFF
+        actual = read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
         expected = expected_mem.get(addr, 0) & 0xFFFF_FFFF
         if actual != expected:
             mismatches.append((addr, expected, actual))

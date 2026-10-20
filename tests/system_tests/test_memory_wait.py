@@ -20,6 +20,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
 from cocotb_test.simulator import run
+from memory_view import read_word
 
 INSTR_MEM_BASE = 0x8000_0000
 INSTR_MEM_SIZE = 0x0400_0000
@@ -35,7 +36,7 @@ DONE_ADDR = 0x1000_0300
 DONE_VALUE = 0x444F_4E45
 ACK_ADDR = 0x1000_0304
 UART_RBR = 0x2000_0000
-UART_GO = 0x1000_0400
+UART_SCR = 0x2000_001C
 UART_RESULT = 0x1000_0404
 M_SCRATCH = 0x1000_0800
 LOOPS = 8
@@ -43,8 +44,7 @@ LOOPS = 8
 AMO_COUNT = LOOPS
 LATENCIES = [0, 1, 2, 4]
 SWEEP_LATENCY = 2
-# Extra build with fast fetch and slow data, so instructions arrive back to back behind a waiting store;
-# a one-entry store buffer is still busy with the previous store, so the store in MEM waits.
+# Fast fetch and slow data; a one-entry buffer still holds an uncached device write, so the next store waits.
 FAST_FETCH = os.environ.get("MEMORY_WAIT_FAST_FETCH") == "1"
 PROLOGUE_STORE = 0x00872223  # sw s0, 4(a4)
 
@@ -104,6 +104,9 @@ tail:
         lw      t0, 0(a1)
         xori    t0, t0, 0x55
         sw      t0, 12(a1)
+        # A device write is uncached, so it drains at memory latency.
+        li      t1, {UART_SCR:#x}
+        sw      t0, 0(t1)
         ret
 
         .align  2
@@ -130,9 +133,11 @@ UART_PROGRAM = f"""
         .global _start
 _start:
         li      a0, {UART_RBR:#x}
-        li      a1, {UART_GO:#x}
+        # Start once the testbench raises the external interrupt pin (interrupts stay disabled).
 wait_go:
-        lw      t0, 0(a1)
+        csrr    t0, mip
+        srli    t0, t0, 11              # MEIP
+        andi    t0, t0, 1
         beqz    t0, wait_go
         lw      t1, 0(a0)
         lw      t2, 0(a0)
@@ -206,7 +211,7 @@ def _poke(dut, addr: int, value: int) -> None:
 
 
 def _peek(dut, addr: int) -> int:
-    return int(dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value) & 0xFFFF_FFFF
+    return read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
 
 
 def _load_image(dut, build_dir: Path, name: str = "image.bin") -> None:
@@ -224,6 +229,7 @@ class Run:
         self.instret = None
         self.wait_cycles = 0
         self.mem_wait_cycles = 0
+        self.amo_waits = []
         self.prologue_hold = 0
 
 
@@ -244,6 +250,7 @@ async def run_program(dut, inject_cycle=None, limit=20000):
 
     result = Run()
     held = 0
+    in_amo = 0
     pin_high = False
     lower_pin = False
     for cycle in range(limit):
@@ -260,6 +267,12 @@ async def run_program(dut, inject_cycle=None, limit=20000):
             result.wait_cycles += 1
         if int(dut.cpu_inst.mem_wait.value):
             result.mem_wait_cycles += 1
+        # MEM waits per AMO, one entry per AMO.
+        if int(dut.cpu_inst.is_amo_w.value):
+            if not in_amo:
+                result.amo_waits.append(0)
+            result.amo_waits[-1] += int(dut.cpu_inst.mem_wait.value)
+        in_amo = int(dut.cpu_inst.is_amo_w.value)
         if int(dut.cpu_inst.mem_wait.value) and int(dut.cpu_inst.id_ex_inst0_instr_out.value) == PROLOGUE_STORE:
             held += 1
             result.prologue_hold = max(result.prologue_hold, held)
@@ -311,11 +324,12 @@ async def test_program_is_latency_independent(dut):
     dut._log.info(f"latency {latency}: {result.cycles} cycles, {result.instret} instret, "
                   f"{result.wait_cycles} wait cycles, {len(result.stores)} result stores")
 
-    # Fetch still waits on instruction cache misses at latency 0, so MEM's waits are counted alone.
+    # Cold lines wait for the caches at latency 0 too; an AMO on a cached line waits one cycle, for its write.
     if latency == 0:
-        assert result.mem_wait_cycles == AMO_COUNT, (
-            f"a memory that answers in the same cycle should only make MEM wait for the write phase of "
-            f"each of the {AMO_COUNT} AMOs, but it waited {result.mem_wait_cycles} cycles")
+        assert len(result.amo_waits) == AMO_COUNT, f"saw {len(result.amo_waits)} AMOs, expected {AMO_COUNT}"
+        assert result.amo_waits[1:] == [1] * (AMO_COUNT - 1), (
+            f"a memory that answers in the same cycle should make MEM wait only for the write phase of each "
+            f"AMO once its line is cached, but the AMOs waited {result.amo_waits} cycles")
         return
 
     base = json.loads(_reference_path(0).read_text())
@@ -394,7 +408,7 @@ async def test_uart_read_pops_one_byte(dut):
     latency = int(os.environ["MEMORY_WAIT_LATENCY"])
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     _load_image(dut, _build_dir(), "uart.bin")
-    for addr in (UART_GO, UART_RESULT, UART_RESULT + 4, DONE_ADDR):
+    for addr in (UART_RESULT, UART_RESULT + 4, DONE_ADDR):
         _poke(dut, addr, 0)
     dut.rst.value = 1
     dut.software_interrupt.value = 0
@@ -406,11 +420,12 @@ async def test_uart_read_pops_one_byte(dut):
     await _send_byte(dut, ord("A"))
     await _send_byte(dut, ord("B"))
     await _send_byte(dut, ord("C"))
-    _poke(dut, UART_GO, 1)
+    dut.external_interrupt.value = 1
     for _ in range(2000):
         await RisingEdge(dut.clk)
         if _peek(dut, DONE_ADDR) == DONE_VALUE:
             break
+    dut.external_interrupt.value = 0
     assert _peek(dut, DONE_ADDR) == DONE_VALUE, f"latency {latency}: the program did not finish"
     got = [chr(_peek(dut, UART_RESULT) & 0xFF), chr(_peek(dut, UART_RESULT + 4) & 0xFF)]
     assert got == ["A", "B"], f"latency {latency}: read {got}, expected ['A', 'B']"
