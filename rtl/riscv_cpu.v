@@ -28,6 +28,9 @@ module riscv_cpu (
     output wire module_data_write_intent_out,
     // SFENCE.VMA or a write to satp: the TLB may hold stale translations.
     output wire module_tlb_flush_out,
+    // FENCE.I: instruction caches may hold stale lines.
+    output wire module_instr_cache_flush_out,
+    output wire [31:0] module_next_pc_out,
     output wire module_data_mmu_enable_out,
     output wire [1:0] module_data_privilege_out,
     output wire [31:0] module_satp_out,
@@ -71,7 +74,8 @@ module riscv_cpu (
         .j_signal(pc_inst0_j_signal),
         .jump(pc_inst0_jump),
         .stall(pipeline_stall || fetch_wait), // Stall on hazard, WFI sleep or a waiting memory
-        .out(pc_inst0_out)
+        .out(pc_inst0_out),
+        .next_out(module_next_pc_out)
     );
 
     // Send out the PC value
@@ -889,6 +893,8 @@ module riscv_cpu (
         ex_stage_active && id_ex_inst0_instr_valid_out &&
         ((id_ex_inst0_instr_id_out == INSTR_SFENCE_VMA) ||
          (csr_write_enable && (csr_addr == 12'h180)));
+    assign module_instr_cache_flush_out =
+        ex_stage_active && id_ex_inst0_instr_valid_out && (id_ex_inst0_instr_id_out == INSTR_FENCE_I);
     assign mem_stage_load_page_fault = module_load_page_fault_in && ex_mem_read_req;
     // An AMO's read half takes its store/AMO page fault, or MEM would wait on a blocked write.
     assign mem_stage_store_page_fault = module_store_page_fault_in && module_data_write_intent_out;
