@@ -15,6 +15,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge
 from cocotb_test.simulator import run
+from memory_view import read_word
 
 
 INSTR_MEM_BASE = 0x8000_0000
@@ -277,7 +278,7 @@ async def test_linux_byte_loops_match_model(dut):
             )
 
             for addr in sorted(watched_words):
-                actual = int(dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value) & 0xFFFF_FFFF
+                actual = read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
                 expected = expected_mem.get(addr, 0) & 0xFFFF_FFFF
                 assert actual == expected, (
                     f"{scenario_name} memory mismatch on seed {seed} at 0x{addr:08x}: "

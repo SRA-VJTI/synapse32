@@ -16,6 +16,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
 from cocotb_test.simulator import run
+from memory_view import read_word
 
 INSTR_MEM_BASE = 0x8000_0000
 INSTR_MEM_SIZE = 0x0400_0000
@@ -331,7 +332,7 @@ def _poke(dut, addr: int, value: int) -> None:
 
 
 def _peek(dut, addr: int) -> int:
-    return int(dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value) & 0xFFFF_FFFF
+    return read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
 
 
 async def run_case(dut, entry, privilege, medeleg, tdata1_0, tdata2_0, tdata1_1, tdata2_1, enable, limit=3000):

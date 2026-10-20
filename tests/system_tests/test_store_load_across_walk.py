@@ -17,6 +17,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
 from cocotb_test.simulator import run
+from memory_view import read_word
 
 INSTR_MEM_BASE = 0x8000_0000
 INSTR_MEM_SIZE = 0x0400_0000
@@ -151,7 +152,7 @@ def _poke(dut, addr: int, value: int) -> None:
 
 
 def _peek(dut, addr: int) -> int:
-    return int(dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value) & 0xFFFF_FFFF
+    return read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
 
 
 def _pte(pa: int, flags: int) -> int:
@@ -191,7 +192,7 @@ async def test_store_is_visible_to_a_load_after_a_walk(dut):
     for _ in range(20000):
         await RisingEdge(dut.clk)
         await ReadOnly()
-        if (int(dut.data_write_fire.value) and int(dut.cpu_mem_write_addr.value) == DONE_ADDR
+        if (int(dut.cpu_data_gnt.value) and int(dut.cpu_mem_write_en.value) and int(dut.cpu_mem_write_addr.value) == DONE_ADDR
                 and int(dut.cpu_mem_write_data.value) == DONE_VALUE):
             done = True
             break

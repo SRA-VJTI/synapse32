@@ -13,6 +13,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge
 from cocotb_test.simulator import run
+from memory_view import read_word
 
 
 HELPER_PATH = Path(__file__).with_name("test_linux_caller_stitch.py")
@@ -169,14 +170,14 @@ async def test_linux_caller_prestop_state_matches_model(dut):
 
     state_mismatches = []
     for addr in range(ctx + 8, ctx + 8 + 0x20, 4):
-        actual = int(dut.unified_mem_inst.instr_ram[HELPERS._phys_word_index(addr)].value) & 0xFFFF_FFFF
+        actual = read_word(dut, HELPERS._phys_word_index(addr)) & 0xFFFF_FFFF
         expected = expected_mem.get(addr, 0) & 0xFFFF_FFFF
         if actual != expected:
             state_mismatches.append((addr, expected, actual))
 
     out_mismatches = []
     for addr in range(out_buf, out_buf + 0x20, 4):
-        actual = int(dut.unified_mem_inst.instr_ram[HELPERS._phys_word_index(addr)].value) & 0xFFFF_FFFF
+        actual = read_word(dut, HELPERS._phys_word_index(addr)) & 0xFFFF_FFFF
         expected = expected_mem.get(addr, 0) & 0xFFFF_FFFF
         if actual != expected:
             out_mismatches.append((addr, expected, actual))

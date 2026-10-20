@@ -16,6 +16,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
 from cocotb_test.simulator import run
+from memory_view import read_word
 
 INSTR_MEM_BASE = 0x8000_0000
 INSTR_MEM_SIZE = 0x0400_0000
@@ -270,7 +271,7 @@ def _poke(dut, addr: int, value: int) -> None:
 
 
 def _peek(dut, addr: int) -> int:
-    return int(dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value) & 0xFFFF_FFFF
+    return read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
 
 
 def _pte(pa: int, flags: int) -> int:
@@ -338,12 +339,13 @@ async def test_walker_and_tlb(dut):
     for _ in range(20000):
         await RisingEdge(dut.clk)
         await ReadOnly()
-        # A PTE read is a read of the page-table region on the backing store's data port.
-        if int(dut.unified_mem_inst.data_rd_en.value):
-            addr = int(dut.unified_mem_inst.instr_addr_p2.value)
+        # A PTE read is a walker read of the page-table region; it may hit in the data cache.
+        if int(dut.mmu_walk_gnt.value):
+            addr = int(dut.mmu_walk_addr.value)
             if ROOT_TABLE <= addr < PT_REGION_END:
                 walk_reads[phase] = walk_reads.get(phase, 0) + 1
-        if int(dut.data_write_fire.value):
+        # A store is committed when it leaves MEM; it may stay in the data cache.
+        if int(dut.cpu_data_gnt.value) and int(dut.cpu_mem_write_en.value):
             addr = int(dut.cpu_mem_write_addr.value)
             data = int(dut.cpu_mem_write_data.value)
             if addr == MARK_ADDR:
