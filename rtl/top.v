@@ -47,6 +47,13 @@ module top #(
     // Memory interface: the core's requests and the adapters' responses.
     wire cpu_instr_gnt;
     wire cpu_instr_rvalid;
+    wire [31:0] cpu_next_pc;
+    wire cpu_instr_cache_flush;
+    wire icache_mem_req;
+    wire [31:0] icache_mem_addr;
+    wire icache_mem_gnt;
+    wire icache_mem_rvalid;
+    wire [31:0] icache_mem_rdata;
     wire cpu_data_req;
     wire cpu_data_gnt;
     wire cpu_data_rvalid;
@@ -238,18 +245,35 @@ module top #(
         .match(store_buf_match)
     );
 
-    mem_adapter #(.RESPONSE_LATENCY(FETCH_LATENCY)) instr_adapter (
+    icache icache_inst (
         .clk(clk),
         .rst(rst),
+        .flush(cpu_instr_cache_flush),
+        .next_pc(cpu_next_pc),
         // A fetch goes to memory only once translated; a fetch that faults never does.
         .req(mmu_instr_ready && !cpu_instr_page_fault),
         .addr(phys_instr_addr),
-        .we(1'b0),
-        .be(4'b0),
-        .wdata(32'b0),
         .gnt(cpu_instr_gnt),
         .rvalid(cpu_instr_rvalid),
         .rdata(instr_to_cpu),
+        .mem_req(icache_mem_req),
+        .mem_addr(icache_mem_addr),
+        .mem_gnt(icache_mem_gnt),
+        .mem_rvalid(icache_mem_rvalid),
+        .mem_rdata(icache_mem_rdata)
+    );
+
+    mem_adapter #(.RESPONSE_LATENCY(FETCH_LATENCY)) instr_adapter (
+        .clk(clk),
+        .rst(rst),
+        .req(icache_mem_req),
+        .addr(icache_mem_addr),
+        .we(1'b0),
+        .be(4'b0),
+        .wdata(32'b0),
+        .gnt(icache_mem_gnt),
+        .rvalid(icache_mem_rvalid),
+        .rdata(icache_mem_rdata),
         .store_req(),
         .store_addr(instr_store_addr),
         .store_we(),
@@ -309,6 +333,8 @@ module top #(
         .module_store_buffer_empty_in(store_buf_drained),
         .module_data_write_intent_out(cpu_data_write_intent),
         .module_tlb_flush_out(cpu_tlb_flush),
+        .module_instr_cache_flush_out(cpu_instr_cache_flush),
+        .module_next_pc_out(cpu_next_pc),
         .module_data_mmu_enable_out(cpu_data_mmu_enable),
         .module_data_privilege_out(cpu_data_privilege),
         .module_satp_out(cpu_satp),
