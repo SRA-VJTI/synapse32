@@ -4,7 +4,8 @@
 module top #(
     parameter MEM_LATENCY = 0,  // Cycles to answer an access; 0 is today's combinational memory
     parameter FETCH_LATENCY = MEM_LATENCY,  // Fetch side only, when it should differ
-    parameter STORE_BUFFER_DEPTH = 4
+    parameter STORE_BUFFER_DEPTH = 4,
+    parameter NUM_MSHR = 8
 ) (
     input wire clk,
     input wire rst,
@@ -116,8 +117,8 @@ module top #(
     wire data_bus_walk_owns;
     reg data_bus_walk_owner_q;
     wire data_store_req;
-    wire adapter_data_gnt;
-    wire adapter_data_rvalid;
+    wire dcache_gnt;
+    wire dcache_rvalid;
     wire cpu_data_bus_req;
     // Store buffer wires
     wire cpu_ram_access;
@@ -144,6 +145,19 @@ module top #(
     wire [31:0] drain_data;
     wire drain_ram;
     wire bus_ram_access;
+    // Data cache wires
+    wire [31:0] cpu_next_data_addr;
+    wire cpu_data_cache_clean_req;
+    wire dcache_clean;
+    wire dcache_mem_req;
+    wire [31:0] dcache_mem_addr;
+    wire dcache_mem_we;
+    wire [3:0] dcache_mem_be;
+    wire [31:0] dcache_mem_wdata;
+    wire dcache_mem_line;
+    wire dcache_mem_gnt;
+    wire dcache_mem_rvalid;
+    wire [31:0] dcache_mem_rdata;
 
     assign external_interrupt_combined = external_interrupt | plic_interrupt;
 
@@ -165,7 +179,7 @@ module top #(
     assign cpu_ram_access = (translated_data_access && !cpu_device_access) ||
                             (!translated_data_access &&
                              (`IS_DATA_MEM(phys_data_addr) || `IS_INSTR_MEM(phys_data_addr)));
-    assign bus_ram_access = data_bus_drain_owns ? drain_ram : ram_access;
+    assign bus_ram_access = dcache_mem_line || (data_bus_drain_owns ? drain_ram : ram_access);
 
     // Select the appropriate address for memory access
     assign data_mem_addr = cpu_mem_write_en ? cpu_mem_write_addr : cpu_mem_read_addr;
@@ -196,7 +210,7 @@ module top #(
     assign drain_be = store_buf_empty ? cpu_write_byte_enable : store_buf_head_be;
     assign drain_data = store_buf_empty ? cpu_mem_write_data : store_buf_head_data;
     assign drain_ram = store_buf_empty ? cpu_ram_access : store_buf_head_ram;
-    assign drain_done = adapter_data_rvalid && data_bus_drain_owns;
+    assign drain_done = dcache_rvalid && data_bus_drain_owns;
     assign store_buf_push = store_buf_push_req && !(store_buf_empty && drain_done);
     assign store_buf_pop = drain_done && !store_buf_empty;
 
@@ -204,22 +218,22 @@ module top #(
     // empty buffer so it reads updated page-table entries.
     assign data_bus_drain_sel = drain_req && !cpu_load_go;
     assign data_bus_walk_sel = mmu_walk_req && !cpu_load_go && !drain_req;
-    assign data_bus_walk_owns = data_bus_walk_owner_q || (data_bus_walk_sel && adapter_data_gnt);
-    assign data_bus_drain_owns = data_bus_drain_owner_q || (data_bus_drain_sel && adapter_data_gnt);
-    assign mmu_walk_gnt = adapter_data_gnt && data_bus_walk_sel;
-    assign mmu_walk_rvalid = adapter_data_rvalid && data_bus_walk_owns;
-    assign cpu_data_gnt = cpu_mem_write_en ? store_buf_push_req : (adapter_data_gnt && cpu_load_go);
+    assign data_bus_walk_owns = data_bus_walk_owner_q || (data_bus_walk_sel && dcache_gnt);
+    assign data_bus_drain_owns = data_bus_drain_owner_q || (data_bus_drain_sel && dcache_gnt);
+    assign mmu_walk_gnt = dcache_gnt && data_bus_walk_sel;
+    assign mmu_walk_rvalid = dcache_rvalid && data_bus_walk_owns;
+    assign cpu_data_gnt = cpu_mem_write_en ? store_buf_push_req : (dcache_gnt && cpu_load_go);
     assign cpu_data_rvalid = cpu_mem_write_en ? store_buf_push_req :
-                             (adapter_data_rvalid && !data_bus_walk_owns && !data_bus_drain_owns);
+                             (dcache_rvalid && !data_bus_walk_owns && !data_bus_drain_owns);
 
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             data_bus_walk_owner_q <= 1'b0;
             data_bus_drain_owner_q <= 1'b0;
-        end else if (adapter_data_rvalid) begin
+        end else if (dcache_rvalid) begin
             data_bus_walk_owner_q <= 1'b0;
             data_bus_drain_owner_q <= 1'b0;
-        end else if (adapter_data_gnt) begin
+        end else if (dcache_gnt) begin
             data_bus_walk_owner_q <= data_bus_walk_sel;
             data_bus_drain_owner_q <= data_bus_drain_sel;
         end
@@ -284,17 +298,43 @@ module top #(
         .store_rdata(instr_store_rdata)
     );
 
-    mem_adapter #(.RESPONSE_LATENCY(MEM_LATENCY)) data_adapter (
+    dcache #(.NUM_MSHR(NUM_MSHR)) dcache_inst (
         .clk(clk),
         .rst(rst),
+        .next_addr(cpu_next_data_addr),
+        .clean_req(cpu_data_cache_clean_req),
+        .clean(dcache_clean),
         .req(data_bus_walk_sel || data_bus_drain_sel || cpu_load_go),
         .addr(data_bus_walk_sel ? mmu_walk_addr : data_bus_drain_sel ? drain_addr : phys_data_addr),
         .we(data_bus_drain_sel),
         .be(data_bus_walk_sel ? 4'b1111 : data_bus_drain_sel ? drain_be : cpu_write_byte_enable),
         .wdata(data_bus_drain_sel ? drain_data : 32'b0),
-        .gnt(adapter_data_gnt),
-        .rvalid(adapter_data_rvalid),
+        .load_type(data_bus_walk_sel ? 3'b010 : cpu_load_type),
+        .gnt(dcache_gnt),
+        .rvalid(dcache_rvalid),
         .rdata(cpu_data_rdata),
+        .mem_req(dcache_mem_req),
+        .mem_addr(dcache_mem_addr),
+        .mem_we(dcache_mem_we),
+        .mem_be(dcache_mem_be),
+        .mem_wdata(dcache_mem_wdata),
+        .mem_line(dcache_mem_line),
+        .mem_gnt(dcache_mem_gnt),
+        .mem_rvalid(dcache_mem_rvalid),
+        .mem_rdata(dcache_mem_rdata)
+    );
+
+    mem_adapter #(.RESPONSE_LATENCY(MEM_LATENCY)) data_adapter (
+        .clk(clk),
+        .rst(rst),
+        .req(dcache_mem_req),
+        .addr(dcache_mem_addr),
+        .we(dcache_mem_we),
+        .be(dcache_mem_be),
+        .wdata(dcache_mem_wdata),
+        .gnt(dcache_mem_gnt),
+        .rvalid(dcache_mem_rvalid),
+        .rdata(dcache_mem_rdata),
         .store_req(data_store_req),
         .store_addr(data_store_addr),
         .store_we(data_store_we),
@@ -335,6 +375,10 @@ module top #(
         .module_tlb_flush_out(cpu_tlb_flush),
         .module_instr_cache_flush_out(cpu_instr_cache_flush),
         .module_next_pc_out(cpu_next_pc),
+        .module_next_data_addr_out(cpu_next_data_addr),
+        .module_data_cache_clean_req_out(cpu_data_cache_clean_req),
+        // Also no write entering the cache this cycle.
+        .module_data_cache_clean_in(dcache_clean && !drain_req),
         .module_data_mmu_enable_out(cpu_data_mmu_enable),
         .module_data_privilege_out(cpu_data_privilege),
         .module_satp_out(cpu_satp),
@@ -393,8 +437,8 @@ module top #(
         .wr_en(data_write_fire && bus_ram_access),
         .write_byte_enable(data_store_be),
         .wr_data(data_store_wdata),
-        // A walk reads a whole PTE word; the core's load type applies to its own accesses.
-        .load_type(data_bus_walk_owns ? 3'b010 : cpu_load_type),
+        // Line transfers and walks read whole words; the core's load type applies to its own accesses.
+        .load_type((dcache_mem_line || data_bus_walk_owns) ? 3'b010 : cpu_load_type),
         // The walker reads PTEs over the data interface now, so the side channel is unused.
         .pte_wr_en_a(1'b0),
         .pte_wr_addr_a(32'b0),
