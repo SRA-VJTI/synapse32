@@ -56,6 +56,7 @@ module csr_file (
     input wire machine_software_interrupt,     // MSIP, CLINT msip
     input wire machine_external_interrupt,     // MEIP, PLIC context 0
     input wire supervisor_external_interrupt,  // SEIP, PLIC context 1
+    input wire [63:0] mtime_in,
     // The value csrrs/csrrc modify: as read_data, but mip.SEIP is only the software-writable bit.
     output wire [31:0] rmw_data
 );
@@ -465,10 +466,10 @@ module csr_file (
                 CSR_MCYCLEH:  read_data = cycle_counter[63:32];
                 CSR_MINSTRETH: read_data = instret_counter[63:32];
                 CSR_CYCLE:    read_data = cycle_counter[31:0];
-                CSR_TIME:     read_data = cycle_counter[31:0];
+                CSR_TIME:     read_data = mtime_in[31:0];
                 CSR_INSTRET:  read_data = instret_counter[31:0];
                 CSR_CYCLEH:   read_data = cycle_counter[63:32];
-                CSR_TIMEH:    read_data = cycle_counter[63:32];
+                CSR_TIMEH:    read_data = mtime_in[63:32];
                 CSR_INSTRETH: read_data = instret_counter[63:32];
                 CSR_PMPCFG0:  read_data = 32'h0;
                 CSR_PMPADDR0: read_data = 32'h0;

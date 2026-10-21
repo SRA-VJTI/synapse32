@@ -48,7 +48,8 @@ module riscv_cpu (
     input wire timer_interrupt,                // MTIP
     input wire machine_software_interrupt,     // MSIP
     input wire machine_external_interrupt,     // MEIP
-    input wire supervisor_external_interrupt   // SEIP
+    input wire supervisor_external_interrupt,  // SEIP
+    input wire [63:0] mtime_in
 );
 
     // Instantiate PC
@@ -543,6 +544,7 @@ module riscv_cpu (
         .machine_software_interrupt(machine_software_interrupt),
         .machine_external_interrupt(machine_external_interrupt),
         .supervisor_external_interrupt(supervisor_external_interrupt),
+        .mtime_in(mtime_in),
         .rmw_data(csr_rmw_data)
     );
 
