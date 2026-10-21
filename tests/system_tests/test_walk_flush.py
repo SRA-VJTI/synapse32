@@ -284,7 +284,8 @@ async def test_a_fence_during_a_walk_does_not_leave_a_stale_translation(dut):
             # The walk has already read a PTE, so it carries a pointer the fence retires.
             if walking and reads_this_walk:
                 flush_after_first_read += 1
-        if (int(dut.data_write_fire.value) and int(dut.cpu_mem_write_addr.value) == DONE_ADDR
+        if (int(dut.cpu_mem_write_en.value) and int(dut.cpu_data_rvalid.value)
+                and int(dut.cpu_mem_write_addr.value) == DONE_ADDR
                 and int(dut.cpu_mem_write_data.value) == DONE_VALUE):
             done = True
             break
