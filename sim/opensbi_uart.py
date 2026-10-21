@@ -65,12 +65,11 @@ class UartConsole:
 def _uart_baud_cycles(dut, baud_cycles=None):
     if baud_cycles is not None:
         return baud_cycles
-    # The RTL reloads baud_counter with baud_div and advances on the next zero hit,
-    # so one bit spans baud_div + 1 clock cycles.
+    # 16550: one bit is 16 x divisor clock cycles.
     try:
-        return int(dut.uart_inst.baud_div.value) + 1
+        return 16 * max(1, int(dut.uart_inst.baud_div.value))
     except Exception:
-        return 11
+        return 16
 
 
 async def uart_send_byte(dut, byte, baud_cycles=None):

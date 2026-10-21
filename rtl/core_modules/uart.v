@@ -45,8 +45,12 @@ reg        tx_start_pending;
 reg [3:0]  tx_state;
 reg [3:0]  tx_bit_count;
 reg        tx_out;
-reg [15:0] baud_counter;
+reg [3:0]  tx_tick_count;
+reg [15:0] baud_tick_counter;
 reg [15:0] baud_div;
+// 16550 baud generator: one tick every divisor cycles, 16 ticks per bit.
+wire       baud_tick = (baud_tick_counter == 16'd0);
+wire       tx_bit_tick = baud_tick && (tx_tick_count == 4'd15);
 
 localparam TX_IDLE  = 4'd0;
 localparam TX_START = 4'd1;
@@ -54,8 +58,8 @@ localparam TX_DATA  = 4'd2;
 localparam TX_STOP  = 4'd3;
 localparam TX_FIFO_DEPTH = 16;
 
-// Default baud divisor: 10 cycles/bit for fast simulation
-localparam DEFAULT_BAUD_DIV = 16'd10;
+// Divisor at reset: 1, 16 cycles/bit (software programs its own)
+localparam DEFAULT_BAUD_DIV = 16'd1;
 
 assign tx = tx_out;
 
@@ -76,8 +80,7 @@ reg tx_fifo_cleared;
 reg [2:0]  rx_state;
 reg [7:0]  rx_shift;
 reg [2:0]  rx_bit_count;
-reg [15:0] rx_baud_counter;
-reg        rx_prev;     // previous rx sample for edge detect
+reg [3:0]  rx_tick_count;
 reg [7:0]  rbr;         // Receive Buffer Register
 reg        rx_oe;       // LSR[1]: Overrun Error
 reg [7:0]  rx_fifo [0:TX_FIFO_DEPTH-1];
@@ -140,15 +143,15 @@ initial begin
     tx_bit_count     = 4'b0;
     tx_out           = 1'b1;
     baud_div         = DEFAULT_BAUD_DIV;
-    baud_counter     = 16'd1;
+    baud_tick_counter = 16'd0;
+    tx_tick_count    = 4'd0;
     tx_fifo_head     = 4'd0;
     tx_fifo_tail     = 4'd0;
     tx_fifo_count    = 5'd0;
     rx_state         = RX_IDLE;
     rx_shift         = 8'h00;
     rx_bit_count     = 3'b0;
-    rx_baud_counter  = 16'd0;
-    rx_prev          = 1'b1;
+    rx_tick_count    = 4'd0;
     rbr              = 8'h00;
     rx_oe            = 1'b0;
     rx_fifo_head     = 4'd0;
@@ -173,15 +176,15 @@ always @(posedge clk or posedge rst) begin
         tx_bit_count     <= 4'b0;
         tx_out           <= 1'b1;
         baud_div         <= DEFAULT_BAUD_DIV;
-        baud_counter     <= 16'd1;
+        baud_tick_counter <= 16'd0;
+        tx_tick_count    <= 4'd0;
         tx_fifo_head     <= 4'd0;
         tx_fifo_tail     <= 4'd0;
         tx_fifo_count    <= 5'd0;
         rx_state         <= RX_IDLE;
         rx_shift         <= 8'h00;
         rx_bit_count     <= 3'b0;
-        rx_baud_counter  <= 16'd0;
-        rx_prev          <= 1'b1;
+        rx_tick_count    <= 4'd0;
         rbr              <= 8'h00;
         rx_oe            <= 1'b0;
         rx_fifo_head     <= 4'd0;
@@ -198,10 +201,15 @@ always @(posedge clk or posedge rst) begin
         rx_fifo_cleared = 1'b0;
 
         // ---- baud counter + TX state machine (runs first) ----
-        if (baud_counter > 0) begin
-            baud_counter <= baud_counter - 1'b1;
+        if (baud_tick) begin
+            // A divisor of 0 is undefined on a 16550; it runs as 1.
+            baud_tick_counter <= (baud_div > 16'd1) ? baud_div - 1'b1 : 16'd0;
+            tx_tick_count     <= tx_tick_count + 1'b1;
         end else begin
-            baud_counter <= baud_div;
+            baud_tick_counter <= baud_tick_counter - 1'b1;
+        end
+
+        if (tx_bit_tick) begin
             case (tx_state)
                 TX_IDLE: begin
                     if (tx_start_pending) begin
@@ -312,36 +320,33 @@ always @(posedge clk or posedge rst) begin
         end
 
         // ---- RX state machine ----
-        rx_prev <= rx;
+        // Start bit seen on a tick, confirmed 7 ticks later (its middle); bits sampled 16 ticks apart.
         case (rx_state)
             RX_IDLE: begin
-                // Falling edge on rx = start bit
-                if (rx_prev && !rx) begin
-                    // Wait half a baud period to sample in the middle of start bit
-                    rx_baud_counter <= {1'b0, baud_div[15:1]};
-                    rx_state        <= RX_START;
+                if (baud_tick && !rx) begin
+                    rx_tick_count <= 4'd0;
+                    rx_state      <= RX_START;
                 end
             end
             RX_START: begin
-                if (rx_baud_counter > 0) begin
-                    rx_baud_counter <= rx_baud_counter - 1'b1;
-                end else begin
-                    // Confirm start bit still low
+                if (baud_tick && (rx_tick_count != 4'd6)) begin
+                    rx_tick_count <= rx_tick_count + 1'b1;
+                end else if (baud_tick) begin
                     if (!rx) begin
-                        rx_baud_counter <= baud_div;
-                        rx_state        <= RX_DATA;
-                        rx_bit_count    <= 3'b0;
-                        rx_shift        <= 8'h00;
+                        rx_tick_count <= 4'd0;
+                        rx_state      <= RX_DATA;
+                        rx_bit_count  <= 3'b0;
+                        rx_shift      <= 8'h00;
                     end else begin
                         rx_state <= RX_IDLE; // false start
                     end
                 end
             end
             RX_DATA: begin
-                if (rx_baud_counter > 0) begin
-                    rx_baud_counter <= rx_baud_counter - 1'b1;
-                end else begin
-                    rx_baud_counter             <= baud_div;
+                if (baud_tick && (rx_tick_count != 4'd15)) begin
+                    rx_tick_count <= rx_tick_count + 1'b1;
+                end else if (baud_tick) begin
+                    rx_tick_count               <= 4'd0;
                     rx_shift[rx_bit_count]      <= rx;
                     if (rx_bit_count == 3'd7) begin
                         rx_state <= RX_STOP;
@@ -351,9 +356,9 @@ always @(posedge clk or posedge rst) begin
                 end
             end
             RX_STOP: begin
-                if (rx_baud_counter > 0) begin
-                    rx_baud_counter <= rx_baud_counter - 1'b1;
-                end else begin
+                if (baud_tick && (rx_tick_count != 4'd15)) begin
+                    rx_tick_count <= rx_tick_count + 1'b1;
+                end else if (baud_tick) begin
                     // Sample stop bit; if high → valid frame
                     if (rx && !rx_fifo_clear_request) begin
                         // A simultaneous RBR read frees a slot at this edge.

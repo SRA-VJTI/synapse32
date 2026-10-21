@@ -1,6 +1,7 @@
 import errno
 import os
 import pty
+import re
 import queue
 import select
 import sys
@@ -8,6 +9,7 @@ import termios
 import threading
 import tty
 from collections import deque
+from pathlib import Path
 
 import cocotb
 from cocotb.triggers import RisingEdge
@@ -25,6 +27,7 @@ from opensbi_uart import (
 
 LINUX_BOOT_BANNER = "Synapse32 Linux userspace is up."
 LINUX_UNAME_PREFIX = "uname: Linux"
+DEVICE_TREE = Path(__file__).resolve().parent / "synapse32.dts"
 STUCK_DEBUG_START_CYCLES = 5_000_000
 STUCK_DEBUG_INTERVAL_CYCLES = 5_000_000
 INTERACTIVE_TTY = os.getenv("INTERACTIVE_TTY", "0") == "1"
@@ -301,6 +304,22 @@ async def drive_bridge_to_uart(dut, bridge):
         await uart_send_byte(dut, byte)
 
 
+def _assert_uart_divisor(dut):
+    """The console is read from the transmitter, so a wrong divisor would not show; a terminal would.
+
+    A 16550 sends a bit every 16 x divisor clocks: the divisor Linux programs must give the device
+    tree's current-speed at its clock-frequency.
+    """
+    node = re.search(r"uart@20000000\s*\{(.*?)\};", DEVICE_TREE.read_text(), re.S)
+    assert node, f"no uart node in {DEVICE_TREE}"
+    clock = int(re.search(r"clock-frequency = <(\d+)>", node.group(1)).group(1))
+    speed = int(re.search(r"current-speed = <(\d+)>", node.group(1)).group(1))
+    divisor = int(dut.uart_inst.baud_div.value)
+    assert 16 * divisor * speed == clock, (
+        f"UART divisor {divisor} gives {clock // (16 * max(divisor, 1))} baud, "
+        f"the device tree says {speed} at {clock} Hz")
+
+
 @cocotb.test()
 async def boot_linux(dut):
     cocotb.log.info(
@@ -384,6 +403,7 @@ async def boot_linux(dut):
                 print("\n\n=== Linux boot banner observed ===")
                 cocotb.log.info("Captured %d UART bytes", len(console.received))
                 dump_status(dut, cycle)
+                _assert_uart_divisor(dut)
                 return
 
             if INTERACTIVE_TTY and stdin_bridge is not None and stdin_bridge.stop_requested:

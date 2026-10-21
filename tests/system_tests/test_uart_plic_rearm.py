@@ -51,7 +51,7 @@ async def _read(dut, addr):
 
 
 async def _send_byte(dut, value):
-    bit_cycles = int(dut.uart_inst.baud_div.value) + 1
+    bit_cycles = 16 * int(dut.uart_inst.baud_div.value)
     dut.rx.value = 0
     await ClockCycles(dut.clk, bit_cycles)
     for bit in range(8):
