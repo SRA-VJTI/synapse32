@@ -42,14 +42,11 @@
 	};
 
 	/*
-	 * CLINT: mtimecmp at 0x02004000, mtime at 0x0200BFF8.
-	 * riscv,clint0 covers the full region starting at 0x02000000.
-	 * MSIP (IPI) registers at 0x02000000 are not implemented —
-	 * safe for single-hart because openSBI never actually fires IPIs.
+	 * CLINT: msip at 0x02000000, mtimecmp at 0x02004000, mtime at 0x0200BFF8.
 	 */
 	clint@2000000 {
 		compatible = "riscv,clint0";
-		reg = <0x02000000 0x000C0000>;
+		reg = <0x02000000 0x00010000>;
 		interrupts-extended = <&cpu0_intc 3 &cpu0_intc 7>;
 	};
 

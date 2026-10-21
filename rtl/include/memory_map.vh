@@ -13,11 +13,12 @@
 
 // Machine-mode Timer (RISC-V Standard)
 // Standard RISC-V timer addresses
-`define TIMER_BASE          32'h02004000
-`define TIMER_SIZE          32'h00008000  // 32KB region
-`define TIMER_END           32'h0200BFFF
+`define TIMER_BASE          32'h02000000
+`define TIMER_SIZE          32'h00010000  // 64KB, the CLINT window
+`define TIMER_END           32'h0200FFFF
 
 // Timer Register Offsets
+`define MSIP                32'h02000000  // msip of hart 0
 `define MTIMECMP_LO         32'h02004000  // mtimecmp[31:0]
 `define MTIMECMP_HI         32'h02004004  // mtimecmp[63:32]
 `define MTIME_LO            32'h0200BFF8  // mtime[31:0]
