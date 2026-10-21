@@ -75,7 +75,7 @@ async def test_cross_word_store_updates_next_word(dut):
 
 def runCocotbTests():
     repo_root = _find_repo_root()
-    rtl_dir = repo_root / "rtl" / "mmu"
+    rtl_dir = repo_root / "rtl"
     incl_dir = repo_root / "rtl" / "include"
 
     sources = [str(rtl_dir / "unified_mem.v")]

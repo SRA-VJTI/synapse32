@@ -43,7 +43,8 @@ LOOPS = 8
 AMO_COUNT = LOOPS
 LATENCIES = [0, 1, 2, 4]
 SWEEP_LATENCY = 2
-# Extra build with fast fetch and slow data, so instructions arrive back to back behind a waiting store.
+# Extra build with fast fetch and slow data, so instructions arrive back to back behind a waiting store;
+# a one-entry store buffer is still busy with the previous store, so the store in MEM waits.
 FAST_FETCH = os.environ.get("MEMORY_WAIT_FAST_FETCH") == "1"
 PROLOGUE_STORE = 0x00872223  # sw s0, 4(a4)
 
@@ -222,6 +223,7 @@ class Run:
         self.cycles = None
         self.instret = None
         self.wait_cycles = 0
+        self.mem_wait_cycles = 0
         self.prologue_hold = 0
 
 
@@ -256,6 +258,8 @@ async def run_program(dut, inject_cycle=None, limit=20000):
         await ReadOnly()
         if int(dut.cpu_inst.mem_wait.value) or int(dut.cpu_inst.fetch_wait.value):
             result.wait_cycles += 1
+        if int(dut.cpu_inst.mem_wait.value):
+            result.mem_wait_cycles += 1
         if int(dut.cpu_inst.mem_wait.value) and int(dut.cpu_inst.id_ex_inst0_instr_out.value) == PROLOGUE_STORE:
             held += 1
             result.prologue_hold = max(result.prologue_hold, held)
@@ -263,8 +267,8 @@ async def run_program(dut, inject_cycle=None, limit=20000):
             held = 0
         if int(dut.cpu_mem_write_en.value) and not int(dut.cpu_store_page_fault.value):
             addr = int(dut.cpu_mem_write_addr.value)
-            # Count the write once, in the cycle the memory port accepts it.
-            if int(dut.data_write_fire.value):
+            # Count the write once, in the cycle the core's write completes.
+            if int(dut.cpu_data_rvalid.value):
                 if RESULT_LO <= addr < RESULT_HI:
                     result.stores.append((addr, int(dut.cpu_mem_write_data.value),
                                           int(dut.cpu_write_byte_enable.value)))
@@ -307,10 +311,11 @@ async def test_program_is_latency_independent(dut):
     dut._log.info(f"latency {latency}: {result.cycles} cycles, {result.instret} instret, "
                   f"{result.wait_cycles} wait cycles, {len(result.stores)} result stores")
 
+    # Fetch still waits on instruction cache misses at latency 0, so MEM's waits are counted alone.
     if latency == 0:
-        assert result.wait_cycles == AMO_COUNT, (
+        assert result.mem_wait_cycles == AMO_COUNT, (
             f"a memory that answers in the same cycle should only make MEM wait for the write phase of "
-            f"each of the {AMO_COUNT} AMOs, but it waited {result.wait_cycles} cycles")
+            f"each of the {AMO_COUNT} AMOs, but it waited {result.mem_wait_cycles} cycles")
         return
 
     base = json.loads(_reference_path(0).read_text())
@@ -418,9 +423,9 @@ def runCocotbTests():
     build_dir = _build_dir()
     assemble(build_dir)
 
-    builds = [(f"lat{latency}", latency, latency) for latency in LATENCIES]
-    builds.append(("fast_fetch", SWEEP_LATENCY, 0))
-    for name, latency, fetch_latency in builds:
+    builds = [(f"lat{latency}", latency, latency, 4) for latency in LATENCIES]
+    builds.append(("fast_fetch", 8, 0, 1))
+    for name, latency, fetch_latency, depth in builds:
         sim_build = Path.cwd() / "sim_build" / f"sim_build_memory_wait_{name}"
         if sim_build.exists():
             shutil.rmtree(sim_build)
@@ -428,7 +433,8 @@ def runCocotbTests():
             verilog_sources=sources,
             toplevel="top",
             module="test_memory_wait",
-            parameters={"MEM_LATENCY": latency, "FETCH_LATENCY": fetch_latency},
+            parameters={"MEM_LATENCY": latency, "FETCH_LATENCY": fetch_latency,
+                        "STORE_BUFFER_DEPTH": depth},
             includes=[str(rtl_dir / "include")],
             simulator="verilator",
             timescale="1ns/1ps",
