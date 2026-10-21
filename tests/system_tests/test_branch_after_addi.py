@@ -8,6 +8,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge
 from cocotb_test.simulator import run
+from memory_view import read_word
 
 
 INSTR_MEM_BASE = 0x8000_0000
@@ -76,14 +77,14 @@ async def test_branch_uses_fresh_addi_result(dut):
     done = False
     for _ in range(120):
         await RisingEdge(dut.clk)
-        done_word = int(dut.unified_mem_inst.instr_ram[_phys_word_index(DONE_WORD_ADDR)].value) & 0xFFFF_FFFF
+        done_word = read_word(dut, _phys_word_index(DONE_WORD_ADDR)) & 0xFFFF_FFFF
         if ((done_word >> 24) & 0xFF) in (1, 2):
             done = True
             break
 
     assert done, "Branch-after-addi test never completed"
 
-    done_word = int(dut.unified_mem_inst.instr_ram[_phys_word_index(DONE_WORD_ADDR)].value) & 0xFFFF_FFFF
+    done_word = read_word(dut, _phys_word_index(DONE_WORD_ADDR)) & 0xFFFF_FFFF
     done_byte = (done_word >> 24) & 0xFF
     assert done_byte == 1, f"Branch used stale ADDI result and took fail path (marker={done_byte})"
 

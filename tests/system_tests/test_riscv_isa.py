@@ -53,8 +53,9 @@ async def test_riscv_isa_image(dut):
                     f"x {int(dut.cpu_inst.mem_wb_inst0_pc_out.value):08x} {int(dut.cpu_inst.rf_inst0_rd_in.value)} "
                     f"{int(dut.cpu_inst.rf_inst0_rd_value_in.value) & 0xFFFFFFFF:08x}\n"
                 )
-            # data_write_fire marks the one cycle a waiting store actually commits.
-            if int(dut.data_write_fire.value) and not int(dut.cpu_store_page_fault.value):
+            # A store commits in the one cycle the core's write completes (taken by the store buffer).
+            if (int(dut.cpu_mem_write_en.value) and int(dut.cpu_data_rvalid.value)
+                    and not int(dut.cpu_store_page_fault.value)):
                 store_pc = int(dut.cpu_inst.ex_mem_inst0_pc_out.value)
                 store_addr = int(dut.cpu_mem_write_addr.value)
                 store_data = int(dut.cpu_mem_write_data.value)
@@ -146,6 +147,9 @@ def runCocotbTests():
         simulator="verilator",
         timescale="1ns/1ps",
         defines=[f'INSTR_HEX_FILE="{hex_file}"'],
+        parameters={"MEM_LATENCY": int(os.environ.get("ISA_MEM_LATENCY", "0")),
+                    "FETCH_LATENCY": int(os.environ.get("ISA_FETCH_LATENCY",
+                                                        os.environ.get("ISA_MEM_LATENCY", "0")))},
         sim_build=str(sim_build),
         force_compile=force_compile,
     )

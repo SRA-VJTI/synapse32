@@ -22,6 +22,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
 from cocotb_test.simulator import run
+from memory_view import read_word
 
 INSTR_MEM_BASE = 0x8000_0000
 INSTR_MEM_SIZE = 0x0400_0000
@@ -219,7 +220,7 @@ def _poke(dut, addr: int, value: int) -> None:
 
 
 def _peek(dut, addr: int) -> int:
-    return int(dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value) & 0xFFFF_FFFF
+    return read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
 
 
 def _load(dut, build_dir: Path) -> None:
@@ -284,7 +285,8 @@ async def test_a_fence_during_a_walk_does_not_leave_a_stale_translation(dut):
             # The walk has already read a PTE, so it carries a pointer the fence retires.
             if walking and reads_this_walk:
                 flush_after_first_read += 1
-        if (int(dut.data_write_fire.value) and int(dut.cpu_mem_write_addr.value) == DONE_ADDR
+        if (int(dut.cpu_mem_write_en.value) and int(dut.cpu_data_rvalid.value)
+                and int(dut.cpu_mem_write_addr.value) == DONE_ADDR
                 and int(dut.cpu_mem_write_data.value) == DONE_VALUE):
             done = True
             break

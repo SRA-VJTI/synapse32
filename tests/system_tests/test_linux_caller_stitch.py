@@ -20,6 +20,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge
 from cocotb_test.simulator import run
+from memory_view import read_word
 
 
 INSTR_MEM_BASE = 0x8000_0000
@@ -418,7 +419,7 @@ async def test_linux_caller_stitch_matches_model(dut):
                         int(dut.cpu_inst.hazard_stall.value) & 0x1,
                     )
                 )
-            done_word = int(dut.unified_mem_inst.instr_ram[_phys_word_index(DONE_WORD_ADDR)].value) & 0xFFFF_FFFF
+            done_word = read_word(dut, _phys_word_index(DONE_WORD_ADDR)) & 0xFFFF_FFFF
             if ((done_word >> 24) & 0xFF) == 1:
                 done = True
                 break
@@ -453,7 +454,7 @@ async def test_linux_caller_stitch_matches_model(dut):
 
         memory_mismatches = []
         for addr in sorted(watched_words):
-            actual = int(dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value) & 0xFFFF_FFFF
+            actual = read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
             expected = expected_mem.get(addr, 0) & 0xFFFF_FFFF
             if actual != expected:
                 memory_mismatches.append((addr, expected, actual))
