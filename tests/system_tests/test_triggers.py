@@ -3,7 +3,8 @@
 A matching instruction traps with cause 3 before it executes: epc is the instruction, mtval/stval the
 matched address, and the access does not happen. tdata1 is write-any-read-legal, so unsupported bits
 read back 0 and a write of 0 disables the trigger. A trigger does not fire while its mode's interrupts
-are disabled, so a handler cannot retrigger on itself (Sdtrig "Native Triggers").
+are disabled, so a handler cannot retrigger on itself (Sdtrig "Native Triggers"). An ebreak traps with the
+same cause and its own address in mtval/stval.
 """
 
 import os
@@ -153,6 +154,11 @@ bad_amo:
         sw      a6, 8(t6)
         j       finish
 
+ebreak_body:
+bad_ebreak:
+        ebreak
+        j       finish
+
 # ---- Trigger CSR legalization
 warl_body:
         li      t6, {RESULT:#x}
@@ -245,6 +251,9 @@ CASES = [
     ("no_trigger", M, 0, NO_TRIGGER, 0, NO_TRIGGER, 0, 1,
      [], {0: 1, 4: DATA_A_VALUE, 8: DATA_C_VALUE}),
 ]
+
+# name, privilege, medeleg, expected handler
+EBREAK_CASES = [("m_ebreak", M, 0, "m"), ("s_ebreak_to_m", S, 0, "m"), ("s_ebreak_delegated", S, 1 << 3, "s")]
 
 # Read-backs of the legalization body
 WARL_EXPECTED = {
@@ -447,6 +456,26 @@ async def test_trigger_csrs_are_warl(dut):
         problems.append(f"trap log {_fmt(log)} (count {count}), expected an illegal instruction at bad_tinfo")
     assert not problems, "; ".join(problems)
 
+
+
+@cocotb.test()
+async def test_ebreak_reports_its_address(dut):
+    build_dir = _build_dir()
+    symbols = _load_symbols(build_dir)
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    image = (build_dir / "image.bin").read_bytes()
+    image += b"\x00" * (-len(image) % 4)
+    for offset in range(0, len(image), 4):
+        _poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(image[offset:offset + 4], "little"))
+
+    failures = []
+    for name, privilege, medeleg, handler in EBREAK_CASES:
+        done, count, log = await run_case(dut, symbols["ebreak_body"], privilege, medeleg,
+                                          NO_TRIGGER, 0, NO_TRIGGER, 0, 1)
+        expected = [(handler, CAUSE_BREAKPOINT, symbols["bad_ebreak"], symbols["bad_ebreak"])]
+        if not done or count != 1 or log != expected:
+            failures.append(f"{name}: trap log {_fmt(log)} (count {count}, finished {done}), expected {_fmt(expected)}")
+    assert not failures, " | ".join(failures)
 
 def runCocotbTests():
     repo_root = _find_repo_root()

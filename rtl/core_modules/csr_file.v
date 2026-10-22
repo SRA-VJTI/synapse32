@@ -228,8 +228,7 @@ module csr_file (
         load_page_fault_exception                 ? 32'h0000000D :
         store_page_fault_exception                ? 32'h0000000F :
                                                     ecall_cause;
-    wire [31:0] exception_tval = (!page_fault_exception &&
-                                  (ecall_exception || ebreak_exception)) ?
+    wire [31:0] exception_tval = (!page_fault_exception && ecall_exception) ?
                                  32'h00000000 : exception_tval_in;
 
     // Check if CSR address is valid
