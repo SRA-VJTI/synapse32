@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Compare riscv-tests results between Spike (golden) and Verilator model.
+"""Compare riscv-tests and riscv-arch-test results between Spike (golden) and Verilator model.
 
-Assumes riscv-tests has already been built, producing ELF binaries under:
-  <riscv-tests>/isa/rv32*-p-*
+riscv-tests must already be built, producing ELF binaries under <riscv-tests>/isa/rv32*-p-*. riscv-arch-test tests
+are compiled here from <riscv-arch-test>/riscv-test-suite/rv32i_m/<suite>/src with the target files in
+.github/arch-test, selected by their RVTEST_CASE conditions as RISCOF does.
 
 Usage:
   python .github/scripts/compare_with_spike.py --riscv-tests /path/to/riscv-tests
+  python .github/scripts/compare_with_spike.py --arch-test /path/to/riscv-arch-test
 """
 from __future__ import annotations
 
@@ -26,9 +28,18 @@ NOT_APPLICABLE = {
     "rv32ui-p-ma_data": "Zicclsm (misaligned loads/stores) not implemented; core traps",
     "rv32mi-p-pmpaddr": "PMP not implemented; pmpaddr0/pmpcfg0 are plain registers",
 }
+DEFAULT_ARCH_SUITES = "I,M,A,Zifencei,privilege"
+# What riscv-arch-test's RVTEST_CASE conditions are evaluated against: our ISA and platform.
+ARCH_ISA = "RV32IMAZicsr_Zifencei"
+ARCH_PLATFORM = {"hw_data_misaligned_support": "False"}
+ARCH_MARCH = "rv32ima_zicsr_zifencei"
+RVTEST_CASE_RE = re.compile(r'RVTEST_CASE\(\s*\d+\s*,\s*"([^"]*)"')
 # Empty: every compared test's trace now matches Spike. A listed test's pass/fail must still match
 # Spike, only its trace is not compared; add one with a recorded reason.
 TRACE_NOT_COMPARABLE: dict[str, str] = {}
+# Empty: every rv32i_m test in the selected suites applies to our ISA and platform. A test no
+# RVTEST_CASE selects fails the run unless it is listed here with a recorded reason.
+ARCH_NOT_APPLICABLE: dict[str, str] = {}
 
 
 def parse_suites(suites: str) -> set[str]:
@@ -74,6 +85,53 @@ def require_suites(tests: list[Path], required: set[str]) -> None:
             "Missing required riscv-tests suites: "
             f"{', '.join(missing)}. Discovered suites: {found}"
         )
+
+
+def arch_test_macros(source: Path) -> list[str] | None:
+    """Macros of every RVTEST_CASE whose checks hold for ARCH_ISA and ARCH_PLATFORM; None if no case applies."""
+    macros, applies = [], False
+    for case in RVTEST_CASE_RE.findall(source.read_text(errors="replace")):
+        holds, defines = True, []
+        for item in (part.strip() for part in case.replace("//", "").split(";")):
+            if item.startswith("check ISA:=regex(") and item.endswith(")"):
+                holds = holds and re.match(item[len("check ISA:=regex("):-1], ARCH_ISA) is not None
+            elif item.startswith("check "):
+                key, _, value = item[len("check "):].partition(":=")
+                holds = holds and ARCH_PLATFORM.get(key.strip()) == value.strip()
+            elif item.startswith("def "):
+                defines.append(item[len("def "):].strip())
+        if holds:
+            applies = True
+            macros += defines
+    return macros if applies else None
+
+
+def build_arch_tests(arch_dir: Path, suites: set[str], repo_root: Path, out_dir: Path) -> tuple[list[Path], list[dict]]:
+    target_dir = repo_root / ".github" / "arch-test"
+    env_dir = arch_dir / "riscv-test-suite" / "env"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    elves, skipped = [], []
+    for suite in sorted(suites):
+        sources = sorted((arch_dir / "riscv-test-suite" / "rv32i_m" / suite / "src").glob("*.S"))
+        if not sources:
+            raise RuntimeError(f"no riscv-arch-test sources for rv32i_m/{suite} under {arch_dir}")
+        for source in sources:
+            name = f"rv32i_m-{suite}-{source.stem}"
+            macros = arch_test_macros(source)
+            if macros is None:
+                skipped.append({"test": name, "reason": f"no RVTEST_CASE applies to {ARCH_ISA} {ARCH_PLATFORM}"})
+                continue
+            elf = out_dir / name
+            rc = run([
+                "riscv64-unknown-elf-gcc", f"-march={ARCH_MARCH}", "-mabi=ilp32", "-static", "-mcmodel=medany",
+                "-fvisibility=hidden", "-nostdlib", "-nostartfiles", "-T", str(target_dir / "link.ld"),
+                "-I", str(target_dir), "-I", str(env_dir), "-DXLEN=32", *[f"-D{m}" for m in macros],
+                str(source), "-o", str(elf),
+            ])
+            if rc.returncode != 0:
+                raise RuntimeError(f"compiling {source} failed:\n{rc.stderr}")
+            elves.append(elf)
+    return elves, skipped
 
 
 def tohost_addr(elf: Path) -> int:
@@ -256,7 +314,9 @@ def run_verilator(
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--riscv-tests", required=True, type=Path, help="Path to built riscv-tests repo")
+    ap.add_argument("--riscv-tests", type=Path, help="Path to built riscv-tests repo")
+    ap.add_argument("--arch-test", type=Path, help="Path to a riscv-arch-test checkout")
+    ap.add_argument("--arch-suites", default=DEFAULT_ARCH_SUITES, help="Comma-separated rv32i_m suites to compare")
     ap.add_argument("--limit", type=int, default=0, help="Limit number of ISA tests (0 = all)")
     ap.add_argument("--max-cycles", type=int, default=200000, help="Max cycles per Verilator ISA test")
     ap.add_argument("--mem-latency", type=int, default=0, help="Cycles the RTL's memory takes to answer")
@@ -270,17 +330,30 @@ def main() -> int:
     args = ap.parse_args()
 
     repo_root = find_repo_root()
-    isa_dir = args.riscv_tests / "isa"
-    if not isa_dir.exists():
-        print(f"Missing isa dir: {isa_dir}", file=sys.stderr)
+    if args.riscv_tests is None and args.arch_test is None:
+        print("Give --riscv-tests, --arch-test or both", file=sys.stderr)
         return 2
-
-    suites = parse_suites(args.suites)
-    all_tests = discover_tests(isa_dir, suites, 0)
-    require_suites(all_tests, suites)
+    all_tests = []
+    skipped = []
+    arch_skipped = []
+    if args.riscv_tests is not None:
+        isa_dir = args.riscv_tests / "isa"
+        if not isa_dir.exists():
+            print(f"Missing isa dir: {isa_dir}", file=sys.stderr)
+            return 2
+        suites = parse_suites(args.suites)
+        all_tests = discover_tests(isa_dir, suites, 0)
+        require_suites(all_tests, suites)
+    if args.arch_test is not None:
+        arch_elves, arch_skipped = build_arch_tests(
+            args.arch_test, parse_suites(args.arch_suites), repo_root,
+            repo_root / ".github" / "artifacts" / "isa" / "arch_elf",
+        )
+        all_tests += arch_elves
+        skipped += arch_skipped
     tests = all_tests[: args.limit] if args.limit > 0 else all_tests
     if not tests:
-        print("No rv32*-p-* test binaries found. Did riscv-tests build succeed?", file=sys.stderr)
+        print("No test binaries found. Did riscv-tests build succeed?", file=sys.stderr)
         return 2
 
     out_hex_dir = repo_root / ".github" / "artifacts" / "isa" / "build_hex"
@@ -292,7 +365,6 @@ def main() -> int:
     trace_dir.mkdir(parents=True, exist_ok=True)
     results = []
     mismatches = []
-    skipped = []
     trace_not_comparable = []
     model_compiled = False
 
@@ -331,7 +403,8 @@ def main() -> int:
                 )
             else:
                 divergence = "commit trace missing"
-            same = spike_ok == verilator_ok and divergence is None
+            # A test failing on both proves nothing, so both must pass.
+            same = spike_ok and verilator_ok and divergence is None
             rec = {
                 "test": elf.name,
                 "spike_pass": spike_ok,
@@ -366,6 +439,14 @@ def main() -> int:
             results.append(rec)
             mismatches.append(rec)
             print(f"[{elf.name}] ERROR: {exc}")
+
+    for entry in arch_skipped:
+        if entry["test"] in ARCH_NOT_APPLICABLE:
+            continue
+        rec = {"test": entry["test"], "spike_pass": False, "verilator_pass": False, "match": False,
+               "error": f"not compared ({entry['reason']}) and not in ARCH_NOT_APPLICABLE"}
+        mismatches.append(rec)
+        print(f"[{entry['test']}] ERROR: {rec['error']}")
 
     summary = {
         "mem_latency": args.mem_latency,
