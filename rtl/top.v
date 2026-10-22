@@ -60,6 +60,7 @@ module top #(
     wire cpu_data_gnt;
     wire cpu_data_rvalid;
     wire [31:0] cpu_data_rdata;
+    wire [31:0] cpu_load_rdata;
     wire [31:0] instr_store_addr;
     wire [31:0] instr_store_rdata;
     wire [31:0] data_store_addr;
@@ -134,6 +135,11 @@ module top #(
     wire store_buf_full;
     wire store_buf_drained;
     wire store_buf_match;
+    wire store_buf_forward;
+    wire [31:0] store_buf_forward_data;
+    wire store_buf_forward_go;
+    reg store_buf_forward_pending_q;
+    reg [31:0] store_buf_forward_data_q;
     wire [31:0] store_buf_head_addr;
     wire [3:0] store_buf_head_be;
     wire [31:0] store_buf_head_data;
@@ -204,7 +210,11 @@ module top #(
     // A load waits for buffered writes to its word; a device load waits for all of them.
     assign store_buf_push_req = cpu_data_bus_req && cpu_mem_write_en && !store_buf_full;
     assign cpu_load_go = cpu_data_bus_req && !cpu_mem_write_en && !store_buf_match &&
-                         !(cpu_device_access && !store_buf_empty);
+                         !(cpu_device_access && !store_buf_empty) && !store_buf_forward_pending_q;
+    // A load fully covered by the last buffered write to its word takes its bytes from the buffer,
+    // registered: the next cycle, so the translation and the buffer compare do not reach the core.
+    assign store_buf_forward_go = cpu_data_bus_req && !cpu_mem_write_en && store_buf_forward &&
+                                  !store_buf_forward_pending_q;
     // An empty buffer issues the entering write at once.
     assign drain_req = !store_buf_empty || store_buf_push_req;
     assign drain_addr = store_buf_empty ? phys_data_addr : store_buf_head_addr;
@@ -223,9 +233,24 @@ module top #(
     assign data_bus_drain_owns = data_bus_drain_owner_q || (data_bus_drain_sel && dcache_gnt);
     assign mmu_walk_gnt = dcache_gnt && data_bus_walk_sel;
     assign mmu_walk_rvalid = dcache_rvalid && data_bus_walk_owns;
-    assign cpu_data_gnt = cpu_mem_write_en ? store_buf_push_req : (dcache_gnt && cpu_load_go);
+    assign cpu_data_gnt = cpu_mem_write_en ? store_buf_push_req :
+                          ((dcache_gnt && cpu_load_go) || store_buf_forward_go);
     assign cpu_data_rvalid = cpu_mem_write_en ? store_buf_push_req :
-                             (dcache_rvalid && !data_bus_walk_owns && !data_bus_drain_owns);
+                             ((dcache_rvalid && !data_bus_walk_owns && !data_bus_drain_owns) ||
+                              store_buf_forward_pending_q);
+    assign cpu_load_rdata = store_buf_forward_pending_q ? store_buf_forward_data_q : cpu_data_rdata;
+
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            store_buf_forward_pending_q <= 1'b0;
+            store_buf_forward_data_q <= 32'b0;
+        end else begin
+            store_buf_forward_pending_q <= store_buf_forward_go;
+            if (store_buf_forward_go) begin
+                store_buf_forward_data_q <= store_buf_forward_data;
+            end
+        end
+    end
 
     always @(posedge clk or posedge rst) begin
         if (rst) begin
@@ -257,7 +282,10 @@ module top #(
         .head_data(store_buf_head_data),
         .head_ram(store_buf_head_ram),
         .match_addr(phys_data_addr),
-        .match(store_buf_match)
+        .match_type(cpu_load_type),
+        .match(store_buf_match),
+        .forward(store_buf_forward),
+        .forward_data(store_buf_forward_data)
     );
 
     icache icache_inst (
@@ -356,7 +384,7 @@ module top #(
         .supervisor_external_interrupt(plic_supervisor_interrupt),
         .mtime_in(mtime),
         .module_instr_in(instr_to_cpu),
-        .module_read_data_in(cpu_data_rdata),
+        .module_read_data_in(cpu_load_rdata),
         .module_pc_out(cpu_pc_out),
         .module_wr_data_out(cpu_mem_write_data),
         .module_mem_wr_en(cpu_mem_write_en),
