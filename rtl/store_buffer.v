@@ -36,7 +36,7 @@ module store_buffer #(
     reg [COUNT_WIDTH-1:0] count;
 
     wire [COUNT_WIDTH-1:0] tail = pop ? count - 1'b1 : count;
-    integer i;
+    integer i, j;
 
     assign empty = (count == {COUNT_WIDTH{1'b0}});
     assign full = (count == DEPTH_COUNT);
@@ -57,25 +57,25 @@ module store_buffer #(
 
     always @(posedge clk or posedge rst) begin
         if (rst) begin
-            for (i = 0; i < DEPTH; i = i + 1) begin
-                addr_q[i] <= 32'b0;
-                be_q[i] <= 4'b0;
-                data_q[i] <= 32'b0;
+            for (j = 0; j < DEPTH; j = j + 1) begin
+                addr_q[j] <= 32'b0;
+                be_q[j] <= 4'b0;
+                data_q[j] <= 32'b0;
             end
             ram_q <= {DEPTH{1'b0}};
             count <= {COUNT_WIDTH{1'b0}};
         end else begin
-            for (i = 0; i < DEPTH - 1; i = i + 1) begin
-                if (push && (i == {{(32-COUNT_WIDTH){1'b0}}, tail})) begin
-                    addr_q[i] <= push_addr;
-                    be_q[i] <= push_be;
-                    data_q[i] <= push_data;
-                    ram_q[i] <= push_ram;
+            for (j = 0; j < DEPTH - 1; j = j + 1) begin
+                if (push && (j == {{(32-COUNT_WIDTH){1'b0}}, tail})) begin
+                    addr_q[j] <= push_addr;
+                    be_q[j] <= push_be;
+                    data_q[j] <= push_data;
+                    ram_q[j] <= push_ram;
                 end else if (pop) begin
-                    addr_q[i] <= addr_q[i + 1];
-                    be_q[i] <= be_q[i + 1];
-                    data_q[i] <= data_q[i + 1];
-                    ram_q[i] <= ram_q[i + 1];
+                    addr_q[j] <= addr_q[j + 1];
+                    be_q[j] <= be_q[j + 1];
+                    data_q[j] <= data_q[j + 1];
+                    ram_q[j] <= ram_q[j + 1];
                 end
             end
             // The last entry has nothing behind it to shift in.
