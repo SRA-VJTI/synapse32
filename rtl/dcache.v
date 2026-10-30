@@ -137,7 +137,7 @@ module dcache #(
     reg [31:0] hit_word;
     reg [NUM_MSHR-1:0] mshr_match;
     reg [MSHR_BITS-1:0] match_index;
-    integer i, j, k, n, m, b, c, d, w, x;
+    integer i, j, k, n, m, b, c, d, w, x, p;
 
     always @(*) begin
         hit_way = {WAY_BITS{1'b0}};
@@ -338,10 +338,10 @@ module dcache #(
             valid_q <= {(NUM_WAYS*SETS){1'b0}};
             dirty_q <= {(NUM_WAYS*SETS){1'b0}};
             plru_q <= {(PLRU_BITS*SETS){1'b0}};
-            for (i = 0; i < NUM_MSHR; i = i + 1) begin
-                mshr_line_q[i] <= {LINE_ADDR_BITS{1'b0}};
-                mshr_be_q[i] <= {(WORDS*4){1'b0}};
-                mshr_data_q[i] <= {(WORDS*32){1'b0}};
+            for (p = 0; p < NUM_MSHR; p = p + 1) begin
+                mshr_line_q[p] <= {LINE_ADDR_BITS{1'b0}};
+                mshr_be_q[p] <= {(WORDS*4){1'b0}};
+                mshr_data_q[p] <= {(WORDS*32){1'b0}};
             end
             mshr_count <= {COUNT_WIDTH{1'b0}};
             eng_state <= E_IDLE;
@@ -379,27 +379,27 @@ module dcache #(
             end
 
             // Entry 0 retires as its fill ends; nothing is allocated or merged that cycle.
-            for (i = 0; i < NUM_MSHR - 1; i = i + 1) begin
+            for (p = 0; p < NUM_MSHR - 1; p = p + 1) begin
                 if (fill_last) begin
-                    mshr_line_q[i] <= mshr_line_q[i + 1];
-                    mshr_be_q[i] <= mshr_be_q[i + 1];
-                    mshr_data_q[i] <= mshr_data_q[i + 1];
+                    mshr_line_q[p] <= mshr_line_q[p + 1];
+                    mshr_be_q[p] <= mshr_be_q[p + 1];
+                    mshr_data_q[p] <= mshr_data_q[p + 1];
                 end
             end
-            for (i = 0; i < NUM_MSHR; i = i + 1) begin
-                if ((alloc && ({{(32-COUNT_WIDTH){1'b0}}, mshr_count} == i)) ||
-                    (store_merge && ({{(32-MSHR_BITS){1'b0}}, match_index} == i))) begin
+            for (p = 0; p < NUM_MSHR; p = p + 1) begin
+                if ((alloc && ({{(32-COUNT_WIDTH){1'b0}}, mshr_count} == p)) ||
+                    (store_merge && ({{(32-MSHR_BITS){1'b0}}, match_index} == p))) begin
                     if (alloc) begin
-                        mshr_line_q[i] <= req_line;
+                        mshr_line_q[p] <= req_line;
                     end
                     for (w = 0; w < WORDS; w = w + 1) begin
                         for (d = 0; d < 4; d = d + 1) begin
                             if (alloc) begin
-                                mshr_be_q[i][w*4 + d] <= 1'b0;
+                                mshr_be_q[p][w*4 + d] <= 1'b0;
                             end
                             if (we && (req_word == w[WORD_OFFSET_BITS-1:0]) && lane_be[d]) begin
-                                mshr_be_q[i][w*4 + d] <= 1'b1;
-                                mshr_data_q[i][w*32 + d*8 +: 8] <= lane_data[d*8 +: 8];
+                                mshr_be_q[p][w*4 + d] <= 1'b1;
+                                mshr_data_q[p][w*32 + d*8 +: 8] <= lane_data[d*8 +: 8];
                             end
                         end
                     end
