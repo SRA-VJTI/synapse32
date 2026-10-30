@@ -40,6 +40,12 @@ S_SCRATCH = 0x1000_0900
 PAGE_TABLE = 0x1001_0000
 SATP_SV32 = 0x8000_0000 | (PAGE_TABLE >> 12)
 MTIMECMP_LO = 0x0200_4000
+PLIC_PRIORITY_2 = 0x0C00_0008
+PLIC_ENABLE_M = 0x0C00_2000
+PLIC_ENABLE_S = 0x0C00_2080
+PLIC_CLAIM_M = 0x0C20_0004
+PLIC_CLAIM_S = 0x0C20_1004
+PLIC_SOURCE_PIN = 2
 UNMAPPED_VA = 0x4000_0000
 
 # Sv32 identity megapages
@@ -47,6 +53,7 @@ MEGAPAGES = {
     INSTR_MEM_BASE: 0xCF,
     DATA_MEM_BASE: 0xCF,
     0x0200_0000: 0xC7,
+    0x0C00_0000: 0xC7,
 }
 PTE_A_D = 0xC0
 
@@ -64,13 +71,13 @@ VARIANTS = [
     ("m_software", 3, 0, "software", 0x000, 0, 0, 0),
     ("m_external", 3, 0, "external", 0x000, 0, 0, 0),
     ("m_timer", 3, 0, "timer", 0x000, 0, 0, 0),
-    ("s_software_delegated", 1, 0, "software", 0x002, 0, 0, 0),
-    ("s_timer_delegated", 1, 0, "timer", 0x020, 0, 0, 0),
+    ("s_msip_ignores_mideleg", 1, 0, "software", 0x002, 0, 0, 0),
+    ("s_mtip_ignores_mideleg", 1, 0, "timer", 0x020, 0, 0, 0),
     ("s_mmu_external_delegated", 1, 1, "external", 0x200, 0, 0, 0),
     ("s_mmu_software_to_m", 1, 1, "software", 0x000, 0, 0, 0),
     ("m_timer_vectored", 3, 0, "timer", 0x000, 1, 0, 0),
     ("s_mmu_external_delegated_vectored", 1, 1, "external", 0x200, 1, 0, 0),
-    ("s_mmu_timer_delegated_svade", 1, 1, "timer", 0x020, 0, 1, 0),
+    ("s_mmu_mtip_ignores_mideleg_svade", 1, 1, "timer", 0x020, 0, 1, 0),
     ("s_mmu_software_to_m_svade", 1, 1, "software", 0x000, 0, 1, 0),
     ("m_software_trigger", 3, 0, "software", 0x000, 0, 0, 1),
     ("s_mmu_external_delegated_trigger", 1, 1, "external", 0x200, 0, 0, 1),
@@ -132,6 +139,17 @@ _start:
         li      t0, {CONFIG:#x}
         lw      t1, 16(t0)
         csrw    mideleg, t1
+        # The external pin is PLIC source 2: route it to the context of the mode that takes it.
+        li      t2, {PLIC_PRIORITY_2:#x}
+        li      t3, 1
+        sw      t3, 0(t2)
+        andi    t1, t1, 0x200
+        li      t2, {PLIC_ENABLE_M:#x}
+        beqz    t1, 6f
+        li      t2, {PLIC_ENABLE_S:#x}
+6:
+        li      t3, {1 << PLIC_SOURCE_PIN}
+        sw      t3, 0(t2)
         lw      t1, 12(t0)
         beqz    t1, 1f
         li      t2, {MTIMECMP_LO:#x}
@@ -230,6 +248,12 @@ m_irq:
         andi    t0, t0, 0x3f
         li      t1, 7
         beq     t0, t1, m_timer
+        li      t1, 11
+        li      t2, {PLIC_CLAIM_M:#x}
+        beq     t0, t1, m_external
+        li      t1, 9
+        li      t2, {PLIC_CLAIM_S:#x}
+        beq     t0, t1, m_external
         li      t0, {ACK_ADDR:#x}
         sw      t0, 0(t0)
         j       m_ret
@@ -237,6 +261,14 @@ m_timer:
         li      t0, {MTIMECMP_LO + 4:#x}
         li      t1, -1
         sw      t1, 0(t0)
+        j       m_ret
+# Claim, acknowledge (the testbench lowers the pin), then complete, so the gateway does not re-pend.
+m_external:
+        lw      t1, 0(t2)
+        li      t0, {ACK_ADDR:#x}
+        sw      t0, 0(t0)
+        fence   w, w
+        sw      t1, 0(t2)
 m_ret:
         lw      t2, 8(sp)
         lw      t1, 4(sp)
@@ -261,12 +293,23 @@ s_irq:
         andi    t0, t0, 0x3f
         li      t1, 5
         beq     t0, t1, s_timer
+        li      t1, 9
+        beq     t0, t1, s_external
         li      t0, {ACK_ADDR:#x}
         sw      t0, 0(t0)
         j       s_ret
 s_timer:
         li      t0, {MTIMECMP_LO + 4:#x}
         li      t1, -1
+        sw      t1, 0(t0)
+        j       s_ret
+s_external:
+        li      t0, {PLIC_CLAIM_S:#x}
+        lw      t1, 0(t0)
+        li      t0, {ACK_ADDR:#x}
+        sw      t0, 0(t0)
+        fence   w, w
+        li      t0, {PLIC_CLAIM_S:#x}
         sw      t1, 0(t0)
 s_ret:
         lw      t1, 4(sp)

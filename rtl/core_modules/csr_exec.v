@@ -5,6 +5,7 @@ module csr_exec (
     input wire [31:0] rs1_value,
     input wire [4:0] rs1_addr,     // For immediate value
     input wire [31:0] csr_read_data,
+    input wire [31:0] csr_rmw_data,  // what csrrs/csrrc modify (mip.SEIP: software bit only)
     output reg [31:0] csr_write_data,
     output reg csr_write_enable,
     output reg [31:0] rd_value
@@ -24,11 +25,11 @@ module csr_exec (
                 csr_write_enable = 1'b1;
             end
             INSTR_CSRRS: begin
-                csr_write_data = csr_read_data | rs1_value;
+                csr_write_data = csr_rmw_data | rs1_value;
                 csr_write_enable = (rs1_addr != 5'b0); // Don't write if rs1=x0
             end
             INSTR_CSRRC: begin
-                csr_write_data = csr_read_data & (~rs1_value);
+                csr_write_data = csr_rmw_data & (~rs1_value);
                 csr_write_enable = (rs1_addr != 5'b0); // Don't write if rs1=x0
             end
             INSTR_CSRRWI: begin
@@ -36,11 +37,11 @@ module csr_exec (
                 csr_write_enable = 1'b1;
             end
             INSTR_CSRRSI: begin
-                csr_write_data = csr_read_data | uimm;
+                csr_write_data = csr_rmw_data | uimm;
                 csr_write_enable = (rs1_addr != 5'b0); // Don't write if uimm=0
             end
             INSTR_CSRRCI: begin
-                csr_write_data = csr_read_data & (~uimm);
+                csr_write_data = csr_rmw_data & (~uimm);
                 csr_write_enable = (rs1_addr != 5'b0); // Don't write if uimm=0
             end
             default: begin

@@ -62,27 +62,27 @@ async def _reset_and_configure(dut):
 async def test_level_irq_rearms_after_completion(dut):
     await _reset_and_configure(dut)
 
-    assert int(dut.external_interrupt.value) == 0
+    assert int(dut.supervisor_external_interrupt.value) == 0
     assert await _read_reg(dut, PENDING_ADDR) == 0
 
     dut.source_irq.value = 1
     await ClockCycles(dut.clk, 1)
     await Timer(1, units="ns")
 
-    assert int(dut.external_interrupt.value) == 1
+    assert int(dut.supervisor_external_interrupt.value) == 1
     assert await _read_reg(dut, PENDING_ADDR) == 0x2
 
     claim = await _read_reg(dut, CLAIM_S_ADDR)
     assert claim == 1
     await ClockCycles(dut.clk, 1)
     await Timer(1, units="ns")
-    assert int(dut.external_interrupt.value) == 0
+    assert int(dut.supervisor_external_interrupt.value) == 0
     assert await _read_reg(dut, PENDING_ADDR) == 0
 
     await _write_reg(dut, CLAIM_S_ADDR, 1)
     await ClockCycles(dut.clk, 1)
     await Timer(1, units="ns")
-    assert int(dut.external_interrupt.value) == 1
+    assert int(dut.supervisor_external_interrupt.value) == 1
     assert await _read_reg(dut, PENDING_ADDR) == 0x2
 
     claim = await _read_reg(dut, CLAIM_S_ADDR)
@@ -94,7 +94,7 @@ async def test_level_irq_rearms_after_completion(dut):
     await ClockCycles(dut.clk, 1)
     await Timer(1, units="ns")
 
-    assert int(dut.external_interrupt.value) == 0
+    assert int(dut.supervisor_external_interrupt.value) == 0
     assert await _read_reg(dut, PENDING_ADDR) == 0
     assert await _read_reg(dut, CLAIM_S_ADDR) == 0
 
@@ -106,7 +106,7 @@ async def test_stale_completion_preserves_unclaimed_pending_irq(dut):
     dut.source_irq.value = 1
     await ClockCycles(dut.clk, 1)
     await Timer(1, units="ns")
-    assert int(dut.external_interrupt.value) == 1
+    assert int(dut.supervisor_external_interrupt.value) == 1
     assert await _read_reg(dut, PENDING_ADDR) == 0x2
 
     # A duplicate/stale completion may arrive after the source level falls,
@@ -117,14 +117,44 @@ async def test_stale_completion_preserves_unclaimed_pending_irq(dut):
     await ClockCycles(dut.clk, 1)
     await Timer(1, units="ns")
 
-    assert int(dut.external_interrupt.value) == 1
+    assert int(dut.supervisor_external_interrupt.value) == 1
     assert await _read_reg(dut, PENDING_ADDR) == 0x2
     assert await _read_reg(dut, CLAIM_S_ADDR) == 1
 
     await ClockCycles(dut.clk, 1)
     await Timer(1, units="ns")
-    assert int(dut.external_interrupt.value) == 0
+    assert int(dut.supervisor_external_interrupt.value) == 0
     assert await _read_reg(dut, PENDING_ADDR) == 0
+
+
+@cocotb.test()
+async def test_claim_takes_the_higher_priority_source_then_the_other(dut):
+    """Both sources pending: each context claims the higher priority first, ties go to the lower ID."""
+    await _reset_and_configure(dut)
+    await _write_reg(dut, PRIORITY_1_ADDR + 4, 3)
+    await _write_reg(dut, ENABLE_S_ADDR, 0x6)
+    dut.source_irq.value = 0b11
+    await ClockCycles(dut.clk, 2)
+    assert await _read_reg(dut, PENDING_ADDR) == 0x6
+    assert int(dut.supervisor_external_interrupt.value) == 1
+    assert int(dut.machine_external_interrupt.value) == 0, "context 0 has no source enabled"
+    dut.source_irq.value = 0
+    assert await _read_reg(dut, CLAIM_S_ADDR) == 2, "source 2 has the higher priority"
+    assert await _read_reg(dut, CLAIM_S_ADDR) == 1
+    assert await _read_reg(dut, CLAIM_S_ADDR) == 0, "nothing left to claim"
+    await _write_reg(dut, CLAIM_S_ADDR, 2)
+    await _write_reg(dut, CLAIM_S_ADDR, 1)
+
+    await _write_reg(dut, PRIORITY_1_ADDR + 4, 1)
+    await _write_reg(dut, ENABLE_S_ADDR, 0)
+    await _write_reg(dut, ENABLE_M_ADDR, 0x6)
+    dut.source_irq.value = 0b11
+    await ClockCycles(dut.clk, 2)
+    dut.source_irq.value = 0
+    assert int(dut.machine_external_interrupt.value) == 1
+    assert int(dut.supervisor_external_interrupt.value) == 0
+    assert await _read_reg(dut, CLAIM_M_ADDR) == 1, "equal priorities: the lower ID first"
+    assert await _read_reg(dut, CLAIM_M_ADDR) == 2
 
 
 def runCocotbTests():

@@ -36,6 +36,12 @@ S_SCRATCH = 0x1000_0900
 PAGE_TABLE = 0x1001_0000
 SATP_SV32 = 0x8000_0000 | (PAGE_TABLE >> 12)
 MTIMECMP_LO = 0x0200_4000
+PLIC_PRIORITY_2 = 0x0C00_0008
+PLIC_ENABLE_M = 0x0C00_2000
+PLIC_ENABLE_S = 0x0C00_2080
+PLIC_CLAIM_M = 0x0C20_0004
+PLIC_CLAIM_S = 0x0C20_1004
+PLIC_SOURCE_PIN = 2
 UNMAPPED_VA = 0x4000_0000
 LOOP_COUNT = 200
 DIRECT = 0xFF
@@ -45,6 +51,7 @@ MEGAPAGES = {
     INSTR_MEM_BASE: 0xCF,
     DATA_MEM_BASE: 0xCF,
     0x0200_0000: 0xC7,
+    0x0C00_0000: 0xC7,
 }
 
 ACTION_NONE = 0
@@ -56,6 +63,7 @@ ACTION_ILLEGAL = 5
 ACTION_LOAD_PAGE_FAULT = 6
 ACTION_INSTR_PAGE_FAULT = 7
 ACTION_WARL = 8
+ACTION_SSIP = 9
 
 
 def _vector_table(mode: str) -> str:
@@ -111,17 +119,47 @@ def _common_handler(mode: str) -> str:
         j       {mode}_ret
 {mode}_irq:
         andi    t1, t1, 0x3f
-        li      t2, 5
-        beq     t1, t2, {mode}_timer
         li      t2, 7
-        beq     t1, t2, {mode}_timer
+        beq     t1, t2, {mode}_machine_timer
+        li      t2, 5
+        beq     t1, t2, {mode}_supervisor_timer
+        li      t2, 1
+        beq     t1, t2, {mode}_supervisor_software
+        li      t2, 11
+        li      t3, {PLIC_CLAIM_M:#x}
+        beq     t1, t2, {mode}_external
+        li      t2, 9
+        li      t3, {PLIC_CLAIM_S:#x}
+        beq     t1, t2, {mode}_external
+        # MSIP: the testbench lowers the pin on the acknowledge.
         li      t1, {ACK_ADDR:#x}
         sw      t1, 0(t1)
         j       {mode}_ret
-{mode}_timer:
+# Claim, acknowledge (the testbench lowers the pin), then complete, so the gateway does not re-pend.
+{mode}_external:
+        lw      t2, 0(t3)
+        li      t1, {ACK_ADDR:#x}
+        sw      t1, 0(t1)
+        fence   w, w
+        sw      t2, 0(t3)
+        j       {mode}_ret
+# As an SBI does: retire MTIP, and pass the tick to S-mode as STIP when STIP is delegated.
+{mode}_machine_timer:
         li      t1, {MTIMECMP_LO + 4:#x}
         li      t2, -1
         sw      t2, 0(t1)
+        csrr    t1, mideleg
+        andi    t1, t1, 0x20
+        beqz    t1, {mode}_ret
+        csrs    mip, t1
+        j       {mode}_ret
+# STIP is cleared by M-mode only; the handler masks it.
+{mode}_supervisor_timer:
+        li      t1, 0x20
+        csrc    {mode}ie, t1
+        j       {mode}_ret
+{mode}_supervisor_software:
+        csrci   {mode}ip, 2
 {mode}_ret:
         lw      t3, 12(sp)
         lw      t2, 8(sp)
@@ -150,6 +188,18 @@ _start:
         csrw    mideleg, t1
         lw      t1, 16(t0)
         csrw    medeleg, t1
+        # The external pin is PLIC source 2: route it to the context of the mode that takes it.
+        li      t2, {PLIC_PRIORITY_2:#x}
+        li      t1, 1
+        sw      t1, 0(t2)
+        lw      t1, 12(t0)
+        andi    t1, t1, 0x200
+        li      t2, {PLIC_ENABLE_M:#x}
+        beqz    t1, 8f
+        li      t2, {PLIC_ENABLE_S:#x}
+8:
+        li      t1, {1 << PLIC_SOURCE_PIN}
+        sw      t1, 0(t2)
         li      t1, 0xAAA
         csrw    mie, t1
         lw      t1, 24(t0)
@@ -200,6 +250,10 @@ body:
         li      t2, {UNMAPPED_VA:#x}
         jalr    ra, 0(t2)
 6:
+        li      t1, {ACTION_SSIP}
+        bne     a0, t1, 9f
+        csrsi   sip, 2
+9:
         li      t1, {ACTION_WARL}
         bne     a0, t1, 7f
         csrr    s1, mtvec
@@ -260,12 +314,15 @@ CASES = [
     ("m_software_vectored", "vec", "vec", M, 0x000, 0x0000, ACTION_SOFTWARE, 0, [("m", 3, 0x8000_0003)]),
     ("m_timer_vectored", "vec", "vec", M, 0x000, 0x0000, ACTION_TIMER, 0, [("m", 7, 0x8000_0007)]),
     ("m_external_vectored", "vec", "vec", M, 0x000, 0x0000, ACTION_EXTERNAL, 0, [("m", 11, 0x8000_000B)]),
-    ("s_software_delegated_vectored", "vec", "vec", S, 0x002, 0x0000, ACTION_SOFTWARE, 0, [("s", 1, 0x8000_0001)]),
-    ("s_timer_delegated_vectored", "vec", "vec", S, 0x020, 0x0000, ACTION_TIMER, 0, [("s", 5, 0x8000_0005)]),
+    ("s_software_delegated_vectored", "vec", "vec", S, 0x002, 0x0000, ACTION_SSIP, 0, [("s", 1, 0x8000_0001)]),
+    ("s_msip_ignores_mideleg_vectored", "vec", "vec", S, 0x002, 0x0000, ACTION_SOFTWARE, 0, [("m", 3, 0x8000_0003)]),
+    ("s_timer_delegated_vectored", "vec", "vec", S, 0x020, 0x0000, ACTION_TIMER, 0,
+     [("m", 7, 0x8000_0007), ("s", 5, 0x8000_0005)]),
     ("s_external_delegated_vectored", "vec", "vec", S, 0x200, 0x0000, ACTION_EXTERNAL, 0, [("s", 9, 0x8000_0009)]),
     ("s_mmu_external_delegated_vectored", "vec", "vec", S, 0x200, 0x0000, ACTION_EXTERNAL, 1, [("s", 9, 0x8000_0009)]),
     ("s_software_to_m_vectored", "vec", "vec", S, 0x000, 0x0000, ACTION_SOFTWARE, 0, [("m", 3, 0x8000_0003)]),
-    ("s_timer_delegated_m_direct", "direct", "vec", S, 0x020, 0x0000, ACTION_TIMER, 0, [("s", 5, 0x8000_0005)]),
+    ("s_timer_delegated_m_direct", "direct", "vec", S, 0x020, 0x0000, ACTION_TIMER, 0,
+     [("m", DIRECT, 0x8000_0007), ("s", 5, 0x8000_0005)]),
     ("s_external_to_m_s_direct", "vec", "direct", S, 0x000, 0x0000, ACTION_EXTERNAL, 0, [("m", 11, 0x8000_000B)]),
     ("m_software_mode3_is_vectored", "mode3", "direct", M, 0x000, 0x0000, ACTION_SOFTWARE, 0, [("m", 3, 0x8000_0003)]),
     ("m_software_mode2_is_direct", "mode2", "direct", M, 0x000, 0x0000, ACTION_SOFTWARE, 0, [("m", 0, 0x8000_0003)]),
