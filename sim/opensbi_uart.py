@@ -129,9 +129,9 @@ def dump_status(dut, cycle, force=False):
         "data_vaddr": _read_value(dut.data_mem_addr, 0),
         "data_paddr": _read_value(dut.phys_data_addr, 0),
         "instr_paddr": _read_value(dut.phys_instr_addr, 0),
-        "store_buf_valid": _read_value(dut.cpu_inst.store_buf_valid, 0),
-        "store_buf_addr": _read_value(dut.cpu_inst.store_buf_addr, 0),
-        "store_buf_commit": _read_value(dut.cpu_inst.store_buf_commit_fire, 0),
+        "store_buf_empty": _read_value(dut.store_buf_empty, 0),
+        "store_buf_head_addr": _read_value(dut.store_buf_head_addr, 0),
+        "store_buf_pop": _read_value(dut.store_buf_pop, 0),
         "pipeline_stall": _read_value(dut.cpu_inst.pipeline_stall, 0),
         "hazard_stall": _read_value(dut.cpu_inst.hazard_stall, 0),
         "uart_rx_state": _read_value(uart.rx_state, 0),
@@ -160,7 +160,7 @@ def dump_status(dut, cycle, force=False):
         "stval=0x%(stval)08x satp=0x%(satp)08x mie=0x%(mie)08x mip=0x%(mip)08x "
         "ifault=%(ifault)d lfault=%(lfault)d sfault=%(sfault)d fault_addr=0x%(fault_addr)08x "
         "dvaddr=0x%(data_vaddr)08x dpaddr=0x%(data_paddr)08x ipaddr=0x%(instr_paddr)08x "
-        "sbuf=%(store_buf_valid)d sbuf_addr=0x%(store_buf_addr)08x sbuf_commit=%(store_buf_commit)d "
+        "sbuf_empty=%(store_buf_empty)d sbuf_head=0x%(store_buf_head_addr)08x sbuf_pop=%(store_buf_pop)d "
         "stall=%(pipeline_stall)d hazard=%(hazard_stall)d "
         "rx_state=%(uart_rx_state)d rx_dr=%(uart_rx_dr)d rx_oe=%(uart_rx_oe)d "
         "rbr=0x%(uart_rbr)02x uart_irq=%(uart_irq)d "

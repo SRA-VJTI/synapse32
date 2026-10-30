@@ -393,14 +393,7 @@ module riscv_cpu (
         |(csr_mip & csr_mie & WFI_WAKE_INTERRUPT_MASK);
     assign wfi_stall = wfi_active && !wfi_resume_pending;
 
-    // One-entry store buffer (for future decoupled memory interfaces).
-    reg store_buf_valid;
-    reg [31:0] store_buf_addr;
-    reg [31:0] store_buf_data;
-    reg [3:0] store_buf_be;
-    wire ex_mem_std_store_raw_req;
     wire ex_mem_std_store_req;
-    wire ex_mem_std_store_direct_req;
     wire [31:0] ex_mem_store_addr;
     wire [31:0] ex_mem_store_data;
     wire [3:0] ex_mem_store_be;
@@ -410,10 +403,6 @@ module riscv_cpu (
     wire non_atomic_store_write_enable;
     wire [31:0] non_atomic_store_write_addr;
     reg [31:0] mem_read_data_effective;
-    wire load_all_bytes_covered;
-    wire read_needs_memory;
-    wire store_buf_commit_fire;
-    wire atomic_clobbers_store_buf;
 
     // An AMO is a read then a write, since the value written depends on the value read.
     reg amo_write_phase;
@@ -430,7 +419,6 @@ module riscv_cpu (
     wire [31:0] sc_result;
     wire [31:0] atomic_new_word;
     // FENCE and FENCE.I wait for older writes to reach memory, so FENCE.I refetches the new code.
-    wire store_buf_busy_stall = 1'b0;
     wire fence_drain_stall = id_ex_inst0_instr_valid_out &&
                              ((!module_store_buffer_empty_in &&
                                ((id_ex_inst0_instr_id_out == INSTR_FENCE) ||
@@ -445,7 +433,7 @@ module riscv_cpu (
                       !(module_data_rvalid_in && !amo_read_phase) &&
                       !mem_stage_page_fault_taken;
     assign ex_stage_active = !mem_wait && !fence_drain_stall;
-    wire pipeline_hold = wfi_stall || store_buf_busy_stall || fence_drain_stall || mem_wait;
+    wire pipeline_hold = wfi_stall || fence_drain_stall || mem_wait;
     assign pipeline_stall = hazard_stall || pipeline_hold;
 
     always @(posedge clk or posedge rst) begin
@@ -455,10 +443,6 @@ module riscv_cpu (
             fetch_outstanding <= 1'b0;
             fetch_discard <= 1'b0;
             wfi_active <= 1'b0;
-            store_buf_valid <= 1'b0;
-            store_buf_addr <= 32'b0;
-            store_buf_data <= 32'b0;
-            store_buf_be <= 4'b0;
         end else begin
             if (module_instr_rvalid_in) begin
                 fetch_outstanding <= 1'b0;
@@ -483,24 +467,6 @@ module riscv_cpu (
                 amo_write_phase <= 1'b1;
             end else if (amo_write_phase && module_data_rvalid_in) begin
                 amo_write_phase <= 1'b0;
-            end
-
-            // One-entry store buffer update. Frozen while MEM waits for memory.
-            // If a store is committed and no new store is entering, clear valid.
-            // If a new store enters, capture it (and replace any just-committed entry).
-            if (mem_wait) begin
-                store_buf_valid <= store_buf_valid;
-            end else if (ex_mem_std_store_req) begin
-                store_buf_valid <= 1'b1;
-                store_buf_addr <= ex_mem_store_addr;
-                store_buf_data <= ex_mem_store_data;
-                store_buf_be <= ex_mem_store_be;
-            end else if (atomic_clobbers_store_buf) begin
-                // Older store to the same word is architecturally consumed by the
-                // AMO/SC full-word write and must not commit afterward.
-                store_buf_valid <= 1'b0;
-            end else if (store_buf_commit_fire) begin
-                store_buf_valid <= 1'b0;
             end
         end
     end
@@ -747,16 +713,12 @@ module riscv_cpu (
         .atomic_new_word(atomic_new_word)
     );
 
-    // Store request generated in EX/MEM for SB/SH/SW.
-    // For now, retire standard stores directly. The previous one-entry queue
-    // needs a stronger hold/retire protocol before it is safe under Linux.
-    assign ex_mem_std_store_raw_req = mem_unit_inst0_wr_enable_out &&
-                                      (mem_unit_inst0_write_byte_enable_out != 4'b0000);
+    // SB/SH/SW leave EX/MEM directly; the store buffer outside the core queues them.
+    assign ex_mem_std_store_req = mem_unit_inst0_wr_enable_out &&
+                                  (mem_unit_inst0_write_byte_enable_out != 4'b0000);
     assign ex_mem_store_addr = mem_unit_inst0_wr_addr_out;
     assign ex_mem_store_data = mem_unit_inst0_wr_data_out;
     assign ex_mem_store_be = mem_unit_inst0_write_byte_enable_out;
-    assign ex_mem_std_store_req = 1'b0;
-    assign ex_mem_std_store_direct_req = ex_mem_std_store_raw_req;
 
     // Read request for loads/LR/AMO.
     assign amo_read_phase = is_amo_w && !amo_write_phase;
@@ -765,135 +727,32 @@ module riscv_cpu (
     assign ex_mem_read_addr = atomic_read_enable ? ex_mem_inst0_mem_addr_out : mem_unit_inst0_read_addr_out;
     assign ex_mem_read_type = (is_lr_w || is_amo_w) ? 3'b010 : mem_unit_inst0_load_type_out;
 
-    // Lookup a pending store-buffer byte by absolute byte address.
-    function [8:0] store_buf_lookup_byte;
-        input [31:0] addr;
-        begin
-            store_buf_lookup_byte = 9'h000;
-            if (store_buf_valid && store_buf_be[0] && (store_buf_addr == addr)) begin
-                store_buf_lookup_byte = {1'b1, store_buf_data[7:0]};
-            end else if (store_buf_valid && store_buf_be[1] && ((store_buf_addr + 32'd1) == addr)) begin
-                store_buf_lookup_byte = {1'b1, store_buf_data[15:8]};
-            end else if (store_buf_valid && store_buf_be[2] && ((store_buf_addr + 32'd2) == addr)) begin
-                store_buf_lookup_byte = {1'b1, store_buf_data[23:16]};
-            end else if (store_buf_valid && store_buf_be[3] && ((store_buf_addr + 32'd3) == addr)) begin
-                store_buf_lookup_byte = {1'b1, store_buf_data[31:24]};
-            end
-        end
-    endfunction
-
-    reg [8:0] load_byte0_lookup;
-    reg [8:0] load_byte1_lookup;
-    reg [8:0] load_byte2_lookup;
-    reg [8:0] load_byte3_lookup;
-    reg [7:0] load_byte0;
-    reg [7:0] load_byte1;
-    reg [7:0] load_byte2;
-    reg [7:0] load_byte3;
-
-    // Coverage check used to decide whether memory read is required.
-    wire [8:0] cover_byte0_lookup = store_buf_lookup_byte(ex_mem_read_addr);
-    wire [8:0] cover_byte1_lookup = store_buf_lookup_byte(ex_mem_read_addr + 32'd1);
-    wire [8:0] cover_byte2_lookup = store_buf_lookup_byte(ex_mem_read_addr + 32'd2);
-    wire [8:0] cover_byte3_lookup = store_buf_lookup_byte(ex_mem_read_addr + 32'd3);
-    wire cover_byte0 = cover_byte0_lookup[8];
-    wire cover_byte1 = cover_byte1_lookup[8];
-    wire cover_byte2 = cover_byte2_lookup[8];
-    wire cover_byte3 = cover_byte3_lookup[8];
-
-    assign load_all_bytes_covered = !ex_mem_read_req ? 1'b0 :
-                                    ((ex_mem_read_type == 3'b000) || (ex_mem_read_type == 3'b100)) ? cover_byte0 :
-                                    ((ex_mem_read_type == 3'b001) || (ex_mem_read_type == 3'b101)) ? (cover_byte0 && cover_byte1) :
-                                    (ex_mem_read_type == 3'b010) ? (cover_byte0 && cover_byte1 && cover_byte2 && cover_byte3) :
-                                    1'b0;
-
-    // Merge pending store-buffer bytes onto memory read data.
     always @(*) begin
-        load_byte0_lookup = 9'h000;
-        load_byte1_lookup = 9'h000;
-        load_byte2_lookup = 9'h000;
-        load_byte3_lookup = 9'h000;
-        load_byte0 = module_read_data_in[7:0];
-        load_byte1 = module_read_data_in[15:8];
-        load_byte2 = module_read_data_in[23:16];
-        load_byte3 = module_read_data_in[31:24];
         mem_read_data_effective = module_read_data_in;
-
         if (ex_mem_read_req) begin
-            load_byte0_lookup = store_buf_lookup_byte(ex_mem_read_addr);
-            if (load_byte0_lookup[8]) begin
-                load_byte0 = load_byte0_lookup[7:0];
-            end
-
             case (ex_mem_read_type)
-                3'b000: begin // LB
-                    mem_read_data_effective = {{24{load_byte0[7]}}, load_byte0};
-                end
-                3'b100: begin // LBU
-                    mem_read_data_effective = {24'h0, load_byte0};
-                end
-                3'b001: begin // LH
-                    load_byte1_lookup = store_buf_lookup_byte(ex_mem_read_addr + 32'd1);
-                    if (load_byte1_lookup[8]) begin
-                        load_byte1 = load_byte1_lookup[7:0];
-                    end
-                    mem_read_data_effective = {{16{load_byte1[7]}}, load_byte1, load_byte0};
-                end
-                3'b101: begin // LHU
-                    load_byte1_lookup = store_buf_lookup_byte(ex_mem_read_addr + 32'd1);
-                    if (load_byte1_lookup[8]) begin
-                        load_byte1 = load_byte1_lookup[7:0];
-                    end
-                    mem_read_data_effective = {16'h0, load_byte1, load_byte0};
-                end
-                3'b010: begin // LW (also LR/AMO read path)
-                    load_byte1_lookup = store_buf_lookup_byte(ex_mem_read_addr + 32'd1);
-                    load_byte2_lookup = store_buf_lookup_byte(ex_mem_read_addr + 32'd2);
-                    load_byte3_lookup = store_buf_lookup_byte(ex_mem_read_addr + 32'd3);
-                    if (load_byte1_lookup[8]) begin
-                        load_byte1 = load_byte1_lookup[7:0];
-                    end
-                    if (load_byte2_lookup[8]) begin
-                        load_byte2 = load_byte2_lookup[7:0];
-                    end
-                    if (load_byte3_lookup[8]) begin
-                        load_byte3 = load_byte3_lookup[7:0];
-                    end
-                    mem_read_data_effective = {load_byte3, load_byte2, load_byte1, load_byte0};
-                end
-                default: begin
-                    mem_read_data_effective = module_read_data_in;
-                end
+                3'b000: mem_read_data_effective = {{24{module_read_data_in[7]}}, module_read_data_in[7:0]};   // LB
+                3'b100: mem_read_data_effective = {24'h0, module_read_data_in[7:0]};                          // LBU
+                3'b001: mem_read_data_effective = {{16{module_read_data_in[15]}}, module_read_data_in[15:0]}; // LH
+                3'b101: mem_read_data_effective = {16'h0, module_read_data_in[15:0]};                         // LHU
+                default: mem_read_data_effective = module_read_data_in;                                       // LW, LR, AMO
             endcase
         end
     end
 
-    // Use memory when the load/atomic read is not fully covered by the store buffer.
-    assign read_needs_memory = ex_mem_read_req && !load_all_bytes_covered;
+    // A standard store to the reserved word breaks an LR reservation.
+    assign non_atomic_store_write_enable = ex_mem_std_store_req;
+    assign non_atomic_store_write_addr = ex_mem_store_addr;
 
-    // Commit buffered store only when memory read/write port is free this cycle.
-    assign store_buf_commit_fire = store_buf_valid && !read_needs_memory &&
-                                   !atomic_write_enable && !ex_mem_std_store_direct_req;
-    assign non_atomic_store_write_enable = ex_mem_std_store_direct_req || store_buf_commit_fire;
-    assign non_atomic_store_write_addr = ex_mem_std_store_direct_req ? ex_mem_store_addr : store_buf_addr;
-    assign atomic_clobbers_store_buf = store_buf_valid && atomic_write_enable &&
-                                       (store_buf_addr[31:2] == ex_mem_inst0_mem_addr_out[31:2]);
-
-    // External memory interface arbitration:
-    // - Standard stores are buffered then committed from store_buf.
-    // - AMO/SC writes are driven directly.
-    // - Loads/LR/AMO reads use memory only when needed; otherwise bypass from store_buf.
-    assign module_mem_wr_en = (atomic_write_enable && (!is_amo_w || amo_write_phase)) ||
-                              ex_mem_std_store_direct_req || store_buf_commit_fire;
-    assign module_mem_rd_en = read_needs_memory;
-    assign module_write_addr = atomic_write_enable ? ex_mem_inst0_mem_addr_out :
-                               (ex_mem_std_store_direct_req ? ex_mem_store_addr : store_buf_addr);
+    // AMO/SC writes are whole words; standard stores carry their byte enables.
+    assign module_mem_wr_en = (atomic_write_enable && (!is_amo_w || amo_write_phase)) || ex_mem_std_store_req;
+    assign module_mem_rd_en = ex_mem_read_req;
+    assign module_write_addr = atomic_write_enable ? ex_mem_inst0_mem_addr_out : ex_mem_store_addr;
     assign module_read_addr = ex_mem_read_addr;
     assign module_wr_data_out = atomic_write_enable ?
                                 (is_amo_w ? atomic_new_word : ex_mem_inst0_rs2_value_out) :
-                                (ex_mem_std_store_direct_req ? ex_mem_store_data : store_buf_data);
-    assign module_write_byte_enable = atomic_write_enable ? 4'b1111 :
-                                      (ex_mem_std_store_direct_req ? ex_mem_store_be : store_buf_be);
+                                ex_mem_store_data;
+    assign module_write_byte_enable = atomic_write_enable ? 4'b1111 : ex_mem_store_be;
     assign module_load_type = ex_mem_read_type;
     assign module_data_write_intent_out = module_mem_wr_en || is_amo_w;
     assign module_tlb_flush_out =
