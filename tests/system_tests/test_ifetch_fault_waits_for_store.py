@@ -14,6 +14,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
 from cocotb_test.simulator import run
+from memory_view import read_word
 
 INSTR_MEM_BASE = 0x8000_0000
 INSTR_MEM_SIZE = 0x0400_0000
@@ -135,7 +136,7 @@ def _poke(dut, addr: int, value: int) -> None:
 
 
 def _peek(dut, addr: int) -> int:
-    return int(dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value) & 0xFFFF_FFFF
+    return read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
 
 
 def _pte(pa: int, flags: int) -> int:
@@ -175,9 +176,10 @@ async def test_ifetch_fault_waits_for_store(dut):
     for _ in range(5000):
         await RisingEdge(dut.clk)
         await ReadOnly()
-        if int(dut.data_write_fire.value) and int(dut.data_store_we.value):
-            addr = int(dut.data_store_addr.value) & ~0x3
-            data = int(dut.data_store_wdata.value)
+        # A write is done when the data port takes it from the store buffer (into the data cache).
+        if int(dut.drain_done.value):
+            addr = int(dut.drain_addr.value) & ~0x3
+            data = int(dut.drain_data.value)
             if addr == STORE_PA:
                 writes.append(data)
             if addr == DONE_ADDR and data == DONE_VALUE:

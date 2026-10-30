@@ -31,6 +31,11 @@ module riscv_cpu (
     // FENCE.I: instruction caches may hold stale lines.
     output wire module_instr_cache_flush_out,
     output wire [31:0] module_next_pc_out,
+    // Address MEM holds after this edge, for the data cache's array read.
+    output wire [31:0] module_next_data_addr_out,
+    // FENCE.I also waits until the data cache has written every dirty line back.
+    output wire module_data_cache_clean_req_out,
+    input wire module_data_cache_clean_in,
     output wire module_data_mmu_enable_out,
     output wire [1:0] module_data_privilege_out,
     output wire [31:0] module_satp_out,
@@ -426,9 +431,11 @@ module riscv_cpu (
     wire [31:0] atomic_new_word;
     // FENCE and FENCE.I wait for older writes to reach memory, so FENCE.I refetches the new code.
     wire store_buf_busy_stall = 1'b0;
-    wire fence_drain_stall = id_ex_inst0_instr_valid_out && !module_store_buffer_empty_in &&
-                             ((id_ex_inst0_instr_id_out == INSTR_FENCE) ||
-                              (id_ex_inst0_instr_id_out == INSTR_FENCE_I));
+    wire fence_drain_stall = id_ex_inst0_instr_valid_out &&
+                             ((!module_store_buffer_empty_in &&
+                               ((id_ex_inst0_instr_id_out == INSTR_FENCE) ||
+                                (id_ex_inst0_instr_id_out == INSTR_FENCE_I))) ||
+                              (!module_data_cache_clean_in && (id_ex_inst0_instr_id_out == INSTR_FENCE_I)));
     // A page-faulting access never reaches memory, so it is not waited for.
     // A fetch accepted before a redirect answers for the old PC, so its response is dropped.
     assign fetch_response_valid = module_instr_rvalid_in && !fetch_discard;
@@ -893,6 +900,9 @@ module riscv_cpu (
         ex_stage_active && id_ex_inst0_instr_valid_out &&
         ((id_ex_inst0_instr_id_out == INSTR_SFENCE_VMA) ||
          (csr_write_enable && (csr_addr == 12'h180)));
+    assign module_next_data_addr_out = mem_wait ? ex_mem_inst0_mem_addr_out : ex_inst0_mem_addr_out;
+    assign module_data_cache_clean_req_out =
+        id_ex_inst0_instr_valid_out && (id_ex_inst0_instr_id_out == INSTR_FENCE_I);
     assign module_instr_cache_flush_out =
         ex_stage_active && id_ex_inst0_instr_valid_out && (id_ex_inst0_instr_id_out == INSTR_FENCE_I);
     assign mem_stage_load_page_fault = module_load_page_fault_in && ex_mem_read_req;

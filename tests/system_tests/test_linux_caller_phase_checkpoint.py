@@ -18,6 +18,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge
 from cocotb_test.simulator import run
+from memory_view import read_word
 
 
 HELPER_PATH = Path(__file__).with_name("test_linux_caller_stitch.py")
@@ -202,7 +203,7 @@ async def test_linux_caller_phase_checkpoint_matches_model(dut):
     ctx = init_regs[18]
     mismatches = []
     for addr in range(ctx + STATE_COMPARE_START, ctx + STATE_COMPARE_START + STATE_COMPARE_SIZE, 4):
-        actual = int(dut.unified_mem_inst.instr_ram[HELPERS._phys_word_index(addr)].value) & 0xFFFF_FFFF
+        actual = read_word(dut, HELPERS._phys_word_index(addr)) & 0xFFFF_FFFF
         expected = expected_mem.get(addr, 0) & 0xFFFF_FFFF
         if actual != expected:
             mismatches.append((addr, expected, actual))

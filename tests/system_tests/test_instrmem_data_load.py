@@ -13,6 +13,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge
 from cocotb_test.simulator import run
+from memory_view import read_word
 
 
 INSTR_MEM_BASE = 0x8000_0000
@@ -100,7 +101,7 @@ async def test_load_data_from_instruction_memory_region(dut):
     done = False
     for _ in range(220):
         await RisingEdge(dut.clk)
-        done_word = int(dut.unified_mem_inst.instr_ram[_phys_word_index(DONE_WORD_ADDR)].value) & 0xFFFF_FFFF
+        done_word = read_word(dut, _phys_word_index(DONE_WORD_ADDR)) & 0xFFFF_FFFF
         if ((done_word >> 24) & 0xFF) == 1:
             done = True
             break
@@ -118,7 +119,7 @@ async def test_load_data_from_instruction_memory_region(dut):
     }
 
     for addr, value in expected.items():
-        actual = int(dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value) & 0xFFFF_FFFF
+        actual = read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
         assert actual == value, (
             f"Memory mismatch at 0x{addr:08x}: expected=0x{value:08x} actual=0x{actual:08x}"
         )
