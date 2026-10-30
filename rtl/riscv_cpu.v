@@ -23,6 +23,7 @@ module riscv_cpu (
     input wire module_instr_rvalid_in,
     input wire module_data_gnt_in,
     input wire module_data_rvalid_in,
+    input wire module_store_buffer_empty_in,  // Store buffer empty once this cycle ends
     // The MMU treats a whole AMO as a write, its read transaction included.
     output wire module_data_write_intent_out,
     // SFENCE.VMA or a write to satp: the TLB may hold stale translations.
@@ -419,9 +420,11 @@ module riscv_cpu (
     wire sc_success;
     wire [31:0] sc_result;
     wire [31:0] atomic_new_word;
-    // FENCE must wait for any queued store to drain.
+    // FENCE and FENCE.I wait for older writes to reach memory, so FENCE.I refetches the new code.
     wire store_buf_busy_stall = 1'b0;
-    wire fence_drain_stall = (id_ex_inst0_instr_id_out == INSTR_FENCE) && store_buf_valid;
+    wire fence_drain_stall = id_ex_inst0_instr_valid_out && !module_store_buffer_empty_in &&
+                             ((id_ex_inst0_instr_id_out == INSTR_FENCE) ||
+                              (id_ex_inst0_instr_id_out == INSTR_FENCE_I));
     // A page-faulting access never reaches memory, so it is not waited for.
     // A fetch accepted before a redirect answers for the old PC, so its response is dropped.
     assign fetch_response_valid = module_instr_rvalid_in && !fetch_discard;
@@ -430,7 +433,7 @@ module riscv_cpu (
     assign mem_wait = (module_mem_rd_en || module_mem_wr_en) &&
                       !(module_data_rvalid_in && !amo_read_phase) &&
                       !mem_stage_page_fault_taken;
-    assign ex_stage_active = !mem_wait;
+    assign ex_stage_active = !mem_wait && !fence_drain_stall;
     wire pipeline_hold = wfi_stall || store_buf_busy_stall || fence_drain_stall || mem_wait;
     assign pipeline_stall = hazard_stall || pipeline_hold;
 

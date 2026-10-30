@@ -51,8 +51,8 @@ The CPU implements several techniques to handle pipeline hazards:
 
 ### MMU Organization
 
-MMU-specific RTL now lives under [`rtl/mmu/`](rtl/mmu). The current Sv32 page-walk
-and unified backing-memory implementation is in [`rtl/mmu/unified_mem.v`](rtl/mmu/unified_mem.v).
+MMU-specific RTL (Sv32 translation, TLB, page walker, permission checks) lives under
+[`rtl/mmu/`](rtl/mmu). The unified backing memory is in [`rtl/unified_mem.v`](rtl/unified_mem.v).
 
 ## Running Code on the CPU
 
