@@ -73,7 +73,7 @@ async def _receive_one_interrupt(dut, expected):
     await _write(dut, PLIC_CLAIM_S, 1)
     await ClockCycles(dut.clk, 2)
     assert int(dut.external_interrupt.value) == 0
-    assert int(dut.plic_inst.gateway_busy_1.value) == 0
+    assert int(dut.plic_inst.gateway_busy.value) == 0
 
 
 @cocotb.test()

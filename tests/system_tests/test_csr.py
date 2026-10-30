@@ -781,8 +781,8 @@ async def test_delegated_supervisor_timer_interrupt_sret(dut):
     instr_mem[7] = 0x30321073
     # 0x20: csrrw x0, sie, x4            # sie.STIE = 1
     instr_mem[8] = 0x10421073
-    # 0x24: csrrw x0, sip, x4            # sip.STIP = 1
-    instr_mem[9] = 0x14421073
+    # 0x24: csrrw x0, mip, x4            # mip.STIP = 1 (M-mode software, as an SBI does)
+    instr_mem[9] = 0x34421073
     # 0x28: csrrsi x0, sstatus, 2        # sstatus.SIE = 1
     instr_mem[10] = 0x10016073
     # 0x2C: mret                         # enter S-mode at mepc
@@ -799,8 +799,8 @@ async def test_delegated_supervisor_timer_interrupt_sret(dut):
     instr_mem[40] = 0x07700393
     # 0xA4: csrrs x8, sepc, x0           # capture interrupted PC
     instr_mem[41] = 0x14102473
-    # 0xA8: csrrc x0, sip, x4            # clear STIP
-    instr_mem[42] = 0x14423073
+    # 0xA8: csrrc x0, sie, x4            # mask STIE; sip.STIP is read-only to S-mode
+    instr_mem[42] = 0x10423073
     # 0xAC: sret                         # return to interrupted S-mode code
     instr_mem[43] = 0x10200073
 
@@ -825,7 +825,7 @@ async def test_delegated_supervisor_timer_interrupt_sret(dut):
     assert x8 in (0x60, 0x64), f"Unexpected interrupted S-mode PC in sepc: x8={x8:#x}"
     assert privilege_mode == 0x1, f"Expected S-mode after timer sret, got {privilege_mode:#x}"
     assert scause == 0x80000005, f"Expected supervisor timer interrupt scause, got {scause:#x}"
-    assert (sip & 0x20) == 0, f"Handler should clear STIP, sip={sip:#x}"
+    assert (sip & 0x20) != 0, f"sip.STIP is read-only to S-mode, yet the handler cleared it: sip={sip:#x}"
     assert spp == 0x0, f"SRET should clear SPP, got {spp:#x}"
 
     print("Delegated S-mode timer interrupt/SRET test passed!")
@@ -1118,10 +1118,10 @@ async def test_delegated_user_timer_interrupt_sret(dut):
     instr_mem[1] = 0x34111073  # csrrw x0, mepc, x2
     instr_mem[2] = 0x0A000193  # addi x3, x0, 0xA0
     instr_mem[3] = 0x10519073  # csrrw x0, stvec, x3
-    instr_mem[4] = 0x02000213  # addi x4, x0, 0x20     -> mideleg[5], sie.STIE, sip.STIP
+    instr_mem[4] = 0x02000213  # addi x4, x0, 0x20     -> mideleg[5], sie.STIE, mip.STIP
     instr_mem[5] = 0x30321073  # csrrw x0, mideleg, x4
     instr_mem[6] = 0x10421073  # csrrw x0, sie, x4
-    instr_mem[7] = 0x14421073  # csrrw x0, sip, x4
+    instr_mem[7] = 0x34421073  # csrrw x0, mip, x4     (M-mode software, as an SBI does)
     instr_mem[8] = 0x10016073  # csrrsi x0, sstatus, 2
     instr_mem[9] = 0x000022B7  # lui  x5, 0x2
     instr_mem[10] = 0x80028293 # addi x5, x5, -2048    -> 0x1800
@@ -1135,7 +1135,7 @@ async def test_delegated_user_timer_interrupt_sret(dut):
     # S-mode handler at 0xA0 (word index 40).
     instr_mem[40] = 0x07700393  # addi x7, x0, 0x77
     instr_mem[41] = 0x14102473  # csrrs x8, sepc, x0
-    instr_mem[42] = 0x14423073  # csrrc x0, sip, x4
+    instr_mem[42] = 0x10423073  # csrrc x0, sie, x4    (sip.STIP is read-only to S-mode)
     instr_mem[43] = 0x10200073  # sret
 
     await run_csr_test_program(dut, instr_mem)
@@ -1159,7 +1159,7 @@ async def test_delegated_user_timer_interrupt_sret(dut):
     assert x8 in (0x60, 0x64), f"Unexpected interrupted U-mode PC in sepc: x8={x8:#x}"
     assert privilege_mode == 0x0, f"Expected U-mode after delegated timer sret, got {privilege_mode:#x}"
     assert scause == 0x80000005, f"Expected supervisor timer interrupt scause, got {scause:#x}"
-    assert (sip & 0x20) == 0, f"Handler should clear STIP, sip={sip:#x}"
+    assert (sip & 0x20) != 0, f"sip.STIP is read-only to S-mode, yet the handler cleared it: sip={sip:#x}"
     assert spp == 0x0, f"Delegated U-mode interrupt should restore/clear SPP to 0, got {spp:#x}"
 
     print("Delegated U-mode timer interrupt/SRET test passed!")

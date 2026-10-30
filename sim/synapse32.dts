@@ -57,7 +57,7 @@
 		interrupt-controller;
 		#interrupt-cells = <1>;
 		interrupts-extended = <&cpu0_intc 11 &cpu0_intc 9>;
-		riscv,ndev = <1>;
+		riscv,ndev = <2>;
 	};
 
 	uart0: uart@20000000 {
