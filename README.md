@@ -215,6 +215,7 @@ The regression tests include:
 - [Zain Siddavatam](https://github.com/SuperChamp234)
 - [Chanchal Bahrani](https://github.com/Chanchal1010)
 - [Shri Vishakh Devanand](https://github.com/5iri)
+- [Shashvat](https://github.com/spr4bhu)
 
 ### Acknowledgements and Resources
 
