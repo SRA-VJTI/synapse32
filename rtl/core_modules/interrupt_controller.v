@@ -3,11 +3,6 @@ module interrupt_controller (
     input wire clk,
     input wire rst,
     
-    // External interrupt inputs
-    input wire timer_interrupt,
-    input wire software_interrupt,
-    input wire external_interrupt,
-    
     // CPU interface
     input wire [31:0] mstatus,
     input wire [31:0] mie,

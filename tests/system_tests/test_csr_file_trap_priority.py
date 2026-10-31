@@ -27,7 +27,7 @@ def _clear_inputs(dut):
         "load_address_misaligned_exception", "store_address_misaligned_exception",
         "instr_page_fault_exception", "load_page_fault_exception",
         "store_page_fault_exception", "instret_increment", "timer_interrupt",
-        "software_interrupt", "external_interrupt",
+        "machine_software_interrupt", "machine_external_interrupt", "supervisor_external_interrupt",
     ):
         getattr(dut, name).value = 0
     dut.csr_addr.value = 0

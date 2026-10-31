@@ -51,10 +51,13 @@ module csr_file (
     output wire [31:0] scounteren_out,
     output wire [1:0] privilege_mode_out,
 
-    // Timer interrupt input
-    input wire timer_interrupt,
-    input wire software_interrupt,
-    input wire external_interrupt
+    // Interrupt sources (priv spec 3.1.9): each drives its own mip bit, whatever mideleg says.
+    input wire timer_interrupt,                // MTIP, CLINT mtimecmp
+    input wire machine_software_interrupt,     // MSIP, CLINT msip
+    input wire machine_external_interrupt,     // MEIP, PLIC context 0
+    input wire supervisor_external_interrupt,  // SEIP, PLIC context 1
+    // The value csrrs/csrrc modify: as read_data, but mip.SEIP is only the software-writable bit.
+    output wire [31:0] rmw_data
 );
 
     // Common CSR addresses
@@ -187,6 +190,7 @@ module csr_file (
     wire [31:0] sstatus = mstatus & SSTATUS_MASK;
     wire [31:0] sie = mie & S_INTERRUPT_MASK;
     wire [31:0] sip = mip & S_INTERRUPT_MASK;
+    assign rmw_data = (csr_addr == CSR_MIP) ? {read_data[31:10], seip_software_pending, read_data[8:0]} : read_data;
     wire cycle_enabled = !mcountinhibit[0];
     wire instret_enabled = !mcountinhibit[2];
     wire writes_mcycle = write_enable && ((csr_addr == CSR_MCYCLE) || (csr_addr == CSR_MCYCLEH));
@@ -308,18 +312,14 @@ module csr_file (
                 instret_counter <= instret_counter + 64'h1;
             end
             
-            // Update MIP/SIP view based on interrupt inputs and delegation.
-            // Delegated interrupts are surfaced through the supervisor-pending
-            // bits so S-mode sees the expected cause codes.
-            mip[1] <= (mideleg[1] ? software_interrupt : 1'b0) |
-                      ssip_software_pending;                    // SSIP
-            mip[3] <= mideleg[1] ? 1'b0 : software_interrupt;   // MSIP
-            mip[5] <= (mideleg[5] ? timer_interrupt : 1'b0) |
-                      stip_software_pending;                    // STIP
-            mip[7] <= mideleg[5] ? 1'b0 : timer_interrupt;      // MTIP
-            mip[9] <= (mideleg[9] ? external_interrupt : 1'b0) |
-                      seip_software_pending;                    // SEIP
-            mip[11] <= mideleg[9] ? 1'b0 : external_interrupt;  // MEIP
+            // mideleg only chooses the mode that takes a trap. SSIP and STIP are written by M-mode
+            // software (an SBI injects STIP on MTIP); SEIP also reflects PLIC context 1.
+            mip[1] <= ssip_software_pending;
+            mip[3] <= machine_software_interrupt;
+            mip[5] <= stip_software_pending;
+            mip[7] <= timer_interrupt;
+            mip[9] <= seip_software_pending | supervisor_external_interrupt;
+            mip[11] <= machine_external_interrupt;
             
             // Handle interrupt entry
             if (interrupt_taken) begin
@@ -407,14 +407,8 @@ module csr_file (
                     CSR_SCAUSE:   scause <= write_data;
                     CSR_STVAL:    stval <= write_data;
                     CSR_SATP:     satp <= write_data;
-                    CSR_SIP: begin
-                        ssip_software_pending <= write_data[1];
-                        stip_software_pending <= write_data[5];
-                        seip_software_pending <= write_data[9];
-                    end
-                    // Keep hardware pending bits driven by the platform, but
-                    // allow software to synthesize/clear supervisor-visible
-                    // pending bits for focused trap tests and SBI flows.
+                    // sip.STIP and sip.SEIP are read-only (priv spec 4.1.3).
+                    CSR_SIP:      ssip_software_pending <= write_data[1];
                     CSR_MIP: begin
                         ssip_software_pending <= write_data[1];
                         stip_software_pending <= write_data[5];

@@ -133,10 +133,10 @@ UART_PROGRAM = f"""
         .global _start
 _start:
         li      a0, {UART_RBR:#x}
-        # Start once the testbench raises the external interrupt pin (interrupts stay disabled).
+        # Start once the testbench raises the software interrupt pin (interrupts stay disabled).
 wait_go:
         csrr    t0, mip
-        srli    t0, t0, 11              # MEIP
+        srli    t0, t0, 3               # MSIP
         andi    t0, t0, 1
         beqz    t0, wait_go
         lw      t1, 0(a0)
@@ -420,12 +420,12 @@ async def test_uart_read_pops_one_byte(dut):
     await _send_byte(dut, ord("A"))
     await _send_byte(dut, ord("B"))
     await _send_byte(dut, ord("C"))
-    dut.external_interrupt.value = 1
+    dut.software_interrupt.value = 1
     for _ in range(2000):
         await RisingEdge(dut.clk)
         if _peek(dut, DONE_ADDR) == DONE_VALUE:
             break
-    dut.external_interrupt.value = 0
+    dut.software_interrupt.value = 0
     assert _peek(dut, DONE_ADDR) == DONE_VALUE, f"latency {latency}: the program did not finish"
     got = [chr(_peek(dut, UART_RESULT) & 0xFF), chr(_peek(dut, UART_RESULT + 4) & 0xFF)]
     assert got == ["A", "B"], f"latency {latency}: read {got}, expected ['A', 'B']"

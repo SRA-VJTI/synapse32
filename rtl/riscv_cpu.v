@@ -45,9 +45,10 @@ module riscv_cpu (
     output wire [1:0] module_instr_privilege_out,
 
     // Interrupt inputs
-    input wire timer_interrupt,
-    input wire software_interrupt,
-    input wire external_interrupt
+    input wire timer_interrupt,                // MTIP
+    input wire machine_software_interrupt,     // MSIP
+    input wire machine_external_interrupt,     // MEIP
+    input wire supervisor_external_interrupt   // SEIP
 );
 
     // Instantiate PC
@@ -267,6 +268,7 @@ module riscv_cpu (
     // CSR file signals
     wire [11:0] csr_addr;
     wire [31:0] csr_read_data;
+    wire [31:0] csr_rmw_data;
     wire [31:0] csr_write_data;
     wire csr_write_enable;
     wire csr_read_enable;
@@ -475,9 +477,6 @@ module riscv_cpu (
     interrupt_controller int_ctrl_inst (
         .clk(clk),
         .rst(rst),
-        .timer_interrupt(timer_interrupt),
-        .software_interrupt(software_interrupt),
-        .external_interrupt(external_interrupt),
         .mstatus(csr_mstatus),
         .mie(csr_mie),
         .mip(csr_mip),
@@ -541,8 +540,10 @@ module riscv_cpu (
         .privilege_mode_out(csr_privilege_mode),
         .instret_increment(instret_increment),
         .timer_interrupt(timer_interrupt),
-        .software_interrupt(software_interrupt),
-        .external_interrupt(external_interrupt)
+        .machine_software_interrupt(machine_software_interrupt),
+        .machine_external_interrupt(machine_external_interrupt),
+        .supervisor_external_interrupt(supervisor_external_interrupt),
+        .rmw_data(csr_rmw_data)
     );
 
     // Value available for EX-stage forwarding from MEM stage.
@@ -571,6 +572,7 @@ module riscv_cpu (
         
         // CSR interface connections
         .csr_read_data(csr_read_data),
+        .csr_rmw_data(csr_rmw_data),
         .csr_valid(csr_valid),
         .csr_addr(csr_addr),
         .csr_read_enable(csr_read_enable),

@@ -10,7 +10,8 @@ module top #(
     input wire clk,
     input wire rst,
     
-    // External interrupt inputs
+    // External interrupt inputs: a machine software interrupt line next to the CLINT's msip, and
+    // an interrupt line that enters the PLIC as source 2 (source 1 is the UART)
     input wire software_interrupt,
     input wire external_interrupt,
     
@@ -72,9 +73,10 @@ module top #(
     wire [31:0] timer_read_data;
     wire timer_valid;
     wire timer_interrupt;
+    wire machine_software_interrupt;
     wire uart_interrupt;
-    wire plic_interrupt;
-    wire external_interrupt_combined;
+    wire plic_machine_interrupt;
+    wire plic_supervisor_interrupt;
     
     // UART module wires
     wire [31:0] uart_read_data;
@@ -158,8 +160,6 @@ module top #(
     wire dcache_mem_gnt;
     wire dcache_mem_rvalid;
     wire [31:0] dcache_mem_rdata;
-
-    assign external_interrupt_combined = external_interrupt | plic_interrupt;
 
     // Use memory map macros for clean address decoding
     assign translated_data_access = cpu_data_mmu_enable && (cpu_mem_write_en || cpu_mem_read_en);
@@ -350,8 +350,9 @@ module top #(
         .clk(clk),
         .rst(rst),
         .timer_interrupt(timer_interrupt),
-        .software_interrupt(software_interrupt),
-        .external_interrupt(external_interrupt_combined),
+        .machine_software_interrupt(machine_software_interrupt || software_interrupt),
+        .machine_external_interrupt(plic_machine_interrupt),
+        .supervisor_external_interrupt(plic_supervisor_interrupt),
         .module_instr_in(instr_to_cpu),
         .module_read_data_in(cpu_data_rdata),
         .module_pc_out(cpu_pc_out),
@@ -472,7 +473,8 @@ module top #(
         .read_enable(data_read_fire && timer_access),
         .read_data(timer_read_data),
         .timer_valid(timer_valid),
-        .timer_interrupt(timer_interrupt)
+        .timer_interrupt(timer_interrupt),
+        .machine_software_interrupt(machine_software_interrupt)
     );
 
     // Instantiate the UART module
@@ -499,8 +501,9 @@ module top #(
         .read_enable(data_read_fire && plic_access),
         .read_data(plic_read_data),
         .plic_valid(plic_valid),
-        .source_irq(uart_interrupt),
-        .external_interrupt(plic_interrupt)
+        .source_irq({external_interrupt, uart_interrupt}),
+        .machine_external_interrupt(plic_machine_interrupt),
+        .supervisor_external_interrupt(plic_supervisor_interrupt)
     );
 
 `ifdef COCOTB_SIM
