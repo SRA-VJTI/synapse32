@@ -54,7 +54,8 @@ module csr_file (
     // Timer interrupt input
     input wire timer_interrupt,
     input wire software_interrupt,
-    input wire external_interrupt
+    input wire external_interrupt,
+    input wire machine_software_interrupt
 );
 
     // Common CSR addresses
@@ -313,7 +314,9 @@ module csr_file (
             // bits so S-mode sees the expected cause codes.
             mip[1] <= (mideleg[1] ? software_interrupt : 1'b0) |
                       ssip_software_pending;                    // SSIP
-            mip[3] <= mideleg[1] ? 1'b0 : software_interrupt;   // MSIP
+            // CLINT msip is machine-level regardless of mideleg (priv spec 3.1.9).
+            mip[3] <= (mideleg[1] ? 1'b0 : software_interrupt) |
+                      machine_software_interrupt;               // MSIP
             mip[5] <= (mideleg[5] ? timer_interrupt : 1'b0) |
                       stip_software_pending;                    // STIP
             mip[7] <= mideleg[5] ? 1'b0 : timer_interrupt;      // MTIP
