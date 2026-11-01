@@ -15,7 +15,8 @@ module timer (
     
     // Timer interrupt output
     output wire timer_interrupt,
-    output wire machine_software_interrupt
+    output wire machine_software_interrupt,
+    output wire [63:0] mtime_out
 );
 
     // Timer registers
@@ -30,6 +31,7 @@ module timer (
     // Timer interrupt generation
     assign timer_interrupt = (mtime >= mtimecmp);
     assign machine_software_interrupt = msip;
+    assign mtime_out = mtime;
     
     // Timer counter - increments every clock cycle
     always @(posedge clk or posedge rst) begin

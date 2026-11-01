@@ -33,6 +33,7 @@ def _clear_inputs(dut):
     dut.csr_addr.value = 0
     dut.write_data.value = 0
     dut.interrupt_cause_in.value = 0
+    dut.mtime_in.value = 0
     dut.interrupt_pc_in.value = 0
     dut.exception_pc_in.value = 0
     dut.exception_tval_in.value = 0
