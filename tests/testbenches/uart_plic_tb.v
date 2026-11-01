@@ -17,6 +17,10 @@ module uart_plic_tb (
     wire uart_valid;
     wire plic_valid;
     wire uart_interrupt;
+    wire machine_external_interrupt;
+    wire supervisor_external_interrupt;
+
+    assign external_interrupt = machine_external_interrupt || supervisor_external_interrupt;
 
     assign read_data = uart_valid ? uart_read_data :
                        plic_valid ? plic_read_data : 32'h0;
@@ -44,8 +48,9 @@ module uart_plic_tb (
         .read_enable(read_enable),
         .read_data(plic_read_data),
         .plic_valid(plic_valid),
-        .source_irq(uart_interrupt),
-        .external_interrupt(external_interrupt)
+        .source_irq({1'b0, uart_interrupt}),
+        .machine_external_interrupt(machine_external_interrupt),
+        .supervisor_external_interrupt(supervisor_external_interrupt)
     );
 endmodule
 

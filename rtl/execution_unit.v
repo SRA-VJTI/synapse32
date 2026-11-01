@@ -24,6 +24,7 @@ module execution_unit(
     
     // CSR interface inputs
     input wire [31:0] csr_read_data,
+    input wire [31:0] csr_rmw_data,
     input wire csr_valid,
     
     // CSR interface outputs
@@ -186,6 +187,7 @@ csr_exec csr_exec_inst (
     .rs1_value(rs1_value),
     .rs1_addr(rs1_addr),
     .csr_read_data(csr_read_data),
+    .csr_rmw_data(csr_rmw_data),
     .csr_write_data(csr_write_data),
     .csr_write_enable(csr_write_enable),
     .rd_value(csr_rd_value)
