@@ -98,11 +98,11 @@ async def test_interrupt_setup(dut):
     
     # Verify results
     expected_memory = {
-        0x02000000: 0x10000000,  # mtvec value
-        0x02000004: 0x80,        # mie value (MTIE enabled)
-        0x02000008: 0x8,         # mstatus value (MIE enabled)
-        0x0200000C: 0x0,         # mip value (no interrupts pending)
-        0x02000010: 0x1,         # completion flag
+        0x03000000: 0x10000000,  # mtvec value
+        0x03000004: 0x80,        # mie value (MTIE enabled)
+        0x03000008: 0x8,         # mstatus value (MIE enabled)
+        0x0300000C: 0x0,         # mip value (no interrupts pending)
+        0x03000010: 0x1,         # completion flag
     }
     
     print("\nVerifying interrupt setup from memory writes:")
@@ -139,15 +139,15 @@ async def test_ecall_test(dut):
     print("Memory accesses:", mem_writes)
     
     # x1=5 should be written to memory (before ECALL)
-    if 0x02000000 in mem_writes:
-        assert mem_writes[0x02000000] == 5, f"Expected x1=5 at 0x02000000, got {mem_writes[0x02000000]}"
+    if 0x03000000 in mem_writes:
+        assert mem_writes[0x03000000] == 5, f"Expected x1=5 at 0x03000000, got {mem_writes[0x03000000]}"
         print("Memory write before ECALL occurred correctly")
     else:
-        print("Expected memory write at 0x02000000 not found")
+        print("Expected memory write at 0x03000000 not found")
     
     # x4=16 should NOT be written (after ECALL trap)
-    if 0x02000004 in mem_writes:
-        print(f"Memory write at 0x02000004 should not happen (after ECALL), but got {mem_writes[0x02000004]}")
+    if 0x03000004 in mem_writes:
+        print(f"Memory write at 0x03000004 should not happen (after ECALL), but got {mem_writes[0x03000004]}")
     else:
         print("No memory write after ECALL (correct - should have trapped)")
     
@@ -176,15 +176,15 @@ async def test_ebreak_test(dut):
     print("Memory accesses:", mem_writes)
     
     # x1=7 should be written to memory (before EBREAK)
-    if 0x02000000 in mem_writes:
-        assert mem_writes[0x02000000] == 7, f"Expected x1=7 at 0x02000000, got {mem_writes[0x02000000]}"
+    if 0x03000000 in mem_writes:
+        assert mem_writes[0x03000000] == 7, f"Expected x1=7 at 0x03000000, got {mem_writes[0x03000000]}"
         print("Memory write before EBREAK occurred correctly")
     else:
-        print("Expected memory write at 0x02000000 not found")
+        print("Expected memory write at 0x03000000 not found")
     
     # x4=40 should NOT be written (after EBREAK trap)
-    if 0x02000004 in mem_writes:
-        print(f"Memory write at 0x02000004 should not happen (after EBREAK), but got {mem_writes[0x02000004]}")
+    if 0x03000004 in mem_writes:
+        print(f"Memory write at 0x03000004 should not happen (after EBREAK), but got {mem_writes[0x03000004]}")
     else:
         print("No memory write after EBREAK (correct - should have trapped)")
     
@@ -213,15 +213,15 @@ async def test_mret_test(dut):
     print("Memory accesses:", mem_writes)
     
     # Marker 0xAA should be written (before MRET)
-    if 0x02000000 in mem_writes:
-        assert mem_writes[0x02000000] == 0xAA, f"Expected marker 0xAA at 0x02000000, got 0x{mem_writes[0x02000000]:08x}"
+    if 0x03000000 in mem_writes:
+        assert mem_writes[0x03000000] == 0xAA, f"Expected marker 0xAA at 0x03000000, got 0x{mem_writes[0x03000000]:08x}"
         print("Memory write before MRET occurred correctly")
     else:
-        print("Expected memory write at 0x02000000 not found")
+        print("Expected memory write at 0x03000000 not found")
     
     # 0xDEAD should NOT be written (after MRET jump)
-    if 0x02000004 in mem_writes:
-        print(f"Memory write at 0x02000004 should not happen (after MRET), but got 0x{mem_writes[0x02000004]:08x}")
+    if 0x03000004 in mem_writes:
+        print(f"Memory write at 0x03000004 should not happen (after MRET), but got 0x{mem_writes[0x03000004]:08x}")
     else:
         print("No memory write after MRET (correct - should have jumped away)")
     
@@ -304,7 +304,7 @@ async def test_wfi_interrupt(dut):
             print(f"Cycle {cycle}: Memory write addr=0x{addr:08x} data=0x{data:08x}")
 
         # Arm SW interrupt once we know setup reached the pre-WFI marker.
-        if not irq_armed and mem_writes.get(0x02000000) == 0x11:
+        if not irq_armed and mem_writes.get(0x03000000) == 0x11:
             irq_armed = True
             irq_pulse = 4
             dut.software_interrupt.value = 1
@@ -316,18 +316,18 @@ async def test_wfi_interrupt(dut):
                 dut.software_interrupt.value = 0
                 print(f"Cycle {cycle}: Deasserting software_interrupt")
 
-        if mem_writes.get(0x02000008) == 1:
+        if mem_writes.get(0x03000008) == 1:
             print(f"Cycle {cycle}: Completion flag observed")
             break
 
         await RisingEdge(dut.clk)
 
-    assert mem_writes.get(0x02000000) == 0x11, "Pre-WFI marker missing"
-    assert mem_writes.get(0x0200000C) == 0x33, "WFI handler marker missing"
-    assert mem_writes.get(0x02000004) == 0x22, "Post-WFI resume marker missing"
-    assert mem_writes.get(0x02000008) == 1, "Completion flag missing"
+    assert mem_writes.get(0x03000000) == 0x11, "Pre-WFI marker missing"
+    assert mem_writes.get(0x0300000C) == 0x33, "WFI handler marker missing"
+    assert mem_writes.get(0x03000004) == 0x22, "Post-WFI resume marker missing"
+    assert mem_writes.get(0x03000008) == 1, "Completion flag missing"
 
-    assert first_write_cycle[0x0200000C] < first_write_cycle[0x02000004], (
+    assert first_write_cycle[0x0300000C] < first_write_cycle[0x03000004], (
         "Post-WFI marker appeared before handler marker; WFI wake/return order is wrong"
     )
 
@@ -356,7 +356,7 @@ async def test_wfi_interrupt_with_global_mie_clear(dut):
             mem_writes[addr] = int(dut.cpu_mem_write_data.value)
 
         # Pulse once WFI sleeps: a pulse that ends before WFI executes leaves nothing pending.
-        if not irq_armed and mem_writes.get(0x02000000) == 0x11 and int(dut.cpu_inst.wfi_active.value):
+        if not irq_armed and mem_writes.get(0x03000000) == 0x11 and int(dut.cpu_inst.wfi_active.value):
             irq_armed = True
             irq_pulse = 4
             dut.software_interrupt.value = 1
@@ -366,17 +366,17 @@ async def test_wfi_interrupt_with_global_mie_clear(dut):
             if irq_pulse == 0:
                 dut.software_interrupt.value = 0
 
-        if mem_writes.get(0x02000008) == 1:
+        if mem_writes.get(0x03000008) == 1:
             break
         await RisingEdge(dut.clk)
 
-    assert mem_writes.get(0x02000000) == 0x11, "Pre-WFI marker missing"
+    assert mem_writes.get(0x03000000) == 0x11, "Pre-WFI marker missing"
     assert irq_armed, "WFI never slept"
-    assert mem_writes.get(0x02000004) == 0x22, (
+    assert mem_writes.get(0x03000004) == 0x22, (
         "WFI did not resume while global MIE was clear"
     )
-    assert mem_writes.get(0x02000008) == 1, "Completion flag missing"
-    assert 0x0200000C not in mem_writes, "Interrupt was delivered despite MIE=0"
+    assert mem_writes.get(0x03000008) == 1, "Completion flag missing"
+    assert 0x0300000C not in mem_writes, "Interrupt was delivered despite MIE=0"
 
 @cocotb.test()
 async def test_wfi_pending_no_global(dut):
@@ -403,17 +403,17 @@ async def test_wfi_pending_no_global(dut):
             mem_writes[addr] = data
             print(f"Cycle {cycle}: Memory write addr=0x{addr:08x} data=0x{data:08x}")
 
-        if mem_writes.get(0x02000008) == 1:
+        if mem_writes.get(0x03000008) == 1:
             print(f"Cycle {cycle}: Completion flag observed")
             break
 
         await RisingEdge(dut.clk)
 
-    assert mem_writes.get(0x02000000) == 0x11, "Pre-WFI marker missing"
-    assert mem_writes.get(0x02000004) == 0x22, (
+    assert mem_writes.get(0x03000000) == 0x11, "Pre-WFI marker missing"
+    assert mem_writes.get(0x03000004) == 0x22, (
         "Post-WFI marker missing; WFI did not resume with pending enabled interrupt"
     )
-    assert mem_writes.get(0x02000008) == 1, "Completion flag missing"
+    assert mem_writes.get(0x03000008) == 1, "Completion flag missing"
     assert int(dut.cpu_inst.csr_file_inst.mcause.value) == 0, (
         "Interrupt should not have trapped while global MIE was disabled"
     )
@@ -672,7 +672,7 @@ def run_interrupt_setup_test():
         0x00800193,  # addi x3, x0, 8        # Load immediate: Set x3 to 0x8 (MIE bit - global machine interrupt enable)
         0x30019073,  # csrw mstatus, x3      # Write CSR: Set mstatus to value in x3 (enable interrupts)
         0x30502273,  # csrr x4, mtvec        # Read CSR: Read mtvec value into x4
-        0x020002b7,  # lui x5 0x2000         # Load immediate: Set x5 to memory base address 0x02000000
+        0x030002b7,  # lui x5 0x3000         # Load immediate: Set x5 to memory base address 0x03000000
         0x0042a023,  # sw x4, 0(x5)          # Store word: Store mtvec value (x4) to memory at x5+0
         0x30402373,  # csrr x6, mie          # Read CSR: Read mie value into x6
         0x0062a223,  # sw x6, 4(x5)          # Store word: Store mie value (x6) to memory at x5+4
@@ -692,7 +692,7 @@ def run_ecall_test():
         0x10000137,  # lui x2, 0x10000       # Load upper immediate: Set x2 (sp) to point to 0x10000000 (MTVEC base)
         0x30511073,  # csrw mtvec, x2        # Write CSR: Set mtvec (trap vector) to value in x2
         0x00500093,  # addi x1, x0, 5        # Load immediate: Set x1 to 5 (test value before ECALL)
-        0x020001b7,  # lui x3, 0x2000        # Load immediate: Set x3 to memory base address 0x02000000
+        0x030001b7,  # lui x3, 0x3000        # Load immediate: Set x3 to memory base address 0x03000000
         0x0011a023,  # sw x1, 0(x3)          # Store word: Store x1 (5) to memory at x3+0
         0x00000073,  # ecall                 # Environment call - should trigger trap
         0x01000213,  # addi x4, x0, 16       # Load immediate: Set x4 to 16 (should not execute after ECALL)
@@ -709,7 +709,7 @@ def run_ebreak_test():
         0x10000137,  # lui x2, 0x10000       # Load upper immediate: Set x2 (sp) to point to 0x10000000 (MTVEC base)
         0x30511073,  # csrw mtvec, x2        # Write CSR: Set mtvec (trap vector) to value in x2
         0x00700093,  # addi x1, x0, 7        # Load immediate: Set x1 to 7 (test value before EBREAK)
-        0x020001b7,  # lui x3, 0x2000        # Load immediate: Set x3 to memory base address 0x02000000
+        0x030001b7,  # lui x3, 0x3000        # Load immediate: Set x3 to memory base address 0x03000000
         0x0011a023,  # sw x1, 0(x3)          # Store word: Store x1 (7) to memory at x3+0
         0x00100073,  # ebreak                # Breakpoint instruction - should trigger trap
         0x02800213,  # addi x4, x0, 40       # Load immediate: Set x4 to 40 (should not execute after EBREAK)
@@ -727,7 +727,7 @@ def run_mret_test():
         0x30009073,  # csrw mstatus, x1      # Write CSR: Set mstatus to value in x1 (set MPP)
         0x10000137,  # lui x2, 0x10000       # Load upper immediate: Set x2 to 0x10000000 (return address)
         0x34111073,  # csrw mepc, x2         # Write CSR: Set mepc (machine exception program counter) to value in x2
-        0x020001b7,  # lui x3, 0x2000        # Load immediate: Set x3 to memory base address 0x02000000
+        0x030001b7,  # lui x3, 0x3000        # Load immediate: Set x3 to memory base address 0x03000000
         0x0AA00213,  # addi x4, x0, 0xAA     # Load immediate: Set x4 to 0xAA (marker value before MRET)
         0x0041a023,  # sw x4, 0(x3)          # Store word: Store x4 (0xAA) to memory at x3+0
         0x30200073,  # mret                  # Machine return - should return to address in mepc
@@ -822,7 +822,7 @@ def run_wfi_interrupt_test():
         0x30409073,  # csrw mie, x1
         0x00800093,  # addi x1, x0, 8       # MIE global
         0x30009073,  # csrw mstatus, x1
-        0x02000137,  # lui x2, 0x2000       # data base: 0x02000000
+        0x03000137,  # lui x2, 0x3000       # data base: 0x03000000
         0x01100213,  # addi x4, x0, 0x11    # pre-WFI marker
         0x00412023,  # sw x4, 0(x2)
         0x10500073,  # wfi
@@ -856,7 +856,7 @@ def run_wfi_interrupt_with_global_mie_clear_test():
         0x30509073,  # csrw mtvec, x1
         0x00800093,  # addi x1, x0, 8           # MSIE only
         0x30409073,  # csrw mie, x1
-        0x02000137,  # lui x2, 0x2000           # data base: 0x02000000
+        0x03000137,  # lui x2, 0x3000           # data base: 0x03000000
         0x01100213,  # addi x4, x0, 0x11        # pre-WFI marker
         0x00412023,  # sw x4, 0(x2)
         0x10500073,  # wfi
@@ -880,7 +880,7 @@ def run_wfi_pending_no_global_test():
     even when the global MIE bit is clear.
     """
     main_program = [
-        0x02000137,  # lui x2, 0x2000       # data base: 0x02000000
+        0x03000137,  # lui x2, 0x3000       # data base: 0x03000000
         0x02000093,  # addi x1, x0, 0x20    # STIP bit
         0x30409073,  # csrw mie, x1         # enable STIP source in MIE
         0x34409073,  # csrw mip, x1         # pend STIP via supervisor-visible MIP

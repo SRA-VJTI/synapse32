@@ -72,6 +72,7 @@ module top #(
     wire [31:0] timer_read_data;
     wire timer_valid;
     wire timer_interrupt;
+    wire machine_software_interrupt;
     wire uart_interrupt;
     wire plic_interrupt;
     wire external_interrupt_combined;
@@ -352,6 +353,7 @@ module top #(
         .timer_interrupt(timer_interrupt),
         .software_interrupt(software_interrupt),
         .external_interrupt(external_interrupt_combined),
+        .machine_software_interrupt(machine_software_interrupt),
         .module_instr_in(instr_to_cpu),
         .module_read_data_in(cpu_data_rdata),
         .module_pc_out(cpu_pc_out),
@@ -472,7 +474,8 @@ module top #(
         .read_enable(data_read_fire && timer_access),
         .read_data(timer_read_data),
         .timer_valid(timer_valid),
-        .timer_interrupt(timer_interrupt)
+        .timer_interrupt(timer_interrupt),
+        .machine_software_interrupt(machine_software_interrupt)
     );
 
     // Instantiate the UART module
