@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 async def uart_send_byte(dut, byte, baud_cycles=None):
     """Drive one 8N1 byte using the divisor currently programmed in the DUT."""
     if baud_cycles is None:
-        baud_cycles = int(dut.uart_inst.baud_div.value) + 1
+        baud_cycles = 16 * int(dut.uart_inst.baud_div.value)
     dut.uart_rx.value = 0
     await ClockCycles(dut.clk, baud_cycles)
     for bit in range(8):
@@ -37,7 +37,7 @@ UART_STATUS  = UART_LSR
 
 class UartMonitor:
     """Monitor the UART TX line and decode transmitted bytes"""
-    def __init__(self, uart_tx, clk, baud_rate=5000000):
+    def __init__(self, uart_tx, clk, baud_rate=3125000):
         self.tx = uart_tx
         self.clk = clk
         self.baud_period_cycles = int(50_000_000 / baud_rate)  # Baud period in clock cycles
@@ -57,7 +57,7 @@ class UartMonitor:
             current_time = get_sim_time(units="ns")
             print("Start bit detected at time:", current_time)
             
-            await Timer((self.baud_period_cycles + 1) * 20, units="ns")
+            await Timer(self.baud_period_cycles * 3 // 2 * 20, units="ns")
             
             # Sample data bits (LSB first) - we're now at the center of bit 0
             rx_byte = 0
@@ -71,10 +71,10 @@ class UartMonitor:
                 # Wait one full bit period to get to the center of the next bit
                 # (except for the last bit where we don't need to wait)
                 if bit_num < 7:
-                    await Timer((self.baud_period_cycles + 1) * 20, units="ns")
+                    await Timer(self.baud_period_cycles * 20, units="ns")
             
-            # Wait one full bit period to get past the stop bit
-            await Timer((self.baud_period_cycles + 1) * 20, units="ns")
+            # Wait one full bit period to the center of the stop bit
+            await Timer(self.baud_period_cycles * 20, units="ns")
             current_time = get_sim_time(units="ns")
             print(f"Stop bit received at time: {current_time}, RX byte: 0x{rx_byte:02x}")
             
@@ -118,8 +118,8 @@ def run_uart_hello_test():
     """Create assembly program that outputs 'Hello UART!' via UART"""
     
     # UART configuration for fast simulation
-    # Baud divisor = 50,000,000 / 5,000,000 = 10 (5 MHz baud rate)
-    BAUD_DIVISOR = 10
+    # Baud divisor 1: 50 MHz / (16 x 1) = 3,125,000 baud
+    BAUD_DIVISOR = 1
     
     instr_mem = []
     
@@ -137,9 +137,9 @@ def run_uart_hello_test():
         0x08300093,  # addi x1, x0, 0x83
         0x00112623,  # sw x1, 12(x2)         # LCR = 0x83
 
-        # DLL = 10 (baud divisor low byte)
-        0x00a00093,  # addi x1, x0, 10
-        0x00112023,  # sw x1, 0(x2)          # DLL = 10
+        # DLL = 1 (baud divisor low byte)
+        0x00100093,  # addi x1, x0, 1
+        0x00112023,  # sw x1, 0(x2)          # DLL = 1
 
         # DLH = 0
         0x00000093,  # addi x1, x0, 0
@@ -235,8 +235,8 @@ def run_uart_status_test():
     """Create assembly program that tests UART status register"""
     
     # UART configuration - same baud rate as hello test
-    # Baud divisor = 50,000,000 / 5,000,000 = 10 (5 MHz baud rate)
-    BAUD_DIVISOR = 10
+    # Baud divisor 1: 50 MHz / (16 x 1) = 3,125,000 baud
+    BAUD_DIVISOR = 1
     
     # NS16550 poll: lw x1,20(x2); andi x1,x1,32; beq x1,x0,-8
     POLL = [0x01412083, 0x0200f093, 0xfe008ce3]
@@ -250,8 +250,8 @@ def run_uart_status_test():
         0x08300093,  # addi x1, x0, 0x83
         0x00112623,  # sw x1, 12(x2)         # LCR
 
-        # DLL=10, DLH=0
-        0x00a00093,  # addi x1, x0, 10
+        # DLL=1, DLH=0
+        0x00100093,  # addi x1, x0, 1
         0x00112023,  # sw x1, 0(x2)          # DLL
         0x00000093,  # addi x1, x0, 0
         0x00112223,  # sw x1, 4(x2)          # DLH
@@ -303,8 +303,8 @@ def run_uart_fifo_burst_test():
         0x08300093,  # addi x1, x0, 0x83
         0x00112623,  # sw x1, 12(x2)
 
-        # DLL=10, DLH=0
-        0x00a00093,  # addi x1, x0, 10
+        # DLL=1, DLH=0
+        0x00100093,  # addi x1, x0, 1
         0x00112023,  # sw x1, 0(x2)
         0x00000093,  # addi x1, x0, 0
         0x00112223,  # sw x1, 4(x2)
@@ -351,8 +351,8 @@ def run_uart_fifo_status_test():
         0x08300093,  # addi x1, x0, 0x83
         0x00112623,  # sw x1, 12(x2)
 
-        # DLL=10, DLH=0
-        0x00a00093,  # addi x1, x0, 10
+        # DLL=1, DLH=0
+        0x00100093,  # addi x1, x0, 1
         0x00112023,  # sw x1, 0(x2)
         0x00000093,  # addi x1, x0, 0
         0x00112223,  # sw x1, 4(x2)
@@ -408,8 +408,8 @@ def run_uart_fifo_group_burst_test():
         0x08300093,  # addi x1, x0, 0x83
         0x00112623,  # sw x1, 12(x2)
 
-        # DLL=10, DLH=0
-        0x00a00093,  # addi x1, x0, 10
+        # DLL=1, DLH=0
+        0x00100093,  # addi x1, x0, 1
         0x00112023,  # sw x1, 0(x2)
         0x00000093,  # addi x1, x0, 0
         0x00112223,  # sw x1, 4(x2)
@@ -455,8 +455,8 @@ def run_uart_rx_test():
         0x08300093,  # addi x1, x0, 0x83
         0x00112623,  # sw x1, 12(x2)
 
-        # DLL=10, DLH=0
-        0x00a00093,  # addi x1, x0, 10
+        # DLL=1, DLH=0
+        0x00100093,  # addi x1, x0, 1
         0x00112023,  # sw x1, 0(x2)
         0x00000093,  # addi x1, x0, 0
         0x00112223,  # sw x1, 4(x2)
@@ -520,7 +520,7 @@ async def monitor_cpu_execution(dut, test_name, max_cycles=1000):
         # Check for completion flag
         if 0x02000000 in mem_writes or 0x0200000C in mem_writes:
             # Give more cycles for UART transmission to complete
-            if cycle > 2000:
+            if cycle > 3000:
                 break
     
     return mem_writes
@@ -542,12 +542,12 @@ async def test_uart_hello_output(dut):
     await ClockCycles(dut.clk, 5)
     dut.rst.value = 0
     
-    # Start UART monitor with 5MHz (matching the test program)
-    uart_monitor = UartMonitor(dut.uart_tx, dut.clk, baud_rate=5000000)
+    # Start UART monitor at 3.125 Mbaud (matching the test program)
+    uart_monitor = UartMonitor(dut.uart_tx, dut.clk, baud_rate=3125000)
     monitor_task = cocotb.start_soon(uart_monitor.start_monitoring())
     
     # Monitor execution (reduced cycles due to faster baud rate)
-    mem_writes = await monitor_cpu_execution(dut, "uart_hello", max_cycles=2000)
+    mem_writes = await monitor_cpu_execution(dut, "uart_hello", max_cycles=3000)
     
     log.info("\nVerifying UART Hello World output:")
     log.info("Memory writes:", mem_writes)
@@ -592,12 +592,12 @@ async def test_uart_status_register(dut):
     await ClockCycles(dut.clk, 5)
     dut.rst.value = 0
     
-    # Start UART monitor with 5MHz (same as hello test)
-    uart_monitor = UartMonitor(dut.uart_tx, dut.clk, baud_rate=5000000)
+    # Start UART monitor at 3.125 Mbaud (same as hello test)
+    uart_monitor = UartMonitor(dut.uart_tx, dut.clk, baud_rate=3125000)
     monitor_task = cocotb.start_soon(uart_monitor.start_monitoring())
     
     # Monitor execution (reduced cycles due to faster baud rate)
-    mem_writes = await monitor_cpu_execution(dut, "uart_status", max_cycles=1500)
+    mem_writes = await monitor_cpu_execution(dut, "uart_status", max_cycles=2200)
     
     log.info("\nVerifying UART status register behavior:")
     log.info("Memory writes:", mem_writes)
@@ -644,11 +644,11 @@ async def test_uart_fifo_burst(dut):
     await ClockCycles(dut.clk, 5)
     dut.rst.value = 0
 
-    uart_monitor = UartMonitor(dut.uart_tx, dut.clk, baud_rate=5000000)
+    uart_monitor = UartMonitor(dut.uart_tx, dut.clk, baud_rate=3125000)
     monitor_task = cocotb.start_soon(uart_monitor.start_monitoring())
 
-    mem_writes = await monitor_cpu_execution(dut, "uart_fifo_burst", max_cycles=2000)
-    await ClockCycles(dut.clk, 300)
+    mem_writes = await monitor_cpu_execution(dut, "uart_fifo_burst", max_cycles=3000)
+    await ClockCycles(dut.clk, 450)
 
     completion_found = 0x02000000 in mem_writes and mem_writes[0x02000000] == 1
     assert completion_found, "Program completion flag not found"
@@ -676,7 +676,7 @@ async def test_uart_fifo_status(dut):
     await ClockCycles(dut.clk, 5)
     dut.rst.value = 0
 
-    mem_writes = await monitor_cpu_execution(dut, "uart_fifo_status", max_cycles=2000)
+    mem_writes = await monitor_cpu_execution(dut, "uart_fifo_status", max_cycles=3000)
 
     initial_lsr = mem_writes.get(0x02000000)
     queued_lsr = mem_writes.get(0x02000004)
@@ -711,11 +711,11 @@ async def test_uart_fifo_group_burst(dut):
     await ClockCycles(dut.clk, 5)
     dut.rst.value = 0
 
-    uart_monitor = UartMonitor(dut.uart_tx, dut.clk, baud_rate=5000000)
+    uart_monitor = UartMonitor(dut.uart_tx, dut.clk, baud_rate=3125000)
     cocotb.start_soon(uart_monitor.start_monitoring())
 
-    mem_writes = await monitor_cpu_execution(dut, "uart_fifo_group_burst", max_cycles=6000)
-    await ClockCycles(dut.clk, 500)
+    mem_writes = await monitor_cpu_execution(dut, "uart_fifo_group_burst", max_cycles=9000)
+    await ClockCycles(dut.clk, 750)
 
     completion_found = 0x02000000 in mem_writes and mem_writes[0x02000000] == 1
     assert completion_found, "Program completion flag not found"
@@ -752,7 +752,7 @@ async def test_uart_rx(dut):
 
     cocotb.start_soon(inject_rx_byte())
 
-    mem_writes = await monitor_cpu_execution(dut, "uart_rx", max_cycles=2000)
+    mem_writes = await monitor_cpu_execution(dut, "uart_rx", max_cycles=3000)
 
     received = mem_writes.get(0x02000000)
     lsr_after = mem_writes.get(0x02000004)

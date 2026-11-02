@@ -7,7 +7,7 @@
 
 	chosen {
 		stdout-path = &uart0;
-		bootargs = "console=ttyS0,115200 earlycon=uart8250,mmio32,0x20000000 loglevel=8 rdinit=/init cpuidle.off=1";
+		bootargs = "console=ttyS0,3125000 earlycon=uart8250,mmio32,0x20000000 loglevel=8 rdinit=/init cpuidle.off=1";
 	};
 
 	cpus {
@@ -64,7 +64,7 @@
 		compatible = "ns16550a";
 		reg = <0x20000000 0x00001000>;
 		clock-frequency = <50000000>;
-		current-speed = <115200>;
+		current-speed = <3125000>;
 		interrupt-parent = <&plic>;
 		interrupts = <1>;
 		reg-shift = <2>;

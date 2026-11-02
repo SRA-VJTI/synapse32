@@ -393,7 +393,7 @@ async def test_held_store_keeps_forwarded_operand(dut):
 
 
 async def _send_byte(dut, value: int) -> None:
-    bit_cycles = int(dut.uart_inst.baud_div.value) + 1
+    bit_cycles = 16 * int(dut.uart_inst.baud_div.value)
     for bit in [0] + [(value >> i) & 1 for i in range(8)] + [1]:
         dut.uart_rx.value = bit
         await ClockCycles(dut.clk, bit_cycles)
