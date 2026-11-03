@@ -81,6 +81,9 @@ reg [2:0]  rx_state;
 reg [7:0]  rx_shift;
 reg [2:0]  rx_bit_count;
 reg [3:0]  rx_tick_count;
+// rx is asynchronous to clk: two flops before the receiver uses it.
+reg        rx_meta;
+reg        rx_sync;
 reg [7:0]  rbr;         // Receive Buffer Register
 reg        rx_oe;       // LSR[1]: Overrun Error
 reg [7:0]  rx_fifo [0:TX_FIFO_DEPTH-1];
@@ -152,6 +155,8 @@ initial begin
     rx_shift         = 8'h00;
     rx_bit_count     = 3'b0;
     rx_tick_count    = 4'd0;
+    rx_meta          = 1'b1;
+    rx_sync          = 1'b1;
     rbr              = 8'h00;
     rx_oe            = 1'b0;
     rx_fifo_head     = 4'd0;
@@ -185,6 +190,8 @@ always @(posedge clk or posedge rst) begin
         rx_shift         <= 8'h00;
         rx_bit_count     <= 3'b0;
         rx_tick_count    <= 4'd0;
+        rx_meta          <= 1'b1;
+        rx_sync          <= 1'b1;
         rbr              <= 8'h00;
         rx_oe            <= 1'b0;
         rx_fifo_head     <= 4'd0;
@@ -320,10 +327,13 @@ always @(posedge clk or posedge rst) begin
         end
 
         // ---- RX state machine ----
+        rx_meta <= rx;
+        rx_sync <= rx_meta;
+
         // Start bit seen on a tick, confirmed 7 ticks later (its middle); bits sampled 16 ticks apart.
         case (rx_state)
             RX_IDLE: begin
-                if (baud_tick && !rx) begin
+                if (baud_tick && !rx_sync) begin
                     rx_tick_count <= 4'd0;
                     rx_state      <= RX_START;
                 end
@@ -332,7 +342,7 @@ always @(posedge clk or posedge rst) begin
                 if (baud_tick && (rx_tick_count != 4'd6)) begin
                     rx_tick_count <= rx_tick_count + 1'b1;
                 end else if (baud_tick) begin
-                    if (!rx) begin
+                    if (!rx_sync) begin
                         rx_tick_count <= 4'd0;
                         rx_state      <= RX_DATA;
                         rx_bit_count  <= 3'b0;
@@ -347,7 +357,7 @@ always @(posedge clk or posedge rst) begin
                     rx_tick_count <= rx_tick_count + 1'b1;
                 end else if (baud_tick) begin
                     rx_tick_count               <= 4'd0;
-                    rx_shift[rx_bit_count]      <= rx;
+                    rx_shift[rx_bit_count]      <= rx_sync;
                     if (rx_bit_count == 3'd7) begin
                         rx_state <= RX_STOP;
                     end else begin
@@ -360,7 +370,7 @@ always @(posedge clk or posedge rst) begin
                     rx_tick_count <= rx_tick_count + 1'b1;
                 end else if (baud_tick) begin
                     // Sample stop bit; if high → valid frame
-                    if (rx && !rx_fifo_clear_request) begin
+                    if (rx_sync && !rx_fifo_clear_request) begin
                         // A simultaneous RBR read frees a slot at this edge.
                         // An explicit FIFO clear discards the arriving byte.
                         if (rx_fifo_full && !rx_fifo_pop_request) begin
