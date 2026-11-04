@@ -632,8 +632,9 @@ always @(*) begin
     end
 
     // mtval/stval may hold the faulting instruction (privileged spec 3.1.16); report it, as Spike does.
+    // Low bits other than 11 encode a 16-bit instruction (unprivileged spec 1.5): only its bits count.
     if (illegal_instruction_exception) begin
-        exception_tval = instr;
+        exception_tval = (instr[1:0] == 2'b11) ? instr : {16'b0, instr[15:0]};
     end
 end
 

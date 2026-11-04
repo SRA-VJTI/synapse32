@@ -2,7 +2,8 @@
 
 The spec allows 0 or the faulting instruction; this core reports the instruction, like Spike. Every
 instruction labelled bad_* is illegal in its case's mode and must trap with cause 2, epc at the label
-and tval the instruction word there; the others must not trap.
+and tval the instruction there (its low 16 bits when they encode a 16-bit instruction); the others must
+not trap.
 """
 
 import os
@@ -41,6 +42,8 @@ bad_m_1:
         csrw    mvendorid, t1
 bad_m_2:
         csrr    t1, 0x7c0
+bad_m_3:
+        .word   0xABCD4501
 """,
     "s": """
 bad_s_0:
@@ -300,9 +303,10 @@ async def test_illegal_instruction_tval(dut):
     for offset in range(0, len(image), 4):
         _poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(image[offset:offset + 4], "little"))
 
-    def word_at(addr):
+    def instruction_at(addr):
         offset = addr - INSTR_MEM_BASE
-        return int.from_bytes(image[offset:offset + 4], "little")
+        word = int.from_bytes(image[offset:offset + 4], "little")
+        return word if word & 0b11 == 0b11 else word & 0xFFFF
 
     failures = []
     checked = 0
@@ -310,7 +314,7 @@ async def test_illegal_instruction_tval(dut):
         labels = sorted(
             (value for key, value in symbols.items() if key.startswith(f"bad_{body}_")),
         )
-        expected = [(handler, 2, word_at(addr), addr) for addr in labels]
+        expected = [(handler, 2, instruction_at(addr), addr) for addr in labels]
         done, count, log = await run_case(dut, privilege, medeleg, mstatus_bits, BODY_ORDER.index(body))
         problems = []
         if not done:
