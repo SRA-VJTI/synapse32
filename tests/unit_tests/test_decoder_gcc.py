@@ -214,5 +214,6 @@ def runCocotbTests():
             module="test_decoder_gcc",
             simulator="verilator",
             includes=[str(incl_dir)],
+            sim_build=os.path.join(os.getcwd(), "sim_build", "sim_build_decoder_gcc"),
             extra_env={"PYTHON3": sys.executable},
         )

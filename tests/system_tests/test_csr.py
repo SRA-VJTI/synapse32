@@ -1513,6 +1513,7 @@ def runCocotbTests():
             includes=[str(incl_dir)],
             simulator="verilator",
             timescale="1ns/1ps",
+            sim_build=os.path.join(os.getcwd(), "sim_build", "sim_build_csr"),
             waves=enable_waves,
             plus_args=plus_args,
         )

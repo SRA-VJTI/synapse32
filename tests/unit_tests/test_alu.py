@@ -388,5 +388,6 @@ def runCocotbTests():
             module="test_alu",
             simulator="verilator",
             includes=[incl_dir],
+            sim_build=os.path.join(os.getcwd(), "sim_build", "sim_build_alu"),
             extra_env={"PYTHON3": sys.executable},
         )

@@ -262,7 +262,8 @@ def runCocotbTests():
         simulator="verilator",
         timescale="1ns/1ps",
         plus_args=plus_args,
-        defines=[f"INSTR_HEX_FILE=\"{hex_file}\""]  # Pass as Verilog define
+        defines=[f"INSTR_HEX_FILE=\"{hex_file}\""],  # Pass as Verilog define
+        sim_build=os.path.join(os.getcwd(), "sim_build", "sim_build_fibonacci"),
     )
 
 if __name__ == "__main__":
