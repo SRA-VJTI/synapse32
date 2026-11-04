@@ -72,9 +72,11 @@ wire tx_fifo_full = (tx_fifo_count == TX_FIFO_DEPTH);
 wire tx_temt = !tx_busy && !tx_start_pending && tx_fifo_empty;
 // In FIFO mode, LSR[5] reports the TX FIFO/holding register is empty.
 wire tx_thre = fifo_enabled ? tx_fifo_empty : (!tx_busy && !tx_start_pending);
-reg tx_fifo_pushed;
-reg tx_fifo_popped;
-reg tx_fifo_cleared;
+wire tx_fifo_pop = tx_bit_tick && !tx_fifo_empty &&
+                   (((tx_state == TX_IDLE) && !tx_start_pending) || (tx_state == TX_STOP));
+wire tx_fifo_push = write_enable && uart_valid && (reg_sel == 3'd0) && !dlab && fifo_enabled &&
+                    !tx_fifo_full;
+wire tx_fifo_clear_request = write_enable && uart_valid && (reg_sel == 3'd2) && write_data[2];
 
 // RX state machine
 reg [2:0]  rx_state;
@@ -90,9 +92,6 @@ reg [7:0]  rx_fifo [0:TX_FIFO_DEPTH-1];
 reg [3:0]  rx_fifo_head;
 reg [3:0]  rx_fifo_tail;
 reg [4:0]  rx_fifo_count;
-reg        rx_fifo_pushed;
-reg        rx_fifo_popped;
-reg        rx_fifo_cleared;
 wire       rx_dr = (rx_fifo_count != 0); // LSR[0]: Data Ready
 wire       rx_fifo_full = (rx_fifo_count == TX_FIFO_DEPTH);
 wire [7:0] rx_fifo_data = rx_fifo[rx_fifo_head];
@@ -105,6 +104,12 @@ localparam RX_IDLE  = 3'd0;
 localparam RX_START = 3'd1;
 localparam RX_DATA  = 3'd2;
 localparam RX_STOP  = 3'd3;
+// Stop bit sampled high. A simultaneous RBR read frees a slot at this edge;
+// an explicit FIFO clear discards the arriving byte.
+wire rx_frame_valid = baud_tick && (rx_state == RX_STOP) && (rx_tick_count == 4'd15) &&
+                     rx_sync && !rx_fifo_clear_request;
+wire rx_overrun = rx_frame_valid && rx_fifo_full && !rx_fifo_pop_request;
+wire rx_fifo_push = rx_frame_valid && !rx_overrun;
 
 // LSR: bit6=TEMT, bit5=THRE, bit1=OE, bit0=DR
 wire [7:0] lsr = {1'b0, tx_temt, tx_thre, 3'b0, rx_oe, rx_dr};
@@ -200,13 +205,6 @@ always @(posedge clk or posedge rst) begin
         thre_irq         <= 1'b0;
         tx_thre_prev     <= 1'b1;
     end else begin
-        tx_fifo_pushed = 1'b0;
-        tx_fifo_popped = 1'b0;
-        tx_fifo_cleared = 1'b0;
-        rx_fifo_pushed = 1'b0;
-        rx_fifo_popped = 1'b0;
-        rx_fifo_cleared = 1'b0;
-
         // ---- baud counter + TX state machine (runs first) ----
         if (baud_tick) begin
             // A divisor of 0 is undefined on a 16550; it runs as 1.
@@ -224,10 +222,9 @@ always @(posedge clk or posedge rst) begin
                         tx_out           <= 1'b0;   // start bit
                         tx_bit_count     <= 4'b0;
                         tx_start_pending <= 1'b0;
-                    end else if (!tx_fifo_empty) begin
+                    end else if (tx_fifo_pop) begin
                         tx_data       <= tx_fifo[tx_fifo_head];
                         tx_fifo_head  <= tx_fifo_head + 1'b1;
-                        tx_fifo_popped = 1'b1;
                         tx_state      <= TX_START;
                         tx_out        <= 1'b0;   // start bit
                         tx_bit_count  <= 4'b0;
@@ -252,10 +249,9 @@ always @(posedge clk or posedge rst) begin
                     end
                 end
                 TX_STOP: begin
-                    if (!tx_fifo_empty) begin
+                    if (tx_fifo_pop) begin
                         tx_data       <= tx_fifo[tx_fifo_head];
                         tx_fifo_head  <= tx_fifo_head + 1'b1;
-                        tx_fifo_popped = 1'b1;
                         tx_state      <= TX_START;
                         tx_out        <= 1'b0;   // next start bit
                         tx_bit_count  <= 4'b0;
@@ -275,10 +271,9 @@ always @(posedge clk or posedge rst) begin
                     if (dlab) begin
                         dll <= write_data[7:0];
                     end else if (fifo_enabled) begin
-                        if (!tx_fifo_full) begin
+                        if (tx_fifo_push) begin
                             tx_fifo[tx_fifo_tail] <= write_data[7:0];
                             tx_fifo_tail          <= tx_fifo_tail + 1'b1;
-                            tx_fifo_pushed        = 1'b1;
                         end
                     end else if (!tx_busy && !tx_start_pending) begin
                         tx_data          <= write_data[7:0];
@@ -292,16 +287,14 @@ always @(posedge clk or posedge rst) begin
                 end
                 3'd2: begin
                     fcr <= write_data[7:0];
-                    if (write_data[1]) begin
+                    if (rx_fifo_clear_request) begin
                         rx_fifo_head <= 4'd0;
                         rx_fifo_tail <= 4'd0;
-                        rx_fifo_cleared = 1'b1;
                         rx_oe <= 1'b0;
                     end
-                    if (write_data[2]) begin
+                    if (tx_fifo_clear_request) begin
                         tx_fifo_head  <= 4'd0;
                         tx_fifo_tail  <= 4'd0;
-                        tx_fifo_cleared = 1'b1;
                         if (tx_start_pending && (tx_state == TX_IDLE)) begin
                             tx_start_pending <= 1'b0;
                             tx_busy          <= 1'b0;
@@ -318,11 +311,11 @@ always @(posedge clk or posedge rst) begin
             endcase
         end
 
-        if (tx_fifo_cleared) begin
+        if (tx_fifo_clear_request) begin
             tx_fifo_count <= 5'd0;
-        end else if (tx_fifo_pushed && !tx_fifo_popped) begin
+        end else if (tx_fifo_push && !tx_fifo_pop) begin
             tx_fifo_count <= tx_fifo_count + 1'b1;
-        end else if (!tx_fifo_pushed && tx_fifo_popped) begin
+        end else if (!tx_fifo_push && tx_fifo_pop) begin
             tx_fifo_count <= tx_fifo_count - 1'b1;
         end
 
@@ -369,18 +362,13 @@ always @(posedge clk or posedge rst) begin
                 if (baud_tick && (rx_tick_count != 4'd15)) begin
                     rx_tick_count <= rx_tick_count + 1'b1;
                 end else if (baud_tick) begin
-                    // Sample stop bit; if high → valid frame
-                    if (rx_sync && !rx_fifo_clear_request) begin
-                        // A simultaneous RBR read frees a slot at this edge.
-                        // An explicit FIFO clear discards the arriving byte.
-                        if (rx_fifo_full && !rx_fifo_pop_request) begin
-                            rx_oe <= 1'b1;
-                        end else begin
-                            rx_fifo[rx_fifo_tail] <= rx_shift;
-                            rx_fifo_tail <= rx_fifo_tail + 1'b1;
-                            rx_fifo_pushed = 1'b1;
-                            rbr <= rx_shift;
-                        end
+                    if (rx_overrun) begin
+                        rx_oe <= 1'b1;
+                    end
+                    if (rx_fifo_push) begin
+                        rx_fifo[rx_fifo_tail] <= rx_shift;
+                        rx_fifo_tail <= rx_fifo_tail + 1'b1;
+                        rbr <= rx_shift;
                     end
                     rx_state <= RX_IDLE;
                 end
@@ -392,14 +380,13 @@ always @(posedge clk or posedge rst) begin
         // the receiver FIFO is explicitly cleared, as on a 16550.
         if (rx_fifo_pop_request) begin
             rx_fifo_head <= rx_fifo_head + 1'b1;
-            rx_fifo_popped = 1'b1;
         end
 
-        if (rx_fifo_cleared) begin
+        if (rx_fifo_clear_request) begin
             rx_fifo_count <= 5'd0;
-        end else if (rx_fifo_pushed && !rx_fifo_popped) begin
+        end else if (rx_fifo_push && !rx_fifo_pop_request) begin
             rx_fifo_count <= rx_fifo_count + 1'b1;
-        end else if (!rx_fifo_pushed && rx_fifo_popped) begin
+        end else if (!rx_fifo_push && rx_fifo_pop_request) begin
             rx_fifo_count <= rx_fifo_count - 1'b1;
         end
 
