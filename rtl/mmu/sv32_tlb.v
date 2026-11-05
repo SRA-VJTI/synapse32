@@ -30,6 +30,13 @@ module sv32_tlb #(
                              (ENTRIES <= 16) ? 4 :
                              (ENTRIES <= 32) ? 5 : 6;
 
+    // 1 to 64 entries.
+    generate
+        if ((ENTRIES < 1) || (ENTRIES > 64)) begin : g_invalid_parameters
+            sv32_tlb_parameters_out_of_range invalid_parameters ();
+        end
+    endgenerate
+
     reg entry_valid [0:ENTRIES-1];
     reg [19:0] entry_tag [0:ENTRIES-1];      // vaddr[31:12]
     reg entry_megapage [0:ENTRIES-1];

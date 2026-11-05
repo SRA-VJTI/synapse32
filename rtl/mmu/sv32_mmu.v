@@ -2,7 +2,9 @@
 // Sv32 MMU: a TLB in front of a walker that reads PTEs over the data memory interface, one level
 // at a time. Fetch and data share the walker, data first since its instruction is older; the
 // requesting stage waits until its *_ready is high.
-module sv32_mmu (
+module sv32_mmu #(
+    parameter TLB_ENTRIES = 8
+) (
     input wire clk,
     input wire rst,
     input wire flush_tlb,
@@ -61,7 +63,7 @@ module sv32_mmu (
     reg [31:0] fill_pte;
     reg fill_megapage;
 
-    sv32_tlb tlb_inst (
+    sv32_tlb #(.ENTRIES(TLB_ENTRIES)) tlb_inst (
         .clk(clk),
         .rst(rst),
         .flush(flush_tlb),

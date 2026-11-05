@@ -11,7 +11,14 @@ module top #(
     parameter [32*CACHEABLE_REGIONS-1:0] CACHEABLE_BASES = {`DATA_MEM_BASE, `INSTR_MEM_BASE},
     parameter [32*CACHEABLE_REGIONS-1:0] CACHEABLE_SIZES = {`DATA_MEM_SIZE, `INSTR_MEM_SIZE},
     parameter ICACHE_ENABLE = 1,
-    parameter DCACHE_ENABLE = 1
+    parameter DCACHE_ENABLE = 1,
+    parameter ICACHE_WAYS = 4,
+    parameter ICACHE_SET_INDEX_BITS = 6,
+    parameter ICACHE_WORD_OFFSET_BITS = 2,
+    parameter DCACHE_WAYS = 4,
+    parameter DCACHE_SET_INDEX_BITS = 6,
+    parameter DCACHE_WORD_OFFSET_BITS = 2,
+    parameter TLB_ENTRIES = 8
 ) (
     input wire clk,
     input wire rst,
@@ -161,7 +168,14 @@ module top #(
         .CACHEABLE_BASES(CACHEABLE_BASES),
         .CACHEABLE_SIZES(CACHEABLE_SIZES),
         .ICACHE_ENABLE(ICACHE_ENABLE),
-        .DCACHE_ENABLE(DCACHE_ENABLE)
+        .DCACHE_ENABLE(DCACHE_ENABLE),
+        .ICACHE_WAYS(ICACHE_WAYS),
+        .ICACHE_SET_INDEX_BITS(ICACHE_SET_INDEX_BITS),
+        .ICACHE_WORD_OFFSET_BITS(ICACHE_WORD_OFFSET_BITS),
+        .DCACHE_WAYS(DCACHE_WAYS),
+        .DCACHE_SET_INDEX_BITS(DCACHE_SET_INDEX_BITS),
+        .DCACHE_WORD_OFFSET_BITS(DCACHE_WORD_OFFSET_BITS),
+        .TLB_ENTRIES(TLB_ENTRIES)
     ) cpu_inst (
         .clk(clk),
         .rst(rst),

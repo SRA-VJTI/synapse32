@@ -36,6 +36,12 @@ def dcache(dut):
     return _Scope(dut.cpu_inst, "g_dcache.dcache_inst")
 
 
+def mshr_slots(cache) -> int:
+    """The number of MSHRs: the packed line-address vector holds one 30 - log2(words) bit entry per MSHR."""
+    words = len(cache.data_mem) // len(cache.tag_mem)
+    return len(cache.mshr_line_q) // (30 - (words.bit_length() - 1))
+
+
 def _locate(cache, index: int):
     """The word's data-array row, set, tag, line address and word in line, and the way holding it or None."""
     sets = len(cache.tag_mem)
@@ -73,11 +79,14 @@ def read_word(dut, index: int) -> int:
     if (int(cache.eng_state.value) in (E_EVICT_READ, E_EVICT_WRITE) and not int(cache.eng_clean.value) and
             int(cache.eng_set.value) == set_index and int(cache.eng_tag.value) == tag):
         return _lane(int(cache.data_mem[row].value), int(cache.eng_way.value))
+    words = len(cache.data_mem) // len(cache.tag_mem)
+    line_bits = 30 - (words.bit_length() - 1)
+    lines, bes, datas = (int(x.value) for x in (cache.mshr_line_q, cache.mshr_be_q, cache.mshr_data_q))
     for i in range(int(cache.mshr_count.value)):
-        if int(cache.mshr_line_q[i].value) != line:
+        if (lines >> (i * line_bits)) & ((1 << line_bits) - 1) != line:
             continue
-        be = int(cache.mshr_be_q[i].value) >> (4 * word_in_line)
-        data = int(cache.mshr_data_q[i].value) >> (32 * word_in_line)
+        be = (bes >> (4 * words * i + 4 * word_in_line)) & 0xF
+        data = (datas >> (32 * words * i + 32 * word_in_line)) & 0xFFFF_FFFF
         for byte in range(4):
             if (be >> byte) & 1:
                 mask = 0xFF << (8 * byte)
