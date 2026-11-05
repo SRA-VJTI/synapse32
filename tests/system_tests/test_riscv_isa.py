@@ -54,12 +54,12 @@ async def test_riscv_isa_image(dut):
                     f"{int(dut.cpu_inst.rf_inst0_rd_value_in.value) & 0xFFFFFFFF:08x}\n"
                 )
             # A store commits in the one cycle the core's write completes (taken by the store buffer).
-            if (int(dut.cpu_mem_write_en.value) and int(dut.cpu_data_rvalid.value)
-                    and not int(dut.cpu_store_page_fault.value)):
+            if (int(dut.cpu_inst.module_mem_wr_en.value) and int(dut.cpu_inst.module_data_rvalid_in.value)
+                    and not int(dut.cpu_inst.module_store_page_fault_in.value)):
                 store_pc = int(dut.cpu_inst.ex_mem_inst0_pc_out.value)
-                store_addr = int(dut.cpu_mem_write_addr.value)
-                store_data = int(dut.cpu_mem_write_data.value)
-                byte_enable = int(dut.cpu_write_byte_enable.value)
+                store_addr = int(dut.cpu_inst.module_write_addr.value)
+                store_data = int(dut.cpu_inst.module_wr_data_out.value)
+                byte_enable = int(dut.cpu_inst.module_write_byte_enable.value)
                 for index in range(4):
                     if byte_enable & (1 << index):
                         trace.write(
@@ -78,24 +78,24 @@ async def test_riscv_isa_image(dut):
                 int(dut.cpu_inst.csr_file_inst.mcause.value),
                 int(dut.cpu_inst.csr_file_inst.mtval.value),
                 int(dut.cpu_inst.csr_file_inst.satp.value),
-                int(dut.cpu_mem_read_en.value),
-                int(dut.cpu_mem_write_en.value),
+                int(dut.cpu_inst.module_mem_rd_en.value),
+                int(dut.cpu_inst.module_mem_wr_en.value),
                 int(dut.unified_mem_inst.data_wr_req.value),
                 int(dut.unified_mem_inst.wr_en.value),
-                int(dut.cpu_mem_read_addr.value),
-                int(dut.cpu_mem_write_addr.value),
-                int(dut.cpu_mem_write_data.value),
+                int(dut.cpu_inst.module_read_addr.value),
+                int(dut.cpu_inst.module_write_addr.value),
+                int(dut.cpu_inst.module_wr_data_out.value),
                 int(dut.mem_read_data.value),
                 int(dut.cpu_inst.rf_inst0_wr_en.value),
                 int(dut.cpu_inst.rf_inst0_rd_in.value),
                 int(dut.cpu_inst.rf_inst0_rd_value_in.value),
-                int(dut.cpu_load_page_fault.value),
-                int(dut.cpu_store_page_fault.value),
-                int(dut.cpu_page_fault_addr.value),
+                int(dut.cpu_inst.module_load_page_fault_in.value),
+                int(dut.cpu_inst.module_store_page_fault_in.value),
+                int(dut.cpu_inst.module_page_fault_addr_in.value),
             )
-        if int(dut.cpu_mem_write_en.value):
-            addr = int(dut.cpu_mem_write_addr.value)
-            data = int(dut.cpu_mem_write_data.value) & 0xFFFFFFFF
+        if int(dut.cpu_inst.module_mem_wr_en.value):
+            addr = int(dut.cpu_inst.module_write_addr.value)
+            data = int(dut.cpu_inst.module_wr_data_out.value) & 0xFFFFFFFF
             if addr == tohost_addr and (data & 1):
                 # riscv-tests convention: 1 = pass, else fail code in upper bits.
                 if trace is not None:

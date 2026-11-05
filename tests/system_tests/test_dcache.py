@@ -590,7 +590,7 @@ def _ram(dut, addr: int) -> int:
 
 def _cache(dut):
     try:
-        return dut.dcache_inst
+        return dut.cpu_inst.dcache_inst
     except AttributeError:
         return None
 

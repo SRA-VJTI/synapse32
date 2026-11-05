@@ -636,13 +636,13 @@ async def run_trial(dut, scenario_index, variant, entry_addr, inject_cycle, limi
         if want_entry and trial.entry_cycle is None and int(dut.pc_debug.value) == entry_addr:
             trial.entry_cycle = cycle
         # Count a store once, when it leaves MEM; a page-faulting store is not committed.
-        if int(dut.cpu_data_gnt.value) and int(dut.cpu_mem_write_en.value) and not int(dut.cpu_store_page_fault.value):
-            addr = int(dut.cpu_mem_write_addr.value)
+        if int(dut.cpu_inst.module_data_gnt_in.value) and int(dut.cpu_inst.module_mem_wr_en.value) and not int(dut.cpu_inst.module_store_page_fault_in.value):
+            addr = int(dut.cpu_inst.module_write_addr.value)
             if RESULT_LO <= addr < RESULT_HI:
-                trial.stores.append((addr, int(dut.cpu_mem_write_data.value), int(dut.cpu_write_byte_enable.value)))
+                trial.stores.append((addr, int(dut.cpu_inst.module_wr_data_out.value), int(dut.cpu_inst.module_write_byte_enable.value)))
             elif addr == ACK_ADDR and pin_high:
                 lower_pin = True
-            elif addr == DONE_ADDR and int(dut.cpu_mem_write_data.value) == DONE_VALUE:
+            elif addr == DONE_ADDR and int(dut.cpu_inst.module_wr_data_out.value) == DONE_VALUE:
                 trial.done_cycle = cycle
             elif PAGE_TABLE <= addr < PAGE_TABLE + 0x1000:
                 trial.pte_writes += 1

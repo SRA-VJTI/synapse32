@@ -97,8 +97,8 @@ async def trial(dut, k):
             dut.software_interrupt.value = 0
         await RisingEdge(dut.clk)
         await ReadOnly()
-        if int(dut.cpu_mem_write_en.value):
-            stored[int(dut.cpu_mem_write_addr.value)] = int(dut.cpu_mem_write_data.value)
+        if int(dut.cpu_inst.module_mem_wr_en.value):
+            stored[int(dut.cpu_inst.module_write_addr.value)] = int(dut.cpu_inst.module_wr_data_out.value)
         if mepc is None and int(dut.cpu_inst.interrupt_taken_qualified.value):
             mepc = int(dut.cpu_inst.interrupt_pc.value)
             ex_valid = int(dut.cpu_inst.id_ex_inst0_instr_valid_out.value)

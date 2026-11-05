@@ -45,7 +45,7 @@ def read_word(dut, index: int) -> int:
     """The word at backing-memory word index `index` (the RAM array's index)."""
     word = int(dut.unified_mem_inst.instr_ram[index].value) & 0xFFFF_FFFF
     try:
-        cache = dut.dcache_inst
+        cache = dut.cpu_inst.dcache_inst
     except AttributeError:
         return word
     row, set_index, tag, line, word_in_line, way = _locate(cache, index)

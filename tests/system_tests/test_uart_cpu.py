@@ -501,9 +501,9 @@ async def monitor_cpu_execution(dut, test_name, max_cycles=1000):
         
         # Monitor memory writes to data memory
         try:
-            if hasattr(dut, 'cpu_mem_write_en') and int(dut.cpu_mem_write_en.value):
-                addr = int(dut.cpu_mem_write_addr.value)
-                data = int(dut.cpu_mem_write_data.value)
+            if hasattr(dut.cpu_inst, 'module_mem_wr_en') and int(dut.cpu_inst.module_mem_wr_en.value):
+                addr = int(dut.cpu_inst.module_write_addr.value)
+                data = int(dut.cpu_inst.module_wr_data_out.value)
                 mem_writes[addr] = data
                 log.info(f"Cycle {cycle}: Memory write: addr=0x{addr:08x}, data=0x{data:08x}")
         except Exception:

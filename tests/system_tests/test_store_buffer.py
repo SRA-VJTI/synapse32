@@ -500,11 +500,11 @@ async def _run(dut, image: str, setup=(), inject_cycle=None, limit=20000, covera
             pin_high = True
         await ReadOnly()
         if coverage is not None:
-            writing = int(dut.cpu_mem_write_en.value)
+            writing = int(dut.cpu_inst.module_mem_wr_en.value)
             # A store that waits because the buffer is full; a load that waits on a buffered word.
-            if writing and int(dut.store_buffer_inst.full.value):
+            if writing and int(dut.cpu_inst.store_buffer_inst.full.value):
                 coverage["full"] += 1
-            if not writing and int(dut.cpu_mem_read_en.value) and int(dut.store_buf_match.value):
+            if not writing and int(dut.cpu_inst.module_mem_rd_en.value) and int(dut.cpu_inst.store_buf_match.value):
                 coverage["match"] += 1
         if _peek(dut, DONE_ADDR) == DONE_VALUE:
             return cycle

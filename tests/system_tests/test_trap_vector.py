@@ -471,13 +471,13 @@ async def run_case(dut, mtvec, stvec, privilege, mideleg, medeleg, action, mmu, 
             pin.value = 0
             lower_pin = False
         await ReadOnly()
-        if int(dut.cpu_mem_write_en.value):
-            addr = int(dut.cpu_mem_write_addr.value)
+        if int(dut.cpu_inst.module_mem_wr_en.value):
+            addr = int(dut.cpu_inst.module_write_addr.value)
             if addr == READY_ADDR and pin is not None:
                 raise_pin = True
             elif addr == ACK_ADDR and pin is not None:
                 lower_pin = True
-            elif addr == DONE_ADDR and int(dut.cpu_mem_write_data.value) == DONE_VALUE:
+            elif addr == DONE_ADDR and int(dut.cpu_inst.module_wr_data_out.value) == DONE_VALUE:
                 done = True
                 break
     await RisingEdge(dut.clk)
