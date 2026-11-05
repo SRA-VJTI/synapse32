@@ -6,7 +6,10 @@ module top #(
     parameter FETCH_LATENCY = MEM_LATENCY,  // Fetch side only, when it should differ
     parameter STORE_BUFFER_DEPTH = 4,
     parameter NUM_MSHR = 8,
-    parameter [31:0] BOOT_ADDR = `INSTR_MEM_BASE
+    parameter [31:0] BOOT_ADDR = `INSTR_MEM_BASE,
+    parameter CACHEABLE_REGIONS = 2,
+    parameter [32*CACHEABLE_REGIONS-1:0] CACHEABLE_BASES = {`DATA_MEM_BASE, `INSTR_MEM_BASE},
+    parameter [32*CACHEABLE_REGIONS-1:0] CACHEABLE_SIZES = {`DATA_MEM_SIZE, `INSTR_MEM_SIZE}
 ) (
     input wire clk,
     input wire rst,
@@ -151,7 +154,10 @@ module top #(
     riscv_cpu #(
         .STORE_BUFFER_DEPTH(STORE_BUFFER_DEPTH),
         .NUM_MSHR(NUM_MSHR),
-        .BOOT_ADDR(BOOT_ADDR)
+        .BOOT_ADDR(BOOT_ADDR),
+        .CACHEABLE_REGIONS(CACHEABLE_REGIONS),
+        .CACHEABLE_BASES(CACHEABLE_BASES),
+        .CACHEABLE_SIZES(CACHEABLE_SIZES)
     ) cpu_inst (
         .clk(clk),
         .rst(rst),

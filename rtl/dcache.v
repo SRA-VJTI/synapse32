@@ -6,7 +6,10 @@ module dcache #(
     parameter NUM_WAYS = 4,
     parameter SET_INDEX_BITS = 6,
     parameter WORD_OFFSET_BITS = 2,
-    parameter NUM_MSHR = 8
+    parameter NUM_MSHR = 8,
+    parameter CACHEABLE_REGIONS = 2,
+    parameter [32*CACHEABLE_REGIONS-1:0] CACHEABLE_BASES = {`DATA_MEM_BASE, `INSTR_MEM_BASE},
+    parameter [32*CACHEABLE_REGIONS-1:0] CACHEABLE_SIZES = {`DATA_MEM_SIZE, `INSTR_MEM_SIZE}
 ) (
     input wire clk,
     input wire rst,
@@ -115,7 +118,14 @@ module dcache #(
     wire [WORD_OFFSET_BITS-1:0] req_word = addr[WORD_OFFSET_BITS+1:2];
     wire [TAG_BITS-1:0] req_tag = addr[31:WORD_INDEX_BITS+2];
     wire [LINE_ADDR_BITS-1:0] req_line = addr[31:WORD_OFFSET_BITS+2];
-    wire cacheable = `IS_INSTR_MEM(addr) || `IS_DATA_MEM(addr);
+    reg cacheable;
+    integer region;
+    always @(*) begin
+        cacheable = 1'b0;
+        for (region = 0; region < CACHEABLE_REGIONS; region = region + 1)
+            if (`IN_REGION(addr, CACHEABLE_BASES[32*region +: 32], CACHEABLE_SIZES[32*region +: 32]))
+                cacheable = 1'b1;
+    end
     wire [3:0] lane_be = be << addr[1:0];
     wire [31:0] lane_data = wdata << {addr[1:0], 3'b000};
 

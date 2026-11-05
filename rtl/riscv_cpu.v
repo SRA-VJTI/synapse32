@@ -4,7 +4,11 @@
 module riscv_cpu #(
     parameter STORE_BUFFER_DEPTH = 4,
     parameter NUM_MSHR = 8,
-    parameter [31:0] BOOT_ADDR = `INSTR_MEM_BASE
+    parameter [31:0] BOOT_ADDR = `INSTR_MEM_BASE,
+    // Region r is bits [32*r +: 32] of each list; outside every region is a device.
+    parameter CACHEABLE_REGIONS = 2,
+    parameter [32*CACHEABLE_REGIONS-1:0] CACHEABLE_BASES = {`DATA_MEM_BASE, `INSTR_MEM_BASE},
+    parameter [32*CACHEABLE_REGIONS-1:0] CACHEABLE_SIZES = {`DATA_MEM_SIZE, `INSTR_MEM_SIZE}
 ) (
     input wire clk,
     input wire rst,
@@ -952,7 +956,7 @@ module riscv_cpu #(
     wire cpu_data_bus_req;
     wire cpu_data_req;
     wire [31:0] cpu_data_rdata;
-    wire cpu_ram_access;
+    reg cpu_ram_access;
     wire cpu_device_access;
     wire cpu_load_go;
     wire store_buf_push_req;
@@ -981,9 +985,23 @@ module riscv_cpu #(
     wire dcache_mem_line;
 
     assign translated_data_access = module_data_mmu_enable_out && (module_mem_wr_en || module_mem_rd_en);
-    // Outside RAM is a device: uncached, never forwarded, and its loads wait for earlier writes.
-    assign cpu_ram_access = `IS_DATA_MEM(phys_data_addr) || `IS_INSTR_MEM(phys_data_addr);
+    // Outside the cacheable regions is a device: uncached, never forwarded, and its loads wait for earlier writes.
+    integer region;
+    always @(*) begin
+        cpu_ram_access = 1'b0;
+        for (region = 0; region < CACHEABLE_REGIONS; region = region + 1)
+            if (`IN_REGION(phys_data_addr, CACHEABLE_BASES[32*region +: 32], CACHEABLE_SIZES[32*region +: 32]))
+                cpu_ram_access = 1'b1;
+    end
     assign cpu_device_access = !cpu_ram_access;
+
+    // At least one region; a region of size 0 is empty.
+    generate
+        if (CACHEABLE_REGIONS < 1) begin : g_invalid_parameters
+            riscv_cpu_parameters_out_of_range invalid_parameters ();
+        end
+    endgenerate
+
     // Select the appropriate address for memory access
     assign data_virtual_addr = module_mem_wr_en ? module_write_addr : module_read_addr;
 
@@ -1077,7 +1095,11 @@ module riscv_cpu #(
         .forward_data(store_buf_forward_data)
     );
 
-    icache icache_inst (
+    icache #(
+        .CACHEABLE_REGIONS(CACHEABLE_REGIONS),
+        .CACHEABLE_BASES(CACHEABLE_BASES),
+        .CACHEABLE_SIZES(CACHEABLE_SIZES)
+    ) icache_inst (
         .clk(clk),
         .rst(rst),
         .flush(module_instr_cache_flush_out),
@@ -1095,7 +1117,12 @@ module riscv_cpu #(
         .mem_rdata(instr_mem_rdata)
     );
 
-    dcache #(.NUM_MSHR(NUM_MSHR)) dcache_inst (
+    dcache #(
+        .NUM_MSHR(NUM_MSHR),
+        .CACHEABLE_REGIONS(CACHEABLE_REGIONS),
+        .CACHEABLE_BASES(CACHEABLE_BASES),
+        .CACHEABLE_SIZES(CACHEABLE_SIZES)
+    ) dcache_inst (
         .clk(clk),
         .rst(rst),
         .next_addr(module_next_data_addr_out),

@@ -6,7 +6,10 @@
 module icache #(
     parameter NUM_WAYS = 4,
     parameter SET_INDEX_BITS = 6,
-    parameter WORD_OFFSET_BITS = 2
+    parameter WORD_OFFSET_BITS = 2,
+    parameter CACHEABLE_REGIONS = 2,
+    parameter [32*CACHEABLE_REGIONS-1:0] CACHEABLE_BASES = {`DATA_MEM_BASE, `INSTR_MEM_BASE},
+    parameter [32*CACHEABLE_REGIONS-1:0] CACHEABLE_SIZES = {`DATA_MEM_SIZE, `INSTR_MEM_SIZE}
 ) (
     input wire clk,
     input wire rst,
@@ -72,7 +75,14 @@ module icache #(
     wire [TAG_BITS-1:0] tag = addr[31:WORD_INDEX_BITS+2];
     wire [SET_INDEX_BITS-1:0] fill_set = fill_line[SET_INDEX_BITS-1:0];
     wire [TAG_BITS-1:0] fill_tag = fill_line[LINE_ADDR_BITS-1:SET_INDEX_BITS];
-    wire cacheable = `IS_INSTR_MEM(addr) || `IS_DATA_MEM(addr);
+    reg cacheable;
+    integer region;
+    always @(*) begin
+        cacheable = 1'b0;
+        for (region = 0; region < CACHEABLE_REGIONS; region = region + 1)
+            if (`IN_REGION(addr, CACHEABLE_BASES[32*region +: 32], CACHEABLE_SIZES[32*region +: 32]))
+                cacheable = 1'b1;
+    end
 
     reg [NUM_WAYS-1:0] way_hit;
     reg [31:0] hit_data;

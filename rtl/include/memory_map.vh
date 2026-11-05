@@ -61,5 +61,7 @@
 `define IS_PERIPH_MEM(addr) ((addr) >= `PERIPH_BASE && (addr) <= `PERIPH_END)
 `define IS_UART_MEM(addr)   ((addr) >= `UART_BASE && (addr) <= `UART_END)
 `define IS_PLIC_MEM(addr)   ((addr) >= `PLIC_BASE && (addr) <= `PLIC_END)
+// Wraps instead of overflowing for a region at the top of the address space; size 0 is an empty region.
+`define IN_REGION(addr, base, size) (((addr) - (base)) < (size))
 
 `endif // MEMORY_MAP_VH
