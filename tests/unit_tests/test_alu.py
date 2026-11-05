@@ -21,21 +21,6 @@ def to_twos_complement(value: int, bits: int) -> int:
     return value & ((1 << bits) - 1)
 
 
-def signed_truncating_div(dividend: int, divisor: int) -> int:
-    """RISC-V DIV semantics: truncates toward zero."""
-    assert divisor != 0
-    negative = (dividend < 0) ^ (divisor < 0)
-    quotient = abs(dividend) // abs(divisor)
-    return -quotient if negative else quotient
-
-
-def signed_truncating_rem(dividend: int, divisor: int) -> int:
-    """RISC-V REM semantics: matches dividend sign."""
-    assert divisor != 0
-    quotient = signed_truncating_div(dividend, divisor)
-    return dividend - quotient * divisor
-
-
 @contextmanager
 def prepend_to_path(*path_entries: str):
     """Temporarily prepend directories to PATH for simulator subprocesses."""
@@ -219,7 +204,7 @@ async def test_immediate_operations(dut):
 
 @cocotb.test()
 async def test_m_extension_operations(dut):
-    """Test multiplication and division operations from the M extension."""
+    """Test the M extension multiplications (division is the separate divider)."""
     # MUL: signed * signed low word
     await verify_alu_operation(
         dut, 0x0000FFFF, 0x00001000, 0, 0x30, 0, (0x0000FFFF * 0x1000) & MASK32, "MUL simple")
@@ -239,38 +224,6 @@ async def test_m_extension_operations(dut):
         dut, rs1, rs2, 0, 0x32, 0, (mul_mixed >> 32) & MASK32, "MULHSU signed*unsigned high")
     await verify_alu_operation(
         dut, rs1, rs2, 0, 0x33, 0, (mul_unsigned >> 32) & MASK32, "MULHU unsigned high")
-
-    # DIV signed
-    await verify_alu_operation(
-        dut, 0xFFFFFFFE, 0x00000002, 0, 0x34, 0,
-        to_twos_complement(signed_truncating_div(to_signed32(0xFFFFFFFE), to_signed32(0x2)), 32),
-        "DIV negative dividend")
-    await verify_alu_operation(
-        dut, 0x80000000, 0xFFFFFFFF, 0, 0x34, 0, 0x80000000, "DIV overflow INT_MIN / -1")
-    await verify_alu_operation(
-        dut, 0x12345678, 0, 0, 0x34, 0, 0xFFFFFFFF, "DIV divide by zero")
-
-    # DIVU unsigned
-    await verify_alu_operation(
-        dut, 0x80000000, 0x00000002, 0, 0x35, 0, (0x80000000 // 2) & MASK32, "DIVU simple")
-    await verify_alu_operation(
-        dut, 0x80000000, 0x0, 0, 0x35, 0, 0xFFFFFFFF, "DIVU divide by zero")
-
-    # REM signed
-    await verify_alu_operation(
-        dut, 0xFFFFFFFE, 0x00000003, 0, 0x36, 0,
-        to_twos_complement(signed_truncating_rem(to_signed32(0xFFFFFFFE), to_signed32(0x3)), 32),
-        "REM negative dividend")
-    await verify_alu_operation(
-        dut, 0x80000000, 0xFFFFFFFF, 0, 0x36, 0, 0x00000000, "REM overflow INT_MIN % -1")
-    await verify_alu_operation(
-        dut, 0x89ABCDEF, 0x0, 0, 0x36, 0, 0x89ABCDEF, "REM divide by zero")
-
-    # REMU unsigned
-    await verify_alu_operation(
-        dut, 0x12345678, 0x00000010, 0, 0x37, 0, (0x12345678 % 0x10) & MASK32, "REMU simple")
-    await verify_alu_operation(
-        dut, 0x12345678, 0x0, 0, 0x37, 0, 0x12345678, "REMU divide by zero")
 
 @cocotb.test()
 async def test_default(dut):

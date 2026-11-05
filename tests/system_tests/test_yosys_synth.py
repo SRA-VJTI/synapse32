@@ -3,6 +3,7 @@
 The core and the top level are synthesized; the peripherals around the core are elaborated and checked.
 unified_mem is the simulation backing store and is not part of a board design, so the top level sees it
 as a black box. An out-of-range select becomes undefined logic in hardware, so its warning fails the test.
+The core divides over several cycles, so it holds no combinational divider.
 """
 
 import re
@@ -48,6 +49,8 @@ def runCocotbTests():
         stub = _unified_mem_blackbox(rtl_dir, Path(tmp))
         checks = [(CORE, f"synth -flatten -top {CORE}; check -assert", "")]
         checks += [(TOP, f"synth -flatten -top {TOP}; check -assert", str(stub))]
+        checks += [(f"{CORE} divider", f"hierarchy -check -top {CORE}; proc; opt -fast; "
+                    "select -assert-none t:$div t:$mod t:$divfloor t:$modfloor", "")]
         checks += [(name, f"hierarchy -check -top {name}; proc; flatten; opt_clean; check -assert", "")
                    for name in PERIPHERALS]
         failures = []

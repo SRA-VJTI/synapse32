@@ -57,6 +57,9 @@ MEGAPAGES = {
 }
 PTE_A_D = 0xC0
 
+# Cycles from raising an interrupt pin to EX taking the interrupt: one more for the external pin, through the PLIC.
+# Nothing older holds EX meanwhile: the muldiv loop has no memory access just before a divide.
+PIN_LATENCY = {"software": 1, "external": 2}
 SCENARIOS = ["control", "memory", "csr", "atomic", "muldiv", "exceptions", "fence"]
 # Label of each scenario's loop, used as the address of the execute trigger in trigger variants.
 SCENARIO_LOOP = {"control": "c_loop", "memory": "m_loop", "csr": "k_loop", "atomic": "a_loop",
@@ -588,6 +591,8 @@ class Trial:
         self.bubble_interrupts = 0
         self.pte_writes = 0
         self.trigger_hits = 0
+        self.taken_cycle = None
+        self.divide_at_inject = False
 
 
 async def run_trial(dut, scenario_index, variant, entry_addr, inject_cycle, limit, want_entry=False,
@@ -633,6 +638,9 @@ async def run_trial(dut, scenario_index, variant, entry_addr, inject_cycle, limi
             pin_high = False
             lower_pin = False
         await ReadOnly()
+        if pin is not None and cycle == inject_cycle:
+            cpu = dut.cpu_inst
+            trial.divide_at_inject = bool(int(cpu.div_in_ex.value) and not int(cpu.div_done.value))
         if want_entry and trial.entry_cycle is None and int(dut.pc_debug.value) == entry_addr:
             trial.entry_cycle = cycle
         # Count a store once, when it leaves MEM; a page-faulting store is not committed.
@@ -647,6 +655,8 @@ async def run_trial(dut, scenario_index, variant, entry_addr, inject_cycle, limi
             elif PAGE_TABLE <= addr < PAGE_TABLE + 0x1000:
                 trial.pte_writes += 1
         if watch_taken and int(dut.cpu_inst.interrupt_taken_qualified.value):
+            if trial.taken_cycle is None:
+                trial.taken_cycle = cycle
             trial.interrupt_pcs.append(int(dut.cpu_inst.interrupt_pc.value))
             if not int(dut.cpu_inst.id_ex_inst0_instr_valid_out.value) and int(dut.cpu_inst.if_id_instr_valid_out.value):
                 trial.bubble_interrupts += 1
@@ -685,6 +695,8 @@ async def sweep_variant(dut, variant):
 
     failures = []
     taken_trials = 0
+    divide_latencies = []
+    divide_lost = 0
     bubble_trials = 0
     distinct_pcs = set()
     trial_count = 0
@@ -714,6 +726,11 @@ async def sweep_variant(dut, variant):
                 distinct_pcs.update(trial.interrupt_pcs)
             if trial.bubble_interrupts:
                 bubble_trials += 1
+            if trial.divide_at_inject:
+                if trial.taken_cycle is None:
+                    divide_lost += 1
+                else:
+                    divide_latencies.append(trial.taken_cycle - inject)
             problem = None
             if trial.done_cycle is None:
                 problem = "did not finish"
@@ -744,6 +761,15 @@ async def sweep_variant(dut, variant):
         dut._log.error(line)
     assert not failures, f"{name}: {len(failures)} of {trial_count} trials not transparent; first: {failures[0]}"
     assert bubble_trials > 0, f"{name}: no trial took the interrupt on an EX bubble; coverage lost"
+    source = variant[3]
+    if source in PIN_LATENCY:
+        # A divide in EX does not hold an interrupt off: it is taken as soon as the pin reaches EX.
+        assert divide_latencies, f"{name}: no interrupt was raised during a divide; coverage lost"
+        assert not divide_lost, f"{name}: {divide_lost} interrupts raised during a divide were never taken"
+        worst = max(divide_latencies)
+        assert worst <= PIN_LATENCY[source], (
+            f"{name}: an interrupt raised during a divide waited {worst} cycles, the pin reaches EX in "
+            f"{PIN_LATENCY[source]}: the divide held it off")
     assert len(distinct_pcs) >= MIN_DISTINCT_INTERRUPT_PCS, f"{name}: only {len(distinct_pcs)} distinct interrupt pcs"
 
 
