@@ -4,6 +4,7 @@ The core and the top level are synthesized; the peripherals around the core are 
 unified_mem is the simulation backing store and is not part of a board design, so the top level sees it
 as a black box. An out-of-range select becomes undefined logic in hardware, so its warning fails the test.
 The core divides over several cycles, so it holds no combinational divider.
+The register file has no reset, so it stays one memory that FPGA tools map to LUT RAM.
 """
 
 import re
@@ -51,6 +52,8 @@ def runCocotbTests():
         checks += [(TOP, f"synth -flatten -top {TOP}; check -assert", str(stub))]
         checks += [(f"{CORE} divider", f"hierarchy -check -top {CORE}; proc; opt -fast; "
                     "select -assert-none t:$div t:$mod t:$divfloor t:$modfloor", "")]
+        checks += [(f"{CORE} register file", f"hierarchy -check -top {CORE}; proc; opt -fast; memory -nomap; "
+                    "select -assert-count 1 registerfile/t:$mem_v2", "")]
         checks += [(name, f"hierarchy -check -top {name}; proc; flatten; opt_clean; check -assert", "")
                    for name in PERIPHERALS]
         failures = []

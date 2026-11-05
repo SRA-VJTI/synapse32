@@ -283,6 +283,11 @@ IRQ_PROGRAM = f"""
         .option norelax
         .global _start
 _start:
+        li      a0, {COUNTER:#x}
+        li      s1, 0x11111111
+        li      s2, {FILLER:#x}
+        li      s0, 0
+        li      s3, {LOOPS}
         li      t0, {M_SCRATCH:#x}
         csrw    mscratch, t0
         la      t0, m_trap
@@ -290,11 +295,6 @@ _start:
         li      t0, 0x8
         csrw    mie, t0
         csrsi   mstatus, 0x8
-        li      a0, {COUNTER:#x}
-        li      s1, 0x11111111
-        li      s2, {FILLER:#x}
-        li      s0, 0
-        li      s3, {LOOPS}
 loop:
 {FILL}
         addi    s0, s0, 1

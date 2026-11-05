@@ -188,7 +188,6 @@ module riscv_cpu #(
 
     registerfile rf_inst0 (
         .clk(clk),
-        .rst(rst),
         .rs1(decoder_inst0_rs1_out),
         .rs2(decoder_inst0_rs2_out),
         .rs1_valid(decoder_inst0_rs1_valid_out),
