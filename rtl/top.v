@@ -5,7 +5,8 @@ module top #(
     parameter MEM_LATENCY = 0,  // Cycles to answer an access; 0 is today's combinational memory
     parameter FETCH_LATENCY = MEM_LATENCY,  // Fetch side only, when it should differ
     parameter STORE_BUFFER_DEPTH = 4,
-    parameter NUM_MSHR = 8
+    parameter NUM_MSHR = 8,
+    parameter [31:0] BOOT_ADDR = `INSTR_MEM_BASE
 ) (
     input wire clk,
     input wire rst,
@@ -149,7 +150,8 @@ module top #(
     // Instantiate the RISC-V CPU core
     riscv_cpu #(
         .STORE_BUFFER_DEPTH(STORE_BUFFER_DEPTH),
-        .NUM_MSHR(NUM_MSHR)
+        .NUM_MSHR(NUM_MSHR),
+        .BOOT_ADDR(BOOT_ADDR)
     ) cpu_inst (
         .clk(clk),
         .rst(rst),

@@ -3,7 +3,8 @@
 `include "instr_defines.vh"
 module riscv_cpu #(
     parameter STORE_BUFFER_DEPTH = 4,
-    parameter NUM_MSHR = 8
+    parameter NUM_MSHR = 8,
+    parameter [31:0] BOOT_ADDR = `INSTR_MEM_BASE
 ) (
     input wire clk,
     input wire rst,
@@ -100,7 +101,9 @@ module riscv_cpu #(
     assign pc_inst0_jump = mem_stage_page_fault_taken   ? mem_stage_jump_addr :
                            instr_stage_page_fault_taken ? instr_stage_jump_addr :
                            ex_inst0_jump_addr_out;
-    pc pc_inst0 (
+    pc #(
+        .BOOT_ADDR(BOOT_ADDR)
+    ) pc_inst0 (
         .clk(clk),
         .rst(rst),
         .j_signal(pc_inst0_j_signal),

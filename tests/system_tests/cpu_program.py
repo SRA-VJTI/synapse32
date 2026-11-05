@@ -49,7 +49,7 @@ async def run_program(dut, instr_mem, done=None, max_cycles=5000):
     await ClockCycles(dut.clk, 15)
 
 
-def run_tests(module, tests):
+def run_tests(module, tests, parameters=None):
     """Build top once for module, then run each cocotb test in its own simulation."""
     root = Path.cwd()
     while not (root / "rtl").exists():
@@ -72,6 +72,7 @@ def run_tests(module, tests):
             toplevel="top",
             module=module,
             testcase=test_name,
+            parameters=parameters or {},
             includes=[str(rtl_dir / "include")],
             simulator="verilator",
             timescale="1ns/1ps",
