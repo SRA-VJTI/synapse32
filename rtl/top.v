@@ -9,7 +9,8 @@ module top #(
     parameter [31:0] BOOT_ADDR = `INSTR_MEM_BASE,
     parameter CACHEABLE_REGIONS = 2,
     parameter [32*CACHEABLE_REGIONS-1:0] CACHEABLE_BASES = {`DATA_MEM_BASE, `INSTR_MEM_BASE},
-    parameter [32*CACHEABLE_REGIONS-1:0] CACHEABLE_SIZES = {`DATA_MEM_SIZE, `INSTR_MEM_SIZE}
+    parameter [32*CACHEABLE_REGIONS-1:0] CACHEABLE_SIZES = {`DATA_MEM_SIZE, `INSTR_MEM_SIZE},
+    parameter ICACHE_ENABLE = 1
 ) (
     input wire clk,
     input wire rst,
@@ -157,7 +158,8 @@ module top #(
         .BOOT_ADDR(BOOT_ADDR),
         .CACHEABLE_REGIONS(CACHEABLE_REGIONS),
         .CACHEABLE_BASES(CACHEABLE_BASES),
-        .CACHEABLE_SIZES(CACHEABLE_SIZES)
+        .CACHEABLE_SIZES(CACHEABLE_SIZES),
+        .ICACHE_ENABLE(ICACHE_ENABLE)
     ) cpu_inst (
         .clk(clk),
         .rst(rst),
