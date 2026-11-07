@@ -128,6 +128,7 @@ bad_mega:
         sw      s3, 12(t6)
         sw      s4, 16(t6)
         sw      s5, 20(t6)
+        fence   w, w                   # the results are visible before the done word
         li      t0, {DONE_ADDR:#x}
         li      t1, {DONE_VALUE:#x}
         sw      t1, 0(t0)
