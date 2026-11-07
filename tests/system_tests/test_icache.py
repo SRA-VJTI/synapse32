@@ -16,6 +16,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, FallingEdge, ReadOnly, RisingEdge
 from cocotb_test.simulator import run
+from core_configs import current
 from memory_view import read_word
 
 INSTR_MEM_BASE = 0x8000_0000
@@ -36,8 +37,14 @@ M_SCRATCH = 0x1000_0800
 LATENCIES = [0, 1, 2]
 SWEEP_LATENCY = 2
 WARM_BLOCK = 32
-ENTRY_OFFSETS = [0, 4, 8, 12]
 SWEEP_RUN = 24
+# The programs follow the cache's geometry, so every configuration runs them as written.
+WAYS = current()["ICACHE_WAYS"]
+LINE_SHIFT = 2 + current()["ICACHE_WORD_OFFSET_BITS"]
+LINE_BYTES = 1 << LINE_SHIFT
+LINE_WORDS = LINE_BYTES // 4
+WAY_BYTES = LINE_BYTES << current()["ICACHE_SET_INDEX_BITS"]
+ENTRY_OFFSETS = list(range(0, LINE_BYTES, 4))
 UNCACHED = 0x0000_2000  # unbacked: the simulation memory reads NOPs there
 UNCACHED_CYCLES = 40
 UNCACHED_SLACK = 6  # instructions in flight when the interrupt is taken, plus margin
@@ -131,15 +138,13 @@ loop:
 {M_TRAP}
 """
 
-# Five blocks one way-size apart share a set (4 ways x 64 sets x 16-byte lines); set 0x30 is unused
-# by the code around them.
-WAYS = 4
-WAY_BYTES = 0x400
-SET_BLOCKS = [0x8000_1B00 + i * WAY_BYTES for i in range(WAYS + 1)]
-MARKS = [0xA0 + i for i in range(WAYS + 1)]
+# Five blocks one way-size apart share a set, which the code around them does not use.
+EVICT_WAYS = 4  # the expected order is 4-way round robin's
+SET_BLOCKS = [0x8000_1B00 + i * WAY_BYTES for i in range(EVICT_WAYS + 1)]
+MARKS = [0xA0 + i for i in range(EVICT_WAYS + 1)]
 # Fill the set, hit every way, then round-robin: the fifth block replaces way 0, block 0 comes back into
 # way 1 and block 1 into way 2; block 3 in way 3 stays.
-EVICT_ORDER = list(range(WAYS)) * 2 + [WAYS, 0, WAYS, 1, 3]
+EVICT_ORDER = list(range(EVICT_WAYS)) * 2 + [EVICT_WAYS, 0, EVICT_WAYS, 1, 3]
 
 EVICT_PROGRAM = START + f"""
         li      a7, {RESULT:#x}
@@ -202,7 +207,7 @@ patched:
 
 
 RACE_GAPS = [0, 1, 2, 3]
-RACE_FENCE_OFFSETS = [8, 12]
+RACE_FENCE_OFFSETS = [LINE_BYTES - 8, LINE_BYTES - 4]
 RACE_CASES = [(gap, pos) for pos in RACE_FENCE_OFFSETS for gap in RACE_GAPS]
 
 
@@ -210,11 +215,11 @@ def _race_block(case: int) -> str:
     """Patch the line after FENCE.I, which sits at line offset pos, gap instructions after the store:
     fetch runs ahead into the patched line while FENCE.I waits for the store to drain."""
     gap, pos = RACE_CASES[case]
-    pad = (pos // 4 - 1 - gap) % 4
+    pad = (pos // 4 - 1 - gap) % LINE_WORDS
     return f"""
         la      a5, race_patch_{case}
         li      t1, {_addi(A6, case + 1):#x}
-        .p2align 4
+        .p2align {LINE_SHIFT}
         .rept   {pad}
         nop
         .endr
@@ -223,7 +228,7 @@ def _race_block(case: int) -> str:
         nop
         .endr
         fence.i
-        .p2align 4
+        .p2align {LINE_SHIFT}
 race_patch_{case}:
         addi    a6, zero, 0
         sw      a6, {4 * case}(a7)
@@ -244,8 +249,8 @@ def _entry_block(off: int) -> str:
     """Jump into word off/4 of a cold line; the words before it count as wrong-path execution."""
     return f"""
         j       entry_{off}
-        .p2align 4
-        .rept   8
+        .p2align {LINE_SHIFT}
+        .rept   {2 * LINE_WORDS}
         nop
         .endr
         .rept   {off // 4}
@@ -499,7 +504,9 @@ async def _run(dut, image: str, setup=(), inject_cycle=None, inject_uncached=Fal
             dut.software_interrupt.value = 1
             pin_high = True
         await ReadOnly()
-        if UNCACHED <= int(dut.pc_debug.value) < UNCACHED + 0x1000:
+        # Counted from the first uncached fetch: a fill of the line after the jump, started speculatively, finishes
+        # first, and its length depends on the line size.
+        if UNCACHED < int(dut.pc_debug.value) < UNCACHED + 0x1000:
             uncached_cycles += 1
         if _peek(dut, DONE_ADDR) == DONE_VALUE:
             return cycle
@@ -510,6 +517,9 @@ async def _run(dut, image: str, setup=(), inject_cycle=None, inject_uncached=Fal
             pin_high = False
             inject_uncached = False
     return None
+
+
+NO_ICACHE = not current()["ICACHE_ENABLE"]
 
 
 def _latency() -> int:
@@ -533,7 +543,7 @@ def _slots(dut, count):
     return times, values
 
 
-@cocotb.test()
+@cocotb.test(skip=NO_ICACHE)
 async def test_warm_code_runs_one_instruction_per_cycle(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     done = await _run(dut, "warm.bin")
@@ -547,7 +557,7 @@ async def test_warm_code_runs_one_instruction_per_cycle(dut):
         "instruction: warm code still waited for fetch")
 
 
-@cocotb.test()
+@cocotb.test(skip=NO_ICACHE or WAYS != EVICT_WAYS)
 async def test_a_set_holds_its_ways_and_replaces_round_robin(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     done = await _run(dut, "evict.bin")
@@ -556,12 +566,12 @@ async def test_a_set_holds_its_ways_and_replaces_round_robin(dut):
     expected = [MARKS[i] for i in EVICT_ORDER]
     assert values[1:] == expected, (
         f"{_name()}: blocks returned {[hex(v) for v in values[1:]]}, expected {[hex(v) for v in expected]}")
-    cold, warm = times[1:1 + WAYS], times[1 + WAYS:1 + 2 * WAYS]
+    cold, warm = times[1:1 + EVICT_WAYS], times[1 + EVICT_WAYS:1 + 2 * EVICT_WAYS]
     assert all(w < c for c, w in zip(cold, warm)), (
-        f"{_name()}: {WAYS} blocks in one set took {cold} cycles cold and {warm} warm: the set did not hold "
+        f"{_name()}: {EVICT_WAYS} blocks in one set took {cold} cycles cold and {warm} warm: the set did not hold "
         "them all")
     hit = warm[0]
-    _, first_again, fifth_again, second_again, fourth_again = times[1 + 2 * WAYS:]
+    _, first_again, fifth_again, second_again, fourth_again = times[1 + 2 * EVICT_WAYS:]
     got = {"block 0 after the fifth": first_again, "the fifth again": fifth_again,
            "block 1 after block 0": second_again, "block 3": fourth_again}
     want = {"block 0 after the fifth": "miss", "the fifth again": "hit", "block 1 after block 0": "miss",
@@ -571,7 +581,7 @@ async def test_a_set_holds_its_ways_and_replaces_round_robin(dut):
         f"{_name()}: a hit takes {hit} cycles; round-robin expects {want}, got {wrong}")
 
 
-@cocotb.test()
+@cocotb.test(skip=NO_ICACHE)
 async def test_fence_i_makes_patched_code_visible(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     done = await _run(dut, "patch.bin")
@@ -589,7 +599,7 @@ async def test_fence_i_makes_patched_code_visible(dut):
         f"expected {list(range(1, REFETCH_PASSES + 1))}: it ran the line cached on the previous pass")
 
 
-@cocotb.test()
+@cocotb.test(skip=NO_ICACHE)
 async def test_fence_i_during_a_line_fill(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     done = await _run(dut, "race.bin")
@@ -601,7 +611,7 @@ async def test_fence_i_during_a_line_fill(dut):
         "instruction from before the patch)")
 
 
-@cocotb.test()
+@cocotb.test(skip=NO_ICACHE)
 async def test_entry_into_any_word_of_a_line(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     done = await _run(dut, "entry.bin")
@@ -613,7 +623,7 @@ async def test_entry_into_any_word_of_a_line(dut):
     assert wrong_path == 0, f"{_name()}: {wrong_path} instructions before a jump target ran"
 
 
-@cocotb.test()
+@cocotb.test(skip=NO_ICACHE)
 async def test_interrupt_at_every_cycle_of_cold_code(dut):
     if _latency() != SWEEP_LATENCY:
         return
@@ -638,7 +648,7 @@ async def test_interrupt_at_every_cycle_of_cold_code(dut):
     assert not failures, f"{len(failures)} failures; first: {failures[0]}"
 
 
-@cocotb.test()
+@cocotb.test(skip=NO_ICACHE)
 async def test_virtual_pages_share_a_physical_line(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     for offset in range(0, 0x1000, 4):
@@ -659,7 +669,7 @@ async def test_virtual_pages_share_a_physical_line(dut):
         f"mepc 0x{epc:08x}; expected an instruction page fault at 0x{VA3:08x}")
 
 
-@cocotb.test()
+@cocotb.test(skip=NO_ICACHE)
 async def test_fetch_outside_ram_bypasses(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     done = await _run(dut, "uncached.bin", inject_uncached=True)

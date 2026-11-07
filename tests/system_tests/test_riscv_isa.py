@@ -5,9 +5,11 @@ Environment variables:
   ISA_TOHOST_ADDR   : tohost symbol address (hex, e.g. 0x80001000)
   ISA_MAX_CYCLES    : optional max cycles (default: 200000)
   ISA_TRACE_FILE    : optional commit trace output, compared with Spike's commit log
+  CORE_CONFIG       : optional core configuration from tests/core_configs.py MATRIX
 """
 import os
 import shutil
+import sys
 from pathlib import Path
 
 import cocotb
@@ -15,6 +17,9 @@ import pytest
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
 from cocotb_test.simulator import run
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from core_configs import MATRIX  # noqa: E402
 
 
 def _find_repo_root() -> Path:
@@ -108,6 +113,12 @@ async def test_riscv_isa_image(dut):
     assert False, f"ISA test did not finish within {max_cycles} cycles"
 
 
+def _config_parameters():
+    """The parameters of CORE_CONFIG; compare_with_spike.py runs this file directly, without the conftest wrapper."""
+    name = os.environ.get("CORE_CONFIG")
+    return MATRIX[name] if name else {}
+
+
 def runCocotbTests():
     required_env = ("ISA_HEX_FILE", "ISA_TOHOST_ADDR")
     missing = [name for name in required_env if name not in os.environ]
@@ -147,7 +158,8 @@ def runCocotbTests():
         simulator="verilator",
         timescale="1ns/1ps",
         defines=[f'INSTR_HEX_FILE="{hex_file}"'],
-        parameters={"MEM_LATENCY": int(os.environ.get("ISA_MEM_LATENCY", "0")),
+        parameters={**_config_parameters(),
+                    "MEM_LATENCY": int(os.environ.get("ISA_MEM_LATENCY", "0")),
                     "FETCH_LATENCY": int(os.environ.get("ISA_FETCH_LATENCY",
                                                         os.environ.get("ISA_MEM_LATENCY", "0")))},
         sim_build=str(sim_build),

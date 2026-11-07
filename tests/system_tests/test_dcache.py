@@ -16,6 +16,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, FallingEdge, ReadOnly, RisingEdge
 from cocotb_test.simulator import run
+from core_configs import current
 from memory_view import dcache, mshr_slots, read_word
 
 INSTR_MEM_BASE = 0x8000_0000
@@ -34,10 +35,11 @@ IRQ_COUNT = 0x1000_0310
 M_SCRATCH = 0x1000_0380
 
 BUILDS = [(0, 8), (1, 8), (2, 8), (2, 1)]  # (memory latency, NUM_MSHR); DCACHE_BUILDS="0:8,2:1" picks some
-DEFAULT_MSHRS = 8  # top's NUM_MSHR, passed only when a build differs
 SWEEP_LATENCY = 2
-WAYS = 4
-WAY_BYTES = 0x400  # 64 sets x 16-byte lines
+# The programs follow the cache's geometry, so every configuration runs them as written.
+WAYS = current()["DCACHE_WAYS"]
+LINE_BYTES = 4 << current()["DCACHE_WORD_OFFSET_BITS"]
+WAY_BYTES = LINE_BYTES << current()["DCACHE_SET_INDEX_BITS"]
 SSIP_CAUSE = 0x8000_0003
 
 # dcache.v engine states
@@ -123,8 +125,8 @@ loop:
 # A load miss waits for its line; a store miss followed by loads to warm lines does not.
 HUM_LOADS = 8
 HUM_WARM = 0x1000_B000
-HUM_STORE = 0x1000_C000
-HUM_LOAD = 0x1000_C400
+HUM_STORE = 0x1000_C000 + 4 * LINE_BYTES  # a set apart from the warm lines
+HUM_LOAD = HUM_STORE + WAY_BYTES
 
 _HUM_HITS = "".join(f"        lw      t2, {4 * i}(s1)\n" for i in range(HUM_LOADS))
 
@@ -139,16 +141,17 @@ loop:
 {_timed("load miss", "        lw      t1, 0(s4)", "0")}
 {_timed("store miss then hits", "        sw      s3, 0(s5)\n" + _HUM_HITS, "4")}
         addi    a7, a7, 8
-        addi    s4, s4, 0x10
-        addi    s5, s5, 0x10
+        addi    s4, s4, {LINE_BYTES}
+        addi    s5, s5, {LINE_BYTES}
         addi    s3, s3, -1
         bnez    s3, loop
 """ + END
 
 # Six lines of one set; after hits on lines 3 and 0, PLRU evicts line 2, then line 1, and writes both back.
-PLRU_LINES = [0x1000_4000 + i * WAY_BYTES for i in range(WAYS + 2)]
-PLRU_OLD = [0x0B0B_0000 + i for i in range(WAYS + 2)]
-PLRU_NEW = [0xA0 + i for i in range(WAYS + 2)]
+PLRU_WAYS = 4  # the expected order is the 4-way tree's
+PLRU_LINES = [0x1000_4000 + i * WAY_BYTES for i in range(PLRU_WAYS + 2)]
+PLRU_OLD = [0x0B0B_0000 + i for i in range(PLRU_WAYS + 2)]
+PLRU_NEW = [0xA0 + i for i in range(PLRU_WAYS + 2)]
 PLRU_WRITTEN_BACK = [1, 2]
 
 
@@ -165,12 +168,12 @@ def _load(addr: int, op: str = "lw", reg: str = "t2", offset: int = 0) -> str:
         {op}    {reg}, {offset}(t0)"""
 
 
-PLRU_PROGRAM = START + "".join(_store(PLRU_LINES[i], PLRU_NEW[i]) for i in range(WAYS)) + \
+PLRU_PROGRAM = START + "".join(_store(PLRU_LINES[i], PLRU_NEW[i]) for i in range(PLRU_WAYS)) + \
     _load(PLRU_LINES[3]) + _load(PLRU_LINES[0]) + \
     _store(PLRU_LINES[4], PLRU_NEW[4]) + _store(PLRU_LINES[5], PLRU_NEW[5]) + END
 
 # Stores to a missing line merge into its MSHR; loads wait for the fill. The second pass runs from warm code.
-MERGE_LINES = [0x1000_8100, 0x1000_8110]
+MERGE_LINES = [0x1000_8100, 0x1000_8100 + LINE_BYTES]
 MERGE_OLD = [0x1111_1111, 0x2222_2222, 0x3333_3333, 0x4444_4444]
 MERGE_EXPECTED = [0x1111_AA11, 0xBBBB_2222, 0xCCCC_CCCC, 0x4444_4444, 0xFFFF_FFAA, 0xFFFF_BBBB, 0x11, 0xBBBB]
 
@@ -201,7 +204,7 @@ loop:
         sw      a5, 20(t4)
         sw      a6, 24(t4)
         sw      s2, 28(t4)
-        addi    t0, t0, 0x10
+        addi    t0, t0, {LINE_BYTES}
         addi    t4, t4, 32
         addi    s3, s3, -1
         bnez    s3, loop
@@ -210,7 +213,7 @@ loop:
 # More store misses than MSHRs, then every line read back. The second pass runs from warm code.
 FULL_BASE = 0x1000_A000
 FULL_COUNT = 12
-FULL_PASS = 0x100
+FULL_PASS = 16 * LINE_BYTES
 
 FULL_PROGRAM = START + f"""
         li      t0, {FULL_BASE:#x}
@@ -219,9 +222,9 @@ FULL_PROGRAM = START + f"""
 loop:
         li      t1, 0x100
 """ + "".join(f"""
-        sw      t1, {16 * i}(t0)
+        sw      t1, {LINE_BYTES * i}(t0)
         addi    t1, t1, 1""" for i in range(FULL_COUNT)) + "".join(f"""
-        lw      t2, {16 * i}(t0)
+        lw      t2, {LINE_BYTES * i}(t0)
         sw      t2, {4 * i}(t4)""" for i in range(FULL_COUNT)) + f"""
         addi    t0, t0, {FULL_PASS:#x}
         addi    t4, t4, {4 * FULL_COUNT}
@@ -229,27 +232,24 @@ loop:
         bnez    s3, loop
 """ + END
 
-# A miss picks way 0 as the victim, and a store to way 0's line follows 0 to 3 instructions later.
+# Lines fill every way of a set, a miss picks way 0 as the victim, and a store to way 0's line follows 0 to 3
+# instructions later.
 RACE_BASE = 0x1000_E000
 RACE_GAPS = [0, 1, 2, 3]
 RACE_PASS_SETS = 8
 
 
 def _race_block(gap: int) -> str:
+    fill = "        lw      t2, 0(t1)\n        add     t1, t1, t3\n" * WAYS
     return f"""
-        addi    t0, s1, {0x10 * gap}
-        li      t3, {2 * WAY_BYTES:#x}
-        add     t1, t0, t3
-        add     t3, t1, t3
-        lw      t2, 0(t0)
-        lw      t2, {WAY_BYTES}(t0)
-        lw      t2, 0(t1)
-        lw      t2, {WAY_BYTES}(t1)
-        sw      a0, 0(t3)
+        addi    t0, s1, {LINE_BYTES * gap}
+        li      t3, {WAY_BYTES:#x}
+        mv      t1, t0
+{fill}        sw      a0, 0(t1)               # a line past the full set: needs a victim
 """ + "        nop\n" * gap + f"""        sw      a1, 0(t0)
         lw      t2, 0(t0)
         sw      t2, {8 * gap}(t4)
-        lw      t2, 0(t3)
+        lw      t2, 0(t1)
         sw      t2, {8 * gap + 4}(t4)
 """
 
@@ -262,7 +262,7 @@ RACE_PROGRAM = START + f"""
         li      s3, 2
 loop:
 """ + "".join(_race_block(g) for g in RACE_GAPS) + f"""
-        addi    s1, s1, {0x10 * RACE_PASS_SETS}
+        addi    s1, s1, {LINE_BYTES * RACE_PASS_SETS}
         addi    t4, t4, {8 * len(RACE_GAPS)}
         addi    s3, s3, -1
         bnez    s3, loop
@@ -270,7 +270,7 @@ loop:
 
 # Memory model: byte, halfword and word accesses over more lines than a set has ways, then FENCE.I.
 MODEL_BASE = 0x1001_0000
-MODEL_LINES = [MODEL_BASE + j * WAY_BYTES + s * 0x10 for j in range(6) for s in range(2)]
+MODEL_LINES = [MODEL_BASE + j * WAY_BYTES + s * LINE_BYTES for j in range(6) for s in range(2)]
 MODEL_LOG = 0x1002_0000
 MODEL_OPS = 240
 MODEL_SEED = 0xDCAC
@@ -283,13 +283,13 @@ def _model_ops():
         line = rng.choice(MODEL_LINES)
         if rng.random() < 0.5:
             size = rng.choice([1, 2, 4])
-            addr = line + rng.randrange(0, 16, size)
+            addr = line + rng.randrange(0, LINE_BYTES, size)
             ops.append(("store", size, addr, rng.getrandbits(8 * size)))
         else:
             kind = rng.choice(["lb", "lbu", "lh", "lhu", "lw"])
             size = {"lb": 1, "lbu": 1, "lh": 2, "lhu": 2, "lw": 4}[kind]
-            ops.append(("load", kind, line + rng.randrange(0, 16, size), None))
-    initial = {addr + 4 * w: rng.getrandbits(32) for addr in MODEL_LINES for w in range(4)}
+            ops.append(("load", kind, line + rng.randrange(0, LINE_BYTES, size), None))
+    initial = {addr + 4 * w: rng.getrandbits(32) for addr in MODEL_LINES for w in range(LINE_BYTES // 4)}
     return ops, initial
 
 
@@ -592,6 +592,9 @@ def _cache(dut):
     return dcache(dut)
 
 
+NO_DCACHE = not current()["DCACHE_ENABLE"]
+
+
 def _require_cache(dut):
     cache = _cache(dut)
     assert cache is not None, f"{_name()}: the design has no data cache"
@@ -686,7 +689,7 @@ def _results(dut, count):
     return [_peek(dut, RESULT + 4 * i) for i in range(count)]
 
 
-@cocotb.test()
+@cocotb.test(skip=NO_DCACHE)
 async def test_warm_loads_and_stores_cost_one_cycle(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     done = await _run(dut, "timing.bin")
@@ -702,7 +705,7 @@ async def test_warm_loads_and_stores_cost_one_cycle(dut):
         f"(cold: {cold_stores})")
 
 
-@cocotb.test()
+@cocotb.test(skip=NO_DCACHE)
 async def test_a_store_miss_does_not_stop_hits(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     coverage = Coverage()
@@ -717,7 +720,7 @@ async def test_a_store_miss_does_not_stop_hits(dut):
     assert coverage.hits_during_fill > 0, f"{_name()}: no load hit while a fill was running"
 
 
-@cocotb.test()
+@cocotb.test(skip=NO_DCACHE or WAYS != PLRU_WAYS)
 async def test_a_full_set_replaces_its_plru_way(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     setup = list(zip(PLRU_LINES, PLRU_OLD))
@@ -731,7 +734,7 @@ async def test_a_full_set_replaces_its_plru_way(dut):
         "the others dirty in the cache")
 
 
-@cocotb.test()
+@cocotb.test(skip=NO_DCACHE)
 async def test_store_misses_merge_and_loads_wait_for_the_fill(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     coverage = Coverage()
@@ -746,7 +749,7 @@ async def test_store_misses_merge_and_loads_wait_for_the_fill(dut):
     assert coverage.load_waits_on_mshr > 0, f"{_name()}: no load waited on an MSHR"
 
 
-@cocotb.test()
+@cocotb.test(skip=NO_DCACHE)
 async def test_misses_beyond_the_mshrs_wait(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     coverage = Coverage()
@@ -764,7 +767,7 @@ async def test_misses_beyond_the_mshrs_wait(dut):
         assert int(cache.stat_mshr_full_cycles.value) > 0, f"{_name()}: no miss found the MSHRs full"
 
 
-@cocotb.test()
+@cocotb.test(skip=NO_DCACHE)
 async def test_a_store_to_the_victim_as_it_is_chosen(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     coverage = Coverage()
@@ -779,7 +782,7 @@ async def test_a_store_to_the_victim_as_it_is_chosen(dut):
     assert coverage.stores_at_victim > 0, f"{_name()}: no store arrived while a victim was chosen"
 
 
-@cocotb.test()
+@cocotb.test(skip=NO_DCACHE)
 async def test_mixed_accesses_match_a_memory_model(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     initial, final, log = _model_expected()
@@ -845,7 +848,7 @@ async def test_device_registers_are_not_cached(dut):
     assert 20 <= delta < 200, f"{_name()}: two reads of mtime 20 instructions apart differ by {delta}"
 
 
-@cocotb.test()
+@cocotb.test(skip=NO_DCACHE)
 async def test_interrupt_at_every_cycle_of_misses_and_evictions(dut):
     if _latency() != SWEEP_LATENCY or _mshrs() != 8:
         return
@@ -881,9 +884,7 @@ def runCocotbTests():
     if os.environ.get("DCACHE_BUILDS"):
         builds = [tuple(int(v) for v in b.split(":")) for b in os.environ["DCACHE_BUILDS"].split(",")]
     for latency, mshrs in builds:
-        parameters = {"MEM_LATENCY": latency, "FETCH_LATENCY": latency}
-        if mshrs != DEFAULT_MSHRS:
-            parameters["NUM_MSHR"] = mshrs
+        parameters = {"MEM_LATENCY": latency, "FETCH_LATENCY": latency, "NUM_MSHR": mshrs}
         sim_build = Path.cwd() / "sim_build" / f"sim_build_dcache_lat{latency}_mshr{mshrs}"
         if sim_build.exists():
             shutil.rmtree(sim_build)

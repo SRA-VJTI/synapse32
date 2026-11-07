@@ -13,6 +13,7 @@ import cocotb
 from cocotb.triggers import ReadOnly, RisingEdge
 from cocotb_test.simulator import run
 
+from core_configs import configured
 from cpu_program import run_program
 from memory_view import dcache
 
@@ -121,6 +122,12 @@ async def test_translated_store_outside_ram_is_not_forwarded(dut):
 
 
 def runCocotbTests():
+    parameters = {"MEM_LATENCY": 2}
+    core = configured(parameters)
+    # It watches the dcache. With a one-entry buffer the UART store fills it, so the device store waits in MEM instead
+    # of in the buffer and its load has nothing to forward from.
+    if not (core["DCACHE_ENABLE"] and core["STORE_BUFFER_DEPTH"] >= 2):
+        return
     root = Path.cwd()
     while not (root / "rtl").exists():
         if root.parent == root:
@@ -141,7 +148,7 @@ def runCocotbTests():
         sim_build=str(sim_build),
         waves=os.getenv("WAVES", "0") == "1",
         # Memory latency keeps the UART write on the data port long enough for the next store to wait in the buffer.
-        parameters={"MEM_LATENCY": 2},
+        parameters=parameters,
         extra_env={
             "TOPLEVEL": "top",
             "MODULE": module,

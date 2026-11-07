@@ -3,6 +3,7 @@
 import cocotb
 from cocotb.triggers import ReadOnly, RisingEdge
 
+from core_configs import configured
 from cpu_program import run_program, run_tests
 
 LATENCY = 2
@@ -66,7 +67,8 @@ def runCocotbTests():
     latency = {"MEM_LATENCY": LATENCY, "FETCH_LATENCY": LATENCY}
     run_tests("test_icache_disable", ["test_disabled_fetches_every_instruction"],
               parameters={**latency, "ICACHE_ENABLE": 0})
-    run_tests("test_icache_disable", ["test_enabled_caches_the_loop"], parameters=latency)
+    if configured(latency)["ICACHE_ENABLE"]:  # the control needs the instruction cache
+        run_tests("test_icache_disable", ["test_enabled_caches_the_loop"], parameters=latency)
 
 
 if __name__ == "__main__":

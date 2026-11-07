@@ -7,6 +7,7 @@ standing in for a device the SoC maps there.
 import cocotb
 from cocotb.triggers import ReadOnly, RisingEdge
 
+from core_configs import configured
 from cpu_program import run_program, run_tests
 from memory_view import dcache
 
@@ -79,8 +80,12 @@ async def test_device_outside_ram_regions(dut):
 
 
 def runCocotbTests():
-    run_tests("test_cacheable_region", ["test_device_outside_ram_regions"],
-              parameters={"MEM_LATENCY": 2, "CACHEABLE_SIZES": f"64'h{DATA_RAM_SIZE:08x}{INSTR_RAM_SIZE:08x}"})
+    parameters = {"MEM_LATENCY": 2, "CACHEABLE_SIZES": f"64'h{DATA_RAM_SIZE:08x}{INSTR_RAM_SIZE:08x}"}
+    core = configured(parameters)
+    # It watches the dcache. With a one-entry buffer the UART store fills it, so the RAM store waits in MEM instead of
+    # in the buffer and its load has nothing to forward from.
+    if core["DCACHE_ENABLE"] and core["STORE_BUFFER_DEPTH"] >= 2:
+        run_tests("test_cacheable_region", ["test_device_outside_ram_regions"], parameters=parameters)
 
 
 if __name__ == "__main__":

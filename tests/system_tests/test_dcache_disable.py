@@ -3,6 +3,7 @@
 import cocotb
 from cocotb.triggers import ReadOnly, RisingEdge
 
+from core_configs import configured
 from cpu_program import run_program, run_tests
 from memory_view import read_word
 
@@ -92,7 +93,8 @@ def runCocotbTests():
     latency = {"MEM_LATENCY": LATENCY, "FETCH_LATENCY": LATENCY}
     run_tests("test_dcache_disable", ["test_disabled_writes_every_store"],
               parameters={**latency, "DCACHE_ENABLE": 0})
-    run_tests("test_dcache_disable", ["test_enabled_keeps_the_stores"], parameters=latency)
+    if configured(latency)["DCACHE_ENABLE"]:  # the control needs the data cache
+        run_tests("test_dcache_disable", ["test_enabled_keeps_the_stores"], parameters=latency)
 
 
 if __name__ == "__main__":

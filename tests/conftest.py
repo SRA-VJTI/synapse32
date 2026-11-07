@@ -7,6 +7,8 @@ from pathlib import Path
 import cocotb_test.simulator as cocotb_simulator
 import find_libpython
 
+from core_configs import DEFAULT_CORE, MATRIX, encode
+
 _ORIG_FIND_LIBPYTHON = find_libpython.find_libpython
 
 # These diagnostics extract instructions from a locally built Linux Image and
@@ -88,6 +90,25 @@ def _safe_find_libpython():
 
 find_libpython.find_libpython = _safe_find_libpython
 cocotb_simulator.find_libpython.find_libpython = _safe_find_libpython
+
+_ORIG_RUN = cocotb_simulator.run
+
+
+def _run_in_core_config(*args, **kwargs):
+    """With CORE_CONFIG set, every build of top takes that configuration's parameters, except the ones the test
+    sets itself (a test about one configuration keeps it). The simulation gets the matrix parameters of its build in
+    CORE_PARAMETERS."""
+    if kwargs.get("toplevel") == "top":
+        name = os.environ.get("CORE_CONFIG")
+        if name:
+            kwargs["parameters"] = {**MATRIX[name], **(kwargs.get("parameters") or {})}
+        built = {k: v for k, v in (kwargs.get("parameters") or {}).items() if k in DEFAULT_CORE}
+        kwargs["extra_env"] = {**(kwargs.get("extra_env") or {}), "CORE_PARAMETERS": encode(built)}
+    return _ORIG_RUN(*args, **kwargs)
+
+
+# Test modules import run after conftest, so they get the wrapper.
+cocotb_simulator.run = _run_in_core_config
 
 
 def pytest_configure(config):

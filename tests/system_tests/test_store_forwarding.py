@@ -9,6 +9,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, FallingEdge, ReadOnly, RisingEdge
 from cocotb_test.simulator import run
+from core_configs import current, default_caches
 from memory_view import read_word
 
 INSTR_MEM_BASE = 0x8000_0000
@@ -251,6 +252,9 @@ async def test_covered_loads_take_bytes_from_the_buffer(dut):
     cause = _peek(dut, TRAP_CAUSE)
     assert cause == 0, f"{_name()}: unexpected trap, mcause 0x{cause:08x} at 0x{_peek(dut, TRAP_EPC):08x}"
     baseline = _peek(dut, BASELINE)
+    # The forward's cost holds at the default cache lines, and needs a buffer that holds the store behind the UART
+    # write: with one entry the store waits in MEM and the load has nothing to forward from.
+    timed = default_caches() and current()["STORE_BUFFER_DEPTH"] >= 2
     wrong = []
     for index, (stores, load, forwarded) in enumerate(CASES):
         got = _peek(dut, RESULT + 8 * index)
@@ -258,7 +262,7 @@ async def test_covered_loads_take_bytes_from_the_buffer(dut):
         want = _expected(stores, load, index)
         if got != want:
             wrong.append(f"{_describe(stores, load)}: loaded 0x{got:08x}, expected 0x{want:08x}")
-        if forwarded and cycles != baseline + FORWARD_CYCLES:
+        if forwarded and timed and cycles != baseline + FORWARD_CYCLES:
             wrong.append(f"{_describe(stores, load)}: load took {cycles} cycles, a warm hit {baseline} "
                          f"(a forward is expected to take {FORWARD_CYCLES} more)")
     assert not wrong, f"{_name()}: " + "; ".join(wrong)

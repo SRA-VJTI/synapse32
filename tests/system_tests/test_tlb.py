@@ -16,6 +16,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
 from cocotb_test.simulator import run
+from core_configs import current
 from memory_view import read_word
 
 INSTR_MEM_BASE = 0x8000_0000
@@ -170,6 +171,10 @@ SECTIONS {{
     .text : {{ *(.text.init) *(.text*) }}
 }}
 """
+
+# Translations the walk counts expect to stay cached until the first SFENCE.VMA: code and data megapages, pages A
+# and B, the phase 4 megapage. A smaller TLB re-walks; results and faults are checked at any size.
+LIVE_TRANSLATIONS = 5
 
 # phase -> PTE reads it must take. After a flush, the next fetch and the next mark store walk their
 # megapages again, counted in the phase they happen in.
@@ -359,10 +364,11 @@ async def test_walker_and_tlb(dut):
     problems = []
     if not done:
         problems.append(f"the program did not finish (reached phase {phase})")
-    for step, expected in sorted(EXPECTED_WALK_READS.items()):
-        got = walk_reads.get(step, 0)
-        if got != expected:
-            problems.append(f"phase {step}: {got} PTE reads, expected {expected}")
+    if current()["TLB_ENTRIES"] >= LIVE_TRANSLATIONS:
+        for step, expected in sorted(EXPECTED_WALK_READS.items()):
+            got = walk_reads.get(step, 0)
+            if got != expected:
+                problems.append(f"phase {step}: {got} PTE reads, expected {expected}")
     for offset, expected in sorted(EXPECTED_RESULTS.items()):
         got = _peek(dut, RESULT + offset)
         if got != expected:

@@ -17,6 +17,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, FallingEdge, ReadOnly, RisingEdge
 from cocotb_test.simulator import run
+from core_configs import default_caches
 from memory_view import read_word
 
 INSTR_MEM_BASE = 0x8000_0000
@@ -536,7 +537,7 @@ async def test_buffered_writes_keep_program_order(dut):
     assert not wrong, f"{name}: result words (got, expected): {wrong}"
 
 
-@cocotb.test()
+@cocotb.test(skip=not default_caches())
 async def test_stores_do_not_hold_the_pipeline(dut):
     """With fetch answering at once and data after two cycles, a store must not wait for memory."""
     if not FAST_FETCH:
@@ -592,7 +593,7 @@ async def test_mixed_stores_and_loads_match_a_memory_model(dut):
     assert not bad_words, f"{name}: final words (index, got, expected): {bad_words[:6]}"
     dut._log.info(f"{name}: {coverage['full']} cycles a store waited on a full buffer, "
                   f"{coverage['match']} cycles a load waited on a buffered word")
-    if FAST_FETCH:
+    if FAST_FETCH and default_caches():
         assert coverage["full"] and coverage["match"], (
             f"{name}: the buffer never filled or no load waited on a buffered word ({coverage}), "
             "so this run did not exercise the buffer")
