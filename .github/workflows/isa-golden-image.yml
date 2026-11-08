@@ -79,6 +79,18 @@ jobs:
               --suites rv32ui,rv32um,rv32ua,rv32mi,rv32si \
               --report .github/artifacts/isa/compare_report.json
 
+      - name: Run riscv-arch-test golden comparison
+        env:
+          ISA_IMAGE: ${{ steps.tags.outputs.immutable }}
+        run: |
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/workspace" \
+            --workdir /workspace \
+            "$ISA_IMAGE" \
+            /opt/venv/bin/python .github/scripts/compare_with_spike.py \
+              --arch-test /opt/riscv-arch-test \
+              --report .github/artifacts/isa/arch_compare_report.json
+
       - name: Publish tested image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
@@ -93,5 +105,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: isa-golden-report
-          path: .github/artifacts/isa/compare_report.json
+          path: |
+            .github/artifacts/isa/compare_report.json
+            .github/artifacts/isa/arch_compare_report.json
           if-no-files-found: error
