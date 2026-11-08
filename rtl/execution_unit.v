@@ -544,6 +544,8 @@ always @(*) begin
                     jump_addr = trap_to_supervisor ? stvec : mtvec;  // Jump to trap handler
                     flush_pipeline = 1;
                     ebreak_exception = 1;
+                    // mtval may be 0 or the address (privileged spec 3.1.16); report it, as Spike does.
+                    exception_tval = pc_input;
                 end
                 INSTR_WFI: begin
                     if (wfi_tw_violation) begin
