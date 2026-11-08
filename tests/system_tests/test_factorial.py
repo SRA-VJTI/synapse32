@@ -196,7 +196,8 @@ def runCocotbTests():
         simulator="verilator",
         timescale="1ns/1ps",
         plus_args=[f"+dumpfile={waveform_path}"],
-        defines=[f"INSTR_HEX_FILE=\"{hex_file}\""]
+        defines=[f"INSTR_HEX_FILE=\"{hex_file}\""],
+        sim_build=str(curr_dir / "sim_build" / "sim_build_factorial"),
     )
 
 if __name__ == "__main__":
