@@ -58,7 +58,7 @@ async def test_device_outside_ram_regions(dut):
         _lui(7, UART_SCR),
         _addi(3, 0, 0x5A),
         _addi(5, 0, 0x3C),
-        _sw(3, 7, UART_SCR & 0xFFF),  # holds the data port, so the next store waits in the buffer
+        _sw(3, 7, UART_SCR & 0xFFF),  # holds the memory port, so the next store waits in the buffer
         _sw(3, 1),
         _lw(4, 1),
         _sw(5, 7, UART_SCR & 0xFFF),

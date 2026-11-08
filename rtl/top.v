@@ -3,7 +3,6 @@
 
 module top #(
     parameter MEM_LATENCY = 0,  // Cycles to answer an access; 0 is today's combinational memory
-    parameter FETCH_LATENCY = MEM_LATENCY,  // Fetch side only, when it should differ
     parameter STORE_BUFFER_DEPTH = 4,
     parameter NUM_MSHR = 8,
     parameter [31:0] BOOT_ADDR = `INSTR_MEM_BASE,
@@ -18,7 +17,8 @@ module top #(
     parameter DCACHE_WAYS = 4,
     parameter DCACHE_SET_INDEX_BITS = 6,
     parameter DCACHE_WORD_OFFSET_BITS = 2,
-    parameter TLB_ENTRIES = 8
+    parameter TLB_ENTRIES = 8,
+    parameter MEM_PORTS = 1  // 1: fetch and data share one memory port; 2: each has its own
 ) (
     input wire clk,
     input wire rst,
@@ -41,31 +41,33 @@ module top #(
     wire [31:0] cpu_pc_out;
     wire [31:0] cpu_instr_out;
     wire [31:0] mem_read_data;
-    wire [31:0] instr_read_data;
-    // The CPU's memory ports, each in front of an adapter
-    wire instr_mem_req;
-    wire [31:0] instr_mem_addr;
-    wire instr_mem_gnt;
-    wire instr_mem_rvalid;
-    wire [31:0] instr_mem_rdata;
-    wire data_mem_req;
-    wire [31:0] data_mem_addr;
-    wire data_mem_we;
-    wire [3:0] data_mem_be;
-    wire [31:0] data_mem_wdata;
-    wire [2:0] data_mem_load_type;
-    wire data_mem_gnt;
-    wire data_mem_rvalid;
-    wire [31:0] data_mem_rdata;
-    wire [31:0] instr_store_addr;
-    wire [31:0] instr_store_rdata;
-    wire [31:0] data_store_addr;
-    wire [3:0] data_store_be;
-    wire [31:0] data_store_wdata;
-    wire data_store_req;
-    wire data_store_we;
-    wire data_write_fire;
-    wire data_read_fire;
+    wire [31:0] ram_read_data;
+    // The CPU's memory port, in front of the adapter
+    wire mem_req;
+    wire [31:0] mem_addr;
+    wire mem_we;
+    wire [3:0] mem_be;
+    wire [31:0] mem_wdata;
+    wire [2:0] mem_load_type;
+    wire mem_instr;
+    wire mem_gnt;
+    wire mem_rvalid;
+    wire [31:0] mem_rdata;
+    wire [31:0] mem_store_addr;
+    wire [3:0] mem_store_be;
+    wire [31:0] mem_store_wdata;
+    wire mem_store_req;
+    wire mem_store_we;
+    wire mem_write_fire;
+    wire mem_read_fire;
+    // The CPU's fetch port (MEM_PORTS 2), in front of its own adapter
+    wire fetch_mem_req;
+    wire [31:0] fetch_mem_addr;
+    wire fetch_mem_gnt;
+    wire fetch_mem_rvalid;
+    wire [31:0] fetch_mem_rdata;
+    wire [31:0] fetch_store_addr;
+    wire [31:0] fetch_ram_data;
     
     // Timer module wires
     wire [31:0] timer_read_data;
@@ -101,63 +103,75 @@ module top #(
     wire mmu_data_l1_pte_backed;
     wire mmu_data_l0_pte_backed;
 
-    // Use memory map macros for clean address decoding
-    assign timer_access    = `IS_TIMER_MEM(data_store_addr);
-    assign uart_access     = `IS_UART_MEM(data_store_addr);
-    assign plic_access     = `IS_PLIC_MEM(data_store_addr);
-    assign ram_access      = `IS_DATA_MEM(data_store_addr) || `IS_INSTR_MEM(data_store_addr);
+    // Use memory map macros for clean address decoding. Devices answer data accesses only.
+    assign timer_access    = `IS_TIMER_MEM(mem_store_addr) && !mem_instr;
+    assign uart_access     = `IS_UART_MEM(mem_store_addr) && !mem_instr;
+    assign plic_access     = `IS_PLIC_MEM(mem_store_addr) && !mem_instr;
+    assign ram_access      = `IS_DATA_MEM(mem_store_addr) || `IS_INSTR_MEM(mem_store_addr);
     
     // Multiplex read data based on address
     assign mem_read_data = timer_access ? timer_read_data :
                           uart_access ? uart_read_data :
                           plic_access ? plic_read_data :
-                          ram_access ? instr_read_data : 32'h00000000;
+                          ram_access ? ram_read_data : 32'h00000000;
     
     // Debug outputs
     assign pc_debug = cpu_pc_out;
     assign instr_debug = cpu_instr_out;
 
-    mem_adapter #(.RESPONSE_LATENCY(FETCH_LATENCY)) instr_adapter (
+    mem_adapter #(.RESPONSE_LATENCY(MEM_LATENCY)) mem_adapter_inst (
         .clk(clk),
         .rst(rst),
-        .req(instr_mem_req),
-        .addr(instr_mem_addr),
-        .we(1'b0),
-        .be(4'b0),
-        .wdata(32'b0),
-        .gnt(instr_mem_gnt),
-        .rvalid(instr_mem_rvalid),
-        .rdata(instr_mem_rdata),
-        .store_req(),
-        .store_addr(instr_store_addr),
-        .store_we(),
-        .store_be(),
-        .store_wdata(),
-        .write_fire(),
-        .read_fire(),
-        .store_rdata(instr_store_rdata)
-    );
-
-    mem_adapter #(.RESPONSE_LATENCY(MEM_LATENCY)) data_adapter (
-        .clk(clk),
-        .rst(rst),
-        .req(data_mem_req),
-        .addr(data_mem_addr),
-        .we(data_mem_we),
-        .be(data_mem_be),
-        .wdata(data_mem_wdata),
-        .gnt(data_mem_gnt),
-        .rvalid(data_mem_rvalid),
-        .rdata(data_mem_rdata),
-        .store_req(data_store_req),
-        .store_addr(data_store_addr),
-        .store_we(data_store_we),
-        .store_be(data_store_be),
-        .store_wdata(data_store_wdata),
-        .write_fire(data_write_fire),
-        .read_fire(data_read_fire),
+        .req(mem_req),
+        .addr(mem_addr),
+        .we(mem_we),
+        .be(mem_be),
+        .wdata(mem_wdata),
+        .gnt(mem_gnt),
+        .rvalid(mem_rvalid),
+        .rdata(mem_rdata),
+        .store_req(mem_store_req),
+        .store_addr(mem_store_addr),
+        .store_we(mem_store_we),
+        .store_be(mem_store_be),
+        .store_wdata(mem_store_wdata),
+        .write_fire(mem_write_fire),
+        .read_fire(mem_read_fire),
         .store_rdata(mem_read_data)
     );
+
+    // The fetch port reads RAM only, so a fetch outside RAM reads 0 with either port count.
+    generate
+        if (MEM_PORTS == 2) begin : g_fetch_port
+            wire fetch_ram_access = `IS_DATA_MEM(fetch_store_addr) || `IS_INSTR_MEM(fetch_store_addr);
+
+            mem_adapter #(.RESPONSE_LATENCY(MEM_LATENCY)) fetch_adapter_inst (
+                .clk(clk),
+                .rst(rst),
+                .req(fetch_mem_req),
+                .addr(fetch_mem_addr),
+                .we(1'b0),
+                .be(4'b0),
+                .wdata(32'b0),
+                .gnt(fetch_mem_gnt),
+                .rvalid(fetch_mem_rvalid),
+                .rdata(fetch_mem_rdata),
+                .store_req(),
+                .store_addr(fetch_store_addr),
+                .store_we(),
+                .store_be(),
+                .store_wdata(),
+                .write_fire(),
+                .read_fire(),
+                .store_rdata(fetch_ram_access ? fetch_ram_data : 32'b0)
+            );
+        end else begin : g_no_fetch_port
+            assign fetch_mem_gnt = 1'b0;
+            assign fetch_mem_rvalid = 1'b0;
+            assign fetch_mem_rdata = 32'b0;
+            assign fetch_store_addr = 32'b0;
+        end
+    endgenerate
 
     // Instantiate the RISC-V CPU core
     riscv_cpu #(
@@ -175,24 +189,26 @@ module top #(
         .DCACHE_WAYS(DCACHE_WAYS),
         .DCACHE_SET_INDEX_BITS(DCACHE_SET_INDEX_BITS),
         .DCACHE_WORD_OFFSET_BITS(DCACHE_WORD_OFFSET_BITS),
-        .TLB_ENTRIES(TLB_ENTRIES)
+        .TLB_ENTRIES(TLB_ENTRIES),
+        .MEM_PORTS(MEM_PORTS)
     ) cpu_inst (
         .clk(clk),
         .rst(rst),
-        .instr_mem_req(instr_mem_req),
-        .instr_mem_addr(instr_mem_addr),
-        .instr_mem_gnt(instr_mem_gnt),
-        .instr_mem_rvalid(instr_mem_rvalid),
-        .instr_mem_rdata(instr_mem_rdata),
-        .data_mem_req(data_mem_req),
-        .data_mem_addr(data_mem_addr),
-        .data_mem_we(data_mem_we),
-        .data_mem_be(data_mem_be),
-        .data_mem_wdata(data_mem_wdata),
-        .data_mem_load_type(data_mem_load_type),
-        .data_mem_gnt(data_mem_gnt),
-        .data_mem_rvalid(data_mem_rvalid),
-        .data_mem_rdata(data_mem_rdata),
+        .mem_req(mem_req),
+        .mem_addr(mem_addr),
+        .mem_we(mem_we),
+        .mem_be(mem_be),
+        .mem_wdata(mem_wdata),
+        .mem_load_type(mem_load_type),
+        .mem_instr(mem_instr),
+        .mem_gnt(mem_gnt),
+        .mem_rvalid(mem_rvalid),
+        .mem_rdata(mem_rdata),
+        .fetch_mem_req(fetch_mem_req),
+        .fetch_mem_addr(fetch_mem_addr),
+        .fetch_mem_gnt(fetch_mem_gnt),
+        .fetch_mem_rvalid(fetch_mem_rvalid),
+        .fetch_mem_rdata(fetch_mem_rdata),
         .module_pc_out(cpu_pc_out),
         .module_instr_out(cpu_instr_out),
         .timer_interrupt(timer_interrupt),
@@ -209,15 +225,16 @@ module top #(
         .MEM_SIZE(17039360)  // (64MB + 1MB) / 4 words
     ) unified_mem_inst (
         .clk(clk),
-        .instr_addr(instr_store_addr),
-        .instr_addr_p2(data_store_addr),
-        .data_wr_req(data_store_req && data_store_we && ram_access),
-        .data_rd_en(data_store_req && !data_store_we && ram_access),
+        // The memory port reads through the formatted read port, the fetch port (MEM_PORTS 2) through the other.
+        .instr_addr(fetch_store_addr),
+        .instr_addr_p2(mem_store_addr),
+        .data_wr_req(mem_store_req && mem_store_we && ram_access),
+        .data_rd_en(mem_store_req && !mem_store_we && ram_access),
         // A write lands once, in the cycle the adapter commits it.
-        .wr_en(data_write_fire && ram_access),
-        .write_byte_enable(data_store_be),
-        .wr_data(data_store_wdata),
-        .load_type(data_mem_load_type),
+        .wr_en(mem_write_fire && ram_access),
+        .write_byte_enable(mem_store_be),
+        .wr_data(mem_store_wdata),
+        .load_type(mem_load_type),
         // The walker reads PTEs over the data interface now, so the side channel is unused.
         .pte_wr_en_a(1'b0),
         .pte_wr_addr_a(32'b0),
@@ -229,8 +246,8 @@ module top #(
         .pte_rd_addr_b(32'b0),
         .pte_rd_addr_c(32'b0),
         .pte_rd_addr_d(32'b0),
-        .instr(instr_store_rdata),
-        .instr_p2(instr_read_data),
+        .instr(fetch_ram_data),
+        .instr_p2(ram_read_data),
         .pte_rd_value_a(mmu_instr_l1_pte_value),
         .pte_rd_value_b(mmu_instr_l0_pte_value),
         .pte_rd_value_c(mmu_data_l1_pte_value),
@@ -245,10 +262,10 @@ module top #(
     timer timer_inst (
         .clk(clk),
         .rst(rst),
-        .addr(data_store_addr),
-        .write_data(data_store_wdata),
-        .write_enable(data_write_fire && timer_access),
-        .read_enable(data_read_fire && timer_access),
+        .addr(mem_store_addr),
+        .write_data(mem_store_wdata),
+        .write_enable(mem_write_fire && timer_access),
+        .read_enable(mem_read_fire && timer_access),
         .read_data(timer_read_data),
         .timer_valid(timer_valid),
         .timer_interrupt(timer_interrupt),
@@ -260,10 +277,10 @@ module top #(
     uart uart_inst (
         .clk(clk),
         .rst(rst),
-        .addr(data_store_addr),
-        .write_data(data_store_wdata),
-        .write_enable(data_write_fire && uart_access),
-        .read_enable(data_read_fire && uart_access),
+        .addr(mem_store_addr),
+        .write_data(mem_store_wdata),
+        .write_enable(mem_write_fire && uart_access),
+        .read_enable(mem_read_fire && uart_access),
         .read_data(uart_read_data),
         .uart_valid(uart_valid),
         .interrupt(uart_interrupt),
@@ -274,10 +291,10 @@ module top #(
     plic plic_inst (
         .clk(clk),
         .rst(rst),
-        .addr(data_store_addr),
-        .write_data(data_store_wdata),
-        .write_enable(data_write_fire && plic_access),
-        .read_enable(data_read_fire && plic_access),
+        .addr(mem_store_addr),
+        .write_data(mem_store_wdata),
+        .write_enable(mem_write_fire && plic_access),
+        .read_enable(mem_read_fire && plic_access),
         .read_data(plic_read_data),
         .plic_valid(plic_valid),
         .source_irq({external_interrupt, uart_interrupt}),

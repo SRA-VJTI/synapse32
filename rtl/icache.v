@@ -1,6 +1,6 @@
 `default_nettype none
 `include "memory_map.vh"
-// Set-associative instruction cache in front of the fetch adapter, physically tagged. The arrays are
+// Set-associative instruction cache on the fetch side of the memory port, physically tagged. The arrays are
 // read at the clock edge with the next PC, so a hit answers in the request's cycle; the set index lies
 // within the 4 KB page offset, so the virtual next PC gives the physical index.
 module icache #(

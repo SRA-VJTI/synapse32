@@ -2,7 +2,7 @@
 
 Verilator lints riscv_cpu with the sizes set as parameters; warnings are not fatal, as in the simulation builds. A
 module out of range instantiates its missing *_parameters_out_of_range module, which names it in the error. The
-cache enables lint clean both ways, so a build that sets them on the command line compiles.
+cache enables and the memory port count lint clean every way, so a build that sets them on the command line compiles.
 """
 
 import subprocess
@@ -24,6 +24,8 @@ VALID = [
 CLEAN = [
     {"ICACHE_ENABLE": 0, "DCACHE_ENABLE": 0},
     {"ICACHE_ENABLE": 1, "DCACHE_ENABLE": 1},
+    {"ICACHE_ENABLE": 0, "DCACHE_ENABLE": 0, "MEM_PORTS": 2},
+    {"ICACHE_ENABLE": 1, "DCACHE_ENABLE": 1, "MEM_PORTS": 2},
 ]
 
 INVALID = [
@@ -39,6 +41,8 @@ INVALID = [
     ({"STORE_BUFFER_DEPTH": 0}, "store_buffer"),
     ({"STORE_BUFFER_DEPTH": 256}, "store_buffer"),
     ({"CACHEABLE_REGIONS": 0, "CACHEABLE_BASES": 0, "CACHEABLE_SIZES": 0}, "riscv_cpu"),
+    ({"MEM_PORTS": 0}, "riscv_cpu"),
+    ({"MEM_PORTS": 3}, "riscv_cpu"),
 ]
 
 

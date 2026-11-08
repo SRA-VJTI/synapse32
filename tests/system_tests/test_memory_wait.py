@@ -44,8 +44,8 @@ LOOPS = 8
 AMO_COUNT = LOOPS
 LATENCIES = [0, 1, 2, 4]
 SWEEP_LATENCY = 2
-# Fast fetch and slow data; a one-entry buffer still holds an uncached device write, so the next store waits.
-FAST_FETCH = os.environ.get("MEMORY_WAIT_FAST_FETCH") == "1"
+# A slow memory and a one-entry buffer that still holds an uncached device write, so the next store waits.
+HELD_STORE_BUILD = os.environ.get("MEMORY_WAIT_HELD_STORE_BUILD") == "1"
 PROLOGUE_STORE = 0x00872223  # sw s0, 4(a4)
 
 PROGRAM = f"""
@@ -309,7 +309,7 @@ def _reference_path(latency: int) -> Path:
 @cocotb.test()
 async def test_program_is_latency_independent(dut):
     latency = int(os.environ["MEMORY_WAIT_LATENCY"])
-    if FAST_FETCH:
+    if HELD_STORE_BUILD:
         return
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     _load_image(dut, _build_dir())
@@ -353,7 +353,7 @@ async def test_program_is_latency_independent(dut):
 async def test_interrupt_during_wait_is_transparent(dut):
     """With a waiting memory, an interrupt at any cycle must not disturb the program."""
     latency = int(os.environ["MEMORY_WAIT_LATENCY"])
-    if latency != SWEEP_LATENCY or FAST_FETCH:
+    if latency != SWEEP_LATENCY or HELD_STORE_BUILD:
         return
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     _load_image(dut, _build_dir())
@@ -378,7 +378,7 @@ async def test_interrupt_during_wait_is_transparent(dut):
 @cocotb.test()
 async def test_held_store_keeps_forwarded_operand(dut):
     """The prologue's second store waits in EX while the addi that produced its base leaves WB."""
-    if not FAST_FETCH:
+    if not HELD_STORE_BUILD:
         return
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     _load_image(dut, _build_dir())
@@ -438,9 +438,9 @@ def runCocotbTests():
     build_dir = _build_dir()
     assemble(build_dir)
 
-    builds = [(f"lat{latency}", latency, latency, 4) for latency in LATENCIES]
-    builds.append(("fast_fetch", 8, 0, 1))
-    for name, latency, fetch_latency, depth in builds:
+    builds = [(f"lat{latency}", latency, 4, False) for latency in LATENCIES]
+    builds.append(("held_store", 8, 1, True))  # one buffer entry and a slow memory hold a store in EX
+    for name, latency, depth, held_store_build in builds:
         sim_build = Path.cwd() / "sim_build" / f"sim_build_memory_wait_{name}"
         if sim_build.exists():
             shutil.rmtree(sim_build)
@@ -448,8 +448,7 @@ def runCocotbTests():
             verilog_sources=sources,
             toplevel="top",
             module="test_memory_wait",
-            parameters={"MEM_LATENCY": latency, "FETCH_LATENCY": fetch_latency,
-                        "STORE_BUFFER_DEPTH": depth},
+            parameters={"MEM_LATENCY": latency, "STORE_BUFFER_DEPTH": depth},
             includes=[str(rtl_dir / "include")],
             simulator="verilator",
             timescale="1ns/1ps",
@@ -463,7 +462,7 @@ def runCocotbTests():
                 "COCOTB_TEST_MODULES": "test_memory_wait",
                 "MEMORY_WAIT_BUILD": str(build_dir.resolve()),
                 "MEMORY_WAIT_LATENCY": str(latency),
-                "MEMORY_WAIT_FAST_FETCH": "1" if fetch_latency != latency else "0",
+                "MEMORY_WAIT_HELD_STORE_BUILD": "1" if held_store_build else "0",
             },
         )
 

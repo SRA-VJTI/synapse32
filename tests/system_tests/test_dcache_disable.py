@@ -1,4 +1,4 @@
-"""With DCACHE_ENABLE 0 every store reaches the data port; the default build keeps them in the write-back cache."""
+"""With DCACHE_ENABLE 0 every store goes to memory; the default build keeps them in the write-back cache."""
 
 import cocotb
 from cocotb.triggers import ReadOnly, RisingEdge
@@ -54,7 +54,7 @@ PROGRAM = [
 
 
 async def _run(dut):
-    """Run the loop; return the number of writes granted on the data port."""
+    """Run the loop; return the number of writes the data side had granted."""
     writes = 0
 
     async def count():
@@ -62,7 +62,8 @@ async def _run(dut):
         while True:
             await RisingEdge(dut.clk)
             await ReadOnly()
-            if int(dut.data_mem_req.value) and int(dut.data_mem_gnt.value) and int(dut.data_mem_we.value):
+            cpu = dut.cpu_inst
+            if int(cpu.data_mem_req.value) and int(cpu.data_mem_gnt.value) and int(cpu.data_mem_we.value):
                 writes += 1
 
     cocotb.start_soon(count())
@@ -76,20 +77,20 @@ async def _run(dut):
 
 @cocotb.test()
 async def test_disabled_writes_every_store(dut):
-    """No cache: each store is a write on the data port."""
+    """No cache: each store is a write to memory."""
     writes = await _run(dut)
-    assert writes >= LOOPS, f"{writes} data-port writes for {LOOPS} stores: something cached them"
+    assert writes >= LOOPS, f"{writes} memory writes for {LOOPS} stores: something cached them"
 
 
 @cocotb.test()
 async def test_enabled_keeps_the_stores(dut):
     """Control: the write-back cache keeps the stores."""
     writes = await _run(dut)
-    assert writes < LOOPS // 2, f"{writes} data-port writes for {LOOPS} stores: the stores were not cached"
+    assert writes < LOOPS // 2, f"{writes} memory writes for {LOOPS} stores: the stores were not cached"
 
 
 def runCocotbTests():
-    latency = {"MEM_LATENCY": LATENCY, "FETCH_LATENCY": LATENCY}
+    latency = {"MEM_LATENCY": LATENCY}
     run_tests("test_dcache_disable", ["test_disabled_writes_every_store"],
               parameters={**latency, "DCACHE_ENABLE": 0})
     run_tests("test_dcache_disable", ["test_enabled_keeps_the_stores"], parameters=latency)

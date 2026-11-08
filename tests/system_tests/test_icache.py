@@ -1,10 +1,10 @@
 """Instruction cache.
 
-Warm code runs at one instruction per cycle whatever the fetch latency; a set holds four lines and the
+Warm code runs at one instruction per cycle whatever the memory latency; a set holds four lines and the
 fifth replaces the oldest; FENCE.I makes patched code visible, also when it lands during a line fill; entry into any word of
 a line; an interrupt swept over cold code; two virtual pages share one physical line, and a fetch without
-execute permission still faults on a cached line; fetches outside RAM bypass the cache. Each program
-times its own calls with mcycle, so every check also proves the cache missed or hit where it should.
+execute permission still faults on a cached line; fetches outside the cacheable region bypass the cache.
+Each program times its own calls with mcycle, so every check also proves the cache missed or hit where it should.
 """
 
 import os
@@ -38,7 +38,10 @@ SWEEP_LATENCY = 2
 WARM_BLOCK = 32
 ENTRY_OFFSETS = [0, 4, 8, 12]
 SWEEP_RUN = 24
-UNCACHED = 0x0000_2000  # unbacked: the simulation memory reads NOPs there
+# The build caches only the first half of instruction memory, so the NOPs placed above it are fetched uncached.
+CACHED_INSTR_SIZE = 0x0200_0000
+UNCACHED = 0x8000_0000 + CACHED_INSTR_SIZE
+NOP = 0x0000_0013
 UNCACHED_CYCLES = 40
 UNCACHED_SLACK = 6  # instructions in flight when the interrupt is taken, plus margin
 SSIP_CAUSE = 0x8000_0003
@@ -660,9 +663,10 @@ async def test_virtual_pages_share_a_physical_line(dut):
 
 
 @cocotb.test()
-async def test_fetch_outside_ram_bypasses(dut):
+async def test_fetch_outside_the_cacheable_region_bypasses(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
-    done = await _run(dut, "uncached.bin", inject_uncached=True)
+    setup = [(UNCACHED + offset, NOP) for offset in range(0, 0x1000, 4)]
+    done = await _run(dut, "uncached.bin", setup=setup, inject_uncached=True)
     _check_finished(dut, done, expect_trap=True)
     cause, epc = _peek(dut, TRAP_CAUSE), _peek(dut, TRAP_EPC)
     assert cause == SSIP_CAUSE, f"{_name()}: expected the software interrupt, got mcause 0x{cause:08x}"
@@ -672,7 +676,7 @@ async def test_fetch_outside_ram_bypasses(dut):
     ran, uncached_rate = (epc - UNCACHED) // 4, UNCACHED_CYCLES // (_latency() + 1)
     assert ran >= uncached_rate - UNCACHED_SLACK, (
         f"{_name()}: {ran} NOPs ran in the {UNCACHED_CYCLES} cycles before the interrupt, uncached fetch gives "
-        f"about {uncached_rate}: fetches outside RAM were cached")
+        f"about {uncached_rate}: fetches outside the cacheable region were cached")
 
 
 def runCocotbTests():
@@ -690,7 +694,7 @@ def runCocotbTests():
             verilog_sources=sources,
             toplevel="top",
             module="test_icache",
-            parameters={"MEM_LATENCY": latency, "FETCH_LATENCY": latency},
+            parameters={"MEM_LATENCY": latency, "CACHEABLE_SIZES": f"64'h00100000{CACHED_INSTR_SIZE:08x}"},
             includes=[str(rtl_dir / "include")],
             simulator="verilator",
             timescale="1ns/1ps",

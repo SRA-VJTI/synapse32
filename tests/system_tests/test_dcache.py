@@ -793,7 +793,7 @@ def runCocotbTests():
     if os.environ.get("DCACHE_BUILDS"):
         builds = [tuple(int(v) for v in b.split(":")) for b in os.environ["DCACHE_BUILDS"].split(",")]
     for latency, mshrs in builds:
-        parameters = {"MEM_LATENCY": latency, "FETCH_LATENCY": latency}
+        parameters = {"MEM_LATENCY": latency}
         if mshrs != DEFAULT_MSHRS:
             parameters["NUM_MSHR"] = mshrs
         sim_build = Path.cwd() / "sim_build" / f"sim_build_dcache_lat{latency}_mshr{mshrs}"

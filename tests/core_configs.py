@@ -8,6 +8,7 @@ MATRIX = {
     "long_lines": {"ICACHE_WORD_OFFSET_BITS": 3, "DCACHE_WORD_OFFSET_BITS": 3},
     "one_mshr": {"NUM_MSHR": 1},
     "small_buffers": {"STORE_BUFFER_DEPTH": 1, "TLB_ENTRIES": 1},
+    "two_ports": {"MEM_PORTS": 2},
 }
 
 if __name__ == "__main__":

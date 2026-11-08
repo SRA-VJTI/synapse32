@@ -1,5 +1,5 @@
 `default_nettype none
-// FIFO of translated writes waiting for the data port; entry 0 is the oldest and drains first.
+// FIFO of translated writes waiting for the memory port; entry 0 is the oldest and drains first.
 module store_buffer #(
     parameter DEPTH = 4
 ) (

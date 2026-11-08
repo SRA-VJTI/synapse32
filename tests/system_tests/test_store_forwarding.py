@@ -27,7 +27,7 @@ DONE_VALUE = 0x444F_4E45
 TRAP_CAUSE = 0x1000_0304
 TRAP_EPC = 0x1000_030C
 
-LATENCIES = [2, 4]  # MEM_LATENCY and FETCH_LATENCY; the device writes hold the port long enough
+LATENCIES = [2, 4]  # MEM_LATENCY; the device writes hold the port long enough
 X, Y, Z = 0x89AB_CDEF, 0x9C, 0xF00D
 FORWARD_CYCLES = 1  # a forward is registered: one cycle more than a warm hit
 
@@ -83,7 +83,7 @@ def _case(index: int, stores, load) -> str:
         fence
         li      s1, {_word(index):#x}
         li      t0, 0x5A
-        sw      t0, 0(s0)               # UART scratch register, twice: holds the data port
+        sw      t0, 0(s0)               # UART scratch register, twice: holds the memory port
         sw      t0, 0(s0)
 {body}        csrr    t5, mcycle
         {op}      t1, {offset}(s1)
@@ -281,7 +281,7 @@ def runCocotbTests():
             verilog_sources=sources,
             toplevel="top",
             module="test_store_forwarding",
-            parameters={"MEM_LATENCY": latency, "FETCH_LATENCY": latency},
+            parameters={"MEM_LATENCY": latency},
             includes=[str(rtl_dir / "include")],
             simulator="verilator",
             timescale="1ns/1ps",

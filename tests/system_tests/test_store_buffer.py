@@ -1,10 +1,10 @@
 """Store buffer.
 
-Translated writes wait in front of the data port, so stores cost no more than ALU instructions. Each
+Translated writes wait in front of the memory port, so stores cost no more than ALU instructions. Each
 check runs while the write is still buffered: loads, LR and AMOs of that word, a device read after a
 device write, FENCE.I, the page walk after SFENCE.VMA, and an interrupt handler (swept over every
 cycle). A generated mix of stores and loads must match a memory model at buffer depths 1, 2 and 4.
-Every program runs at latency 0, 1, 2 and 4, plus a build with fast fetch and slow data.
+Every program runs at latency 0, 1, 2 and 4, and at latency 2 with buffer depths 1, 2 and 4.
 """
 
 import os
@@ -24,6 +24,8 @@ INSTR_MEM_SIZE = 0x0400_0000
 DATA_MEM_BASE = 0x1000_0000
 
 SCRATCH = 0x1000_0100
+TIMED_STORES = 0x1000_1000
+TIMED_STRIDE = 0x40  # one line per store, for lines up to 64 bytes
 FILLER = 0x1000_0180
 RESULT = 0x1000_0200
 RESULT_WORDS = 16
@@ -40,8 +42,8 @@ STORE_RUN = 4
 LATENCIES = [0, 1, 2, 4]
 SWEEP_LATENCY = 2
 DEFAULT_DEPTH = 4
-FAST_FETCH_DEPTHS = [1, 2, 4]
-FAST_FETCH = os.environ.get("STORE_BUFFER_FAST_FETCH") == "1"
+BUFFER_DEPTHS = [1, 2, 4]
+DEPTH_BUILD = os.environ.get("STORE_BUFFER_DEPTH_BUILD") == "1"
 
 # Three writes ahead of the one under test, so it waits behind them.
 FILL = f"""
@@ -51,9 +53,9 @@ FILL = f"""
 """
 
 
-def _store_run(op: str) -> str:
+def _store_run(op: str, stride: int = 4) -> str:
     return "".join(f"""
-        {op.format(offset=4 * i)}
+        {op.format(offset=stride * i)}
         addi    t0, t0, 1
         addi    t0, t0, 1
         addi    t0, t0, 1""" for i in range(STORE_RUN))
@@ -71,8 +73,11 @@ _start:
         li      s1, 0x11111111
         li      s2, {FILLER:#x}
 
-        # Stores cost no more cycles than ALU instructions while the buffer has room.
-        csrr    t5, mcycle{_store_run("sw      zero, {offset}(a0)")}
+        # Store misses cost no more than ALU instructions; the second pass, timed, runs from cached code on fresh lines.
+        li      a1, {TIMED_STORES:#x}
+        li      s3, 2
+timed_pass:
+        csrr    t5, mcycle{_store_run("sw      zero, {offset}(a1)", TIMED_STRIDE)}
         csrr    t6, mcycle
         sub     t6, t6, t5
         sw      t6, 0(a7)
@@ -80,6 +85,9 @@ _start:
         csrr    t6, mcycle
         sub     t6, t6, t5
         sw      t6, 4(a7)
+        addi    a1, a1, 0x100
+        addi    s3, s3, -1
+        bnez    s3, timed_pass
 
         # A load of a buffered word, whole and in part.
 {FILL}
@@ -337,6 +345,10 @@ m_trap:
 # Stress: stores use preloaded registers, so they issue back to back; each load's value is logged.
 STRESS = 0x1000_0400
 STRESS_BYTES = 64
+# The body runs twice: with cold-code fetch, then from cached code so its stores fill the buffer; same results.
+STRESS_COPIES = [STRESS, 0x1000_0700]
+# Instructions from a store miss until its line is being filled.
+FILL_START = 4
 STRESS_LOG = 0x1000_0500
 STRESS_OPS = 160
 STRESS_LOADS = 64
@@ -353,6 +365,16 @@ def _stress():
     initial = bytes(memory)
     values = [rng.randrange(1 << 32) for _ in STRESS_REGS]
     body, log = [], []
+    # Per line: a word store starts the fill, a halfword store waits for it in the buffer, a load of that word meets it.
+    for line in range(0, STRESS_BYTES, 16):
+        body.append(f"        sw      {STRESS_REGS[0]}, {line}(a0)")
+        memory[line:line + 4] = values[0].to_bytes(4, "little")
+        body.append("        addi    t2, zero, 0\n" * FILL_START)
+        body.append(f"        sh      {STRESS_REGS[1]}, {line + 4}(a0)")
+        memory[line + 4:line + 6] = values[1].to_bytes(4, "little")[:2]
+        body.append(f"        lw      t2, {line + 4}(a0)")
+        body.append(f"        sw      t2, {4 * len(log)}(a7)")
+        log.append(int.from_bytes(memory[line + 4:line + 8], "little"))
     for _ in range(STRESS_OPS):
         if rng.random() < 0.6 or len(log) == STRESS_LOADS:
             size = rng.choice([1, 2, 4])
@@ -375,10 +397,16 @@ def _stress():
 _start:
         la      t0, m_trap
         csrw    mtvec, t0
-        li      a0, {STRESS:#x}
+        li      a0, {STRESS_COPIES[0]:#x}
         li      a7, {STRESS_LOG:#x}
+        li      s0, {len(STRESS_COPIES)}
 {preload}
+stress_pass:
 """ + "\n".join(body) + f"""
+        addi    a0, a0, {STRESS_COPIES[1] - STRESS_COPIES[0]:#x}
+        addi    a7, a7, {4 * STRESS_LOADS}
+        addi    s0, s0, -1
+        bnez    s0, stress_pass
         li      t0, {DONE_ADDR:#x}
         li      t1, {DONE_VALUE:#x}
         sw      t1, 0(t0)
@@ -528,7 +556,7 @@ def _depth() -> int:
 async def test_buffered_writes_keep_program_order(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     done = await _run(dut, "ordering.bin", setup=[(SCRATCH + 0x40, UNRELATED_VALUE)])
-    name = f"latency {_latency()}{' fast fetch' if FAST_FETCH else ''}"
+    name = f"latency {_latency()}, depth {_depth()}"
     assert done is not None, f"{name}: the program did not finish"
     assert _peek(dut, TRAP_CAUSE) == 0, f"{name}: unexpected trap, mcause 0x{_peek(dut, TRAP_CAUSE):08x}"
     got = {i: _peek(dut, RESULT + 4 * i) for i in ORDERING_EXPECTED}
@@ -538,8 +566,8 @@ async def test_buffered_writes_keep_program_order(dut):
 
 @cocotb.test()
 async def test_stores_do_not_hold_the_pipeline(dut):
-    """With fetch answering at once and data after two cycles, a store must not wait for memory."""
-    if not FAST_FETCH:
+    """From cached code, with data after two cycles, a store must not wait for memory."""
+    if not DEPTH_BUILD:
         return
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     done = await _run(dut, "ordering.bin", setup=[(SCRATCH + 0x40, UNRELATED_VALUE)])
@@ -564,7 +592,7 @@ async def test_page_walk_sees_buffered_pte(dut):
         _poke(dut, ROOT_TABLE + offset, 0)
         _poke(dut, L0_TABLE + offset, 0)
     done = await _run(dut, "paging.bin", setup=setup)
-    name = f"latency {_latency()}{' fast fetch' if FAST_FETCH else ''}"
+    name = f"latency {_latency()}, depth {_depth()}"
     assert done is not None, f"{name}: the program did not finish"
     assert _peek(dut, TRAP_CAUSE) == 0, f"{name}: unexpected trap, mcause 0x{_peek(dut, TRAP_CAUSE):08x}"
     marker = _peek(dut, RESULT)
@@ -577,22 +605,25 @@ async def test_page_walk_sees_buffered_pte(dut):
 async def test_mixed_stores_and_loads_match_a_memory_model(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     _, initial, expected_log, expected_memory = _stress()
-    setup = [(STRESS + 4 * i, word) for i, word in enumerate(initial)]
-    setup += [(STRESS_LOG + 4 * i, 0) for i in range(STRESS_LOADS)]
+    setup = [(copy + 4 * i, word) for copy in STRESS_COPIES for i, word in enumerate(initial)]
+    setup += [(STRESS_LOG + 4 * i, 0) for i in range(len(STRESS_COPIES) * STRESS_LOADS)]
     coverage = {"full": 0, "match": 0}
     done = await _run(dut, "stress.bin", setup=setup, coverage=coverage)
-    name = f"latency {_latency()}, depth {_depth()}{' fast fetch' if FAST_FETCH else ''}"
+    name = f"latency {_latency()}, depth {_depth()}"
     assert done is not None, f"{name}: the program did not finish"
     assert _peek(dut, TRAP_CAUSE) == 0, f"{name}: unexpected trap, mcause 0x{_peek(dut, TRAP_CAUSE):08x}"
-    log = [_peek(dut, STRESS_LOG + 4 * i) for i in range(len(expected_log))]
-    bad_loads = [(i, f"0x{g:x}", f"0x{e:x}") for i, (g, e) in enumerate(zip(log, expected_log)) if g != e]
-    assert not bad_loads, f"{name}: loads (index, got, expected): {bad_loads[:6]}"
-    memory = [_peek(dut, STRESS + 4 * i) for i in range(len(expected_memory))]
-    bad_words = [(i, f"0x{g:x}", f"0x{e:x}") for i, (g, e) in enumerate(zip(memory, expected_memory)) if g != e]
-    assert not bad_words, f"{name}: final words (index, got, expected): {bad_words[:6]}"
+    for copy in range(len(STRESS_COPIES)):
+        base = STRESS_LOG + 4 * STRESS_LOADS * copy
+        log = [_peek(dut, base + 4 * i) for i in range(len(expected_log))]
+        bad_loads = [(i, f"0x{g:x}", f"0x{e:x}") for i, (g, e) in enumerate(zip(log, expected_log)) if g != e]
+        assert not bad_loads, f"{name}: pass {copy + 1} loads (index, got, expected): {bad_loads[:6]}"
+    for copy in STRESS_COPIES:
+        memory = [_peek(dut, copy + 4 * i) for i in range(len(expected_memory))]
+        bad_words = [(i, f"0x{g:x}", f"0x{e:x}") for i, (g, e) in enumerate(zip(memory, expected_memory)) if g != e]
+        assert not bad_words, f"{name}: final words at 0x{copy:08x} (index, got, expected): {bad_words[:6]}"
     dut._log.info(f"{name}: {coverage['full']} cycles a store waited on a full buffer, "
                   f"{coverage['match']} cycles a load waited on a buffered word")
-    if FAST_FETCH:
+    if DEPTH_BUILD:
         assert coverage["full"] and coverage["match"], (
             f"{name}: the buffer never filled or no load waited on a buffered word ({coverage}), "
             "so this run did not exercise the buffer")
@@ -601,7 +632,7 @@ async def test_mixed_stores_and_loads_match_a_memory_model(dut):
 @cocotb.test()
 async def test_handler_reads_buffered_store(dut):
     """An interrupt at any cycle: the handler must read the value of every store before mepc."""
-    if _latency() != SWEEP_LATENCY or FAST_FETCH:
+    if _latency() != SWEEP_LATENCY or DEPTH_BUILD:
         return
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     reference = await _run(dut, "irq.bin")
@@ -631,9 +662,9 @@ def runCocotbTests():
     build_dir = _build_dir()
     assemble(build_dir)
 
-    builds = [(f"lat{latency}", latency, latency, DEFAULT_DEPTH) for latency in LATENCIES]
-    builds += [(f"fast_fetch_depth{depth}", SWEEP_LATENCY, 0, depth) for depth in FAST_FETCH_DEPTHS]
-    for name, latency, fetch_latency, depth in builds:
+    builds = [(f"lat{latency}", latency, DEFAULT_DEPTH, False) for latency in LATENCIES]
+    builds += [(f"depth{depth}", SWEEP_LATENCY, depth, True) for depth in BUFFER_DEPTHS]
+    for name, latency, depth, depth_build in builds:
         sim_build = Path.cwd() / "sim_build" / f"sim_build_store_buffer_{name}"
         if sim_build.exists():
             shutil.rmtree(sim_build)
@@ -641,8 +672,7 @@ def runCocotbTests():
             verilog_sources=sources,
             toplevel="top",
             module="test_store_buffer",
-            parameters={"MEM_LATENCY": latency, "FETCH_LATENCY": fetch_latency,
-                        "STORE_BUFFER_DEPTH": depth},
+            parameters={"MEM_LATENCY": latency, "STORE_BUFFER_DEPTH": depth},
             includes=[str(rtl_dir / "include")],
             simulator="verilator",
             timescale="1ns/1ps",
@@ -657,7 +687,7 @@ def runCocotbTests():
                 "STORE_BUFFER_BUILD": str(build_dir.resolve()),
                 "STORE_BUFFER_LATENCY": str(latency),
                 "STORE_BUFFER_DEPTH": str(depth),
-                "STORE_BUFFER_FAST_FETCH": "1" if fetch_latency != latency else "0",
+                "STORE_BUFFER_DEPTH_BUILD": "1" if depth_build else "0",
             },
         )
 

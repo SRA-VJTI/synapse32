@@ -31,7 +31,7 @@ ACK_ADDR = 0x1000_0404
 READY_ADDR = 0x1000_0408
 UNTOUCHED = 0xDEAD_BEEF
 
-LATENCIES = [0, 2]  # MEM_LATENCY and FETCH_LATENCY
+LATENCIES = [0, 2]  # MEM_LATENCY
 POLL = 64
 MIP_STIP = 0x20
 MIP_SEIP = 0x200
@@ -307,7 +307,7 @@ def runCocotbTests():
             verilog_sources=sources,
             toplevel="top",
             module="test_interrupt_routing",
-            parameters={"MEM_LATENCY": latency, "FETCH_LATENCY": latency},
+            parameters={"MEM_LATENCY": latency},
             includes=[str(rtl_dir / "include")],
             simulator="verilator",
             timescale="1ns/1ps",

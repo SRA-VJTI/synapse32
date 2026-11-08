@@ -2,11 +2,12 @@
 stalling at random.
 
 Each seed is one program over a few sets and more lines per set than the cache has ways, so it hits, misses, merges
-into MSHRs and evicts dirty lines in orders nobody wrote down. Both memory ports are held off at random cycles, as a
-busy memory would, so requests wait a varying time for their grant and their response. A model replays the
-operations in program order and every logged value must match; after the last FENCE.I the backing RAM must match
-too. SC may fail (the ISA allows it, with result 1): the model takes the logged result and applies the store only
-when SC succeeded.
+into MSHRs and evicts dirty lines in orders nobody wrote down. The memory is held off at random cycles, as a busy
+memory would, so fetch and data requests wait a varying time for their grant and their response (with MEM_PORTS 2,
+the fetch port's memory is held off on its own). A model replays
+the operations in program order and every logged value must match; after the last FENCE.I the backing RAM must
+match too. SC may fail (the ISA allows it, with result 1): the model takes the logged result and applies the store
+only when SC succeeded.
 """
 
 import os
@@ -17,7 +18,7 @@ from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles, FallingEdge, ReadOnly, RisingEdge
+from cocotb.triggers import ClockCycles, FallingEdge, ReadOnly
 from cocotb_test.simulator import run
 from memory_view import dcache, read_word
 
@@ -33,7 +34,8 @@ UART_SCR = 0x2000_001C  # uncached, no side effects: reads back the last byte wr
 STRESS_BASE = 0x1004_0000
 STRESS_LOG = 0x1008_0000
 
-BUILDS = [(0, 8), (1, 8), (2, 1), (2, 2), (2, 8)]  # (memory latency, NUM_MSHR)
+# (memory latency, NUM_MSHR, MEM_PORTS)
+BUILDS = [(0, 8, 1), (1, 8, 1), (2, 1, 1), (2, 2, 1), (2, 8, 1), (0, 8, 2), (2, 8, 2)]
 SEEDS = [1, 2, 3]  # STRESS_SEEDS="4,5" runs others
 OPS = 100  # under 3 KB of code, which the default icache holds
 PASSES = 4  # passes after the first run warm code, so data traffic, not fetch, sets the pace
@@ -317,13 +319,23 @@ def _ram(dut, addr: int) -> int:
     return int(dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value) & 0xFFFF_FFFF
 
 
-async def _backpressure(dut, adapter, rng: random.Random):
+def _ports(dut):
+    """Each memory port with its adapter's hold: the one shared port, and with MEM_PORTS 2 the fetch port (inside a
+    generate block, which Verilator's VPI finds only by its full dotted name)."""
+    ports = {"memory": (dut.mem_req, dut.mem_gnt, dut.mem_rvalid, dut.mem_adapter_inst.sim_hold)}
+    if int(os.environ["STRESS_PORTS"]) == 2:
+        ports["fetch"] = (dut.fetch_mem_req, dut.fetch_mem_gnt, dut.fetch_mem_rvalid,
+                          dut._id("g_fetch_port.fetch_adapter_inst.sim_hold", extended=False))
+    return ports
+
+
+async def _backpressure(dut, hold, rng: random.Random):
     """Hold the memory off for random stretches: up to 8 cycles held, then up to 8 free."""
     while True:
         for held in (True, False):
             for _ in range(rng.randrange(0, 9)):
                 await FallingEdge(dut.clk)
-                adapter.sim_hold.value = int(held)
+                hold.value = int(held)
 
 
 def _log_entries(ops) -> int:
@@ -333,7 +345,8 @@ def _log_entries(ops) -> int:
 
 
 def _name(seed: int) -> str:
-    return f"latency {os.environ['STRESS_LATENCY']}, {os.environ['STRESS_MSHRS']} MSHRs, seed {seed}"
+    return (f"latency {os.environ['STRESS_LATENCY']}, {os.environ['STRESS_MSHRS']} MSHRs, "
+            f"{os.environ['STRESS_PORTS']} memory port(s), seed {seed}")
 
 
 async def _run(dut, seed: int, ops, initial, limit=400000):
@@ -343,8 +356,9 @@ async def _run(dut, seed: int, ops, initial, limit=400000):
     dut.software_interrupt.value = 0
     dut.external_interrupt.value = 0
     dut.uart_rx.value = 1
-    for adapter in (dut.instr_adapter, dut.data_adapter):
-        adapter.sim_hold.value = 0
+    ports = _ports(dut)
+    for *_, hold in ports.values():
+        hold.value = 0
     data = (_build_dir() / f"stress_{seed}.bin").read_bytes()
     data += b"\x00" * (-len(data) % 4)
     for offset in range(0, len(data), 4):
@@ -356,17 +370,33 @@ async def _run(dut, seed: int, ops, initial, limit=400000):
     await ClockCycles(dut.clk, 2)
     dut.rst.value = 0
 
-    # Requests the held memory refused, per port, and the cache events that took place.
-    counts = {"fetch": 0, "data": 0, "max_mshrs": 0, "merges": 0}
-    drivers = [cocotb.start_soon(_backpressure(dut, dut.instr_adapter, random.Random(2 * seed))),
-               cocotb.start_soon(_backpressure(dut, dut.data_adapter, random.Random(2 * seed + 1)))]
+    # Requests the held memory refused, per side, and the cache events that took place.
+    counts = {"fetch": 0, "data": 0, "max_mshrs": 0, "merges": 0, "ports_busy_together": 0}
+    # Their own streams, so the stalls do not follow the program drawn from the same seed.
+    drivers = [cocotb.start_soon(_backpressure(dut, hold, random.Random(
+        f"stalls {seed}" if name == "memory" else f"{name} stalls {seed}"))) for name, (*_, hold) in ports.items()]
     cache = dcache(dut)
     done = None
+    outstanding = dict.fromkeys(ports, False)
     for cycle in range(limit):
-        await RisingEdge(dut.clk)
+        # Sampled after the hold changes at the falling edge: the values the next rising edge acts on.
+        await FallingEdge(dut.clk)
         await ReadOnly()
-        for name, adapter in (("fetch", dut.instr_adapter), ("data", dut.data_adapter)):
-            counts[name] += int(adapter.req.value) & int(adapter.sim_hold.value)
+        # Each port keeps one access outstanding: no request until its response has come back.
+        held = {}
+        busy = 0
+        for name, (req, gnt, rvalid, hold) in ports.items():
+            req, gnt, rvalid = int(req.value), int(gnt.value), int(rvalid.value)
+            busy += bool(req or outstanding[name])
+            assert not (outstanding[name] and req), f"cycle {cycle}: a {name} request while a response is outstanding"
+            if outstanding[name]:
+                outstanding[name] = not rvalid
+            else:
+                outstanding[name] = bool(req and gnt and not rvalid)  # at latency 0 the response comes with the grant
+            held[name] = int(hold.value)
+        counts["ports_busy_together"] += busy > 1
+        counts["fetch"] += int(dut.cpu_inst.instr_mem_req.value) & held.get("fetch", held["memory"])
+        counts["data"] += int(dut.cpu_inst.data_mem_req.value) & held["memory"]
         counts["max_mshrs"] = max(counts["max_mshrs"], int(cache.mshr_count.value))
         counts["merges"] += int(cache.store_merge.value)
         if done is None and _peek(dut, DONE_ADDR) == DONE_VALUE:
@@ -376,8 +406,8 @@ async def _run(dut, seed: int, ops, initial, limit=400000):
     for driver in drivers:
         driver.kill()
     await FallingEdge(dut.clk)
-    for adapter in (dut.instr_adapter, dut.data_adapter):
-        adapter.sim_hold.value = 0
+    for *_, hold in ports.values():
+        hold.value = 0
     return done, counts
 
 
@@ -402,6 +432,8 @@ async def test_random_accesses_match_a_memory_model(dut):
                           f"first {stale[:3]}"
         assert sc_ok, f"{name}: no SC succeeded, so the stores of LR/SC pairs were never checked"
         assert seen["fetch"] and seen["data"], f"{name}: the held memory never refused a request ({seen})"
+        if int(os.environ["STRESS_PORTS"]) == 2:
+            assert seen["ports_busy_together"], f"{name}: fetch and data never used their ports at the same time"
         # The counters restart with each run's reset.
         hits, misses, evictions = (int(cache.stat_hits.value), int(cache.stat_misses.value),
                                    int(cache.stat_evictions.value))
@@ -422,15 +454,16 @@ def runCocotbTests():
     build_dir = _build_dir()
     assemble(build_dir)
 
-    for latency, mshrs in BUILDS:
-        sim_build = Path.cwd() / "sim_build" / f"sim_build_dcache_stress_lat{latency}_mshr{mshrs}"
+    for latency, mshrs, ports in BUILDS:
+        parameters = {"MEM_LATENCY": latency, "NUM_MSHR": mshrs, "MEM_PORTS": ports}
+        sim_build = Path.cwd() / "sim_build" / f"sim_build_dcache_stress_lat{latency}_mshr{mshrs}_ports{ports}"
         if sim_build.exists():
             shutil.rmtree(sim_build)
         run(
             verilog_sources=sources,
             toplevel="top",
             module="test_dcache_stress",
-            parameters={"MEM_LATENCY": latency, "FETCH_LATENCY": latency, "NUM_MSHR": mshrs},
+            parameters=parameters,
             includes=[str(rtl_dir / "include")],
             simulator="verilator",
             timescale="1ns/1ps",
@@ -445,6 +478,7 @@ def runCocotbTests():
                 "STRESS_BUILD": str(build_dir.resolve()),
                 "STRESS_LATENCY": str(latency),
                 "STRESS_MSHRS": str(mshrs),
+                "STRESS_PORTS": str(ports),
             },
         )
 

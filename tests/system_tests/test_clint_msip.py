@@ -25,7 +25,7 @@ TRAP_CAUSE = 0x1000_0304
 TRAP_EPC = 0x1000_030C
 IRQ_COUNT = 0x1000_0310
 
-LATENCIES = [0, 2]  # MEM_LATENCY and FETCH_LATENCY; at 2 the msip write waits in the store buffer
+LATENCIES = [0, 2]  # MEM_LATENCY; at 2 the msip write waits in the store buffer
 POLL = 64
 MIP_MSIP = 0x8
 MSIP_CAUSE = 0x8000_0003
@@ -277,7 +277,7 @@ def runCocotbTests():
             verilog_sources=sources,
             toplevel="top",
             module="test_clint_msip",
-            parameters={"MEM_LATENCY": latency, "FETCH_LATENCY": latency},
+            parameters={"MEM_LATENCY": latency},
             includes=[str(rtl_dir / "include")],
             simulator="verilator",
             timescale="1ns/1ps",

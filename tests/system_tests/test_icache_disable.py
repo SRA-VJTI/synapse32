@@ -1,4 +1,4 @@
-"""With ICACHE_ENABLE 0 every instruction is fetched from the fetch port; the default build caches the loop."""
+"""With ICACHE_ENABLE 0 every instruction is fetched from memory; the default build caches the loop."""
 
 import cocotb
 from cocotb.triggers import ReadOnly, RisingEdge
@@ -30,7 +30,7 @@ PROGRAM = [
 
 
 async def _run(dut):
-    """Run the loop; return (fetch-port grants, retired instructions)."""
+    """Run the loop; return (fetch grants, retired instructions)."""
     grants = 0
 
     async def count():
@@ -38,7 +38,7 @@ async def _run(dut):
         while True:
             await RisingEdge(dut.clk)
             await ReadOnly()
-            if int(dut.instr_mem_req.value) and int(dut.instr_mem_gnt.value):
+            if int(dut.cpu_inst.instr_mem_req.value) and int(dut.cpu_inst.instr_mem_gnt.value):
                 grants += 1
 
     cocotb.start_soon(count())
@@ -50,7 +50,7 @@ async def _run(dut):
 
 @cocotb.test()
 async def test_disabled_fetches_every_instruction(dut):
-    """No cache: at least one fetch-port grant per retired instruction."""
+    """No cache: at least one fetch grant per retired instruction."""
     grants, retired = await _run(dut)
     assert grants >= retired, f"{grants} fetch grants for {retired} retired instructions: something cached them"
 
@@ -63,7 +63,7 @@ async def test_enabled_caches_the_loop(dut):
 
 
 def runCocotbTests():
-    latency = {"MEM_LATENCY": LATENCY, "FETCH_LATENCY": LATENCY}
+    latency = {"MEM_LATENCY": LATENCY}
     run_tests("test_icache_disable", ["test_disabled_fetches_every_instruction"],
               parameters={**latency, "ICACHE_ENABLE": 0})
     run_tests("test_icache_disable", ["test_enabled_caches_the_loop"], parameters=latency)

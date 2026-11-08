@@ -292,7 +292,6 @@ def run_verilator(
     compile_model: bool,
     trace_file: Path,
     mem_latency: int,
-    fetch_latency: int,
     config: str | None,
 ) -> tuple[bool, str]:
     # The image is read by the RTL at simulator start.  Keep the Verilog
@@ -308,7 +307,6 @@ def run_verilator(
     env["ISA_MAX_CYCLES"] = str(max_cycles)
     env["ISA_TRACE_FILE"] = str(trace_file)
     env["ISA_MEM_LATENCY"] = str(mem_latency)
-    env["ISA_FETCH_LATENCY"] = str(fetch_latency)
     env["CORE_CONFIG"] = config or ""
     rc = run([sys.executable, "tests/system_tests/test_riscv_isa.py"], env=env, cwd=repo_root)
     ok = rc.returncode == 0
@@ -324,7 +322,6 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=0, help="Limit number of ISA tests (0 = all)")
     ap.add_argument("--max-cycles", type=int, default=200000, help="Max cycles per Verilator ISA test")
     ap.add_argument("--mem-latency", type=int, default=0, help="Cycles the RTL's memory takes to answer")
-    ap.add_argument("--fetch-latency", type=int, default=None, help="Fetch side only (default: --mem-latency)")
     ap.add_argument("--config", choices=sorted(MATRIX), default=None, help="Core configuration (default: none)")
     ap.add_argument("--report", type=Path, default=Path(".github/artifacts/isa/compare_report.json"))
     ap.add_argument(
@@ -363,9 +360,8 @@ def main() -> int:
 
     out_hex_dir = repo_root / ".github" / "artifacts" / "isa" / "build_hex"
     runtime_hex = repo_root / ".github" / "artifacts" / "isa" / "runtime.hex"
-    fetch_latency = args.mem_latency if args.fetch_latency is None else args.fetch_latency
     sim_build = (repo_root / ".github" / "artifacts" / "isa" /
-                 f"sim_build_riscv_isa_lat{args.mem_latency}_fetch{fetch_latency}_{args.config or 'default'}")
+                 f"sim_build_riscv_isa_lat{args.mem_latency}_{args.config or 'default'}")
     trace_dir = repo_root / ".github" / "artifacts" / "isa" / "traces"
     trace_dir.mkdir(parents=True, exist_ok=True)
     results = []
@@ -396,7 +392,6 @@ def main() -> int:
                 compile_model=not model_compiled,
                 trace_file=rtl_trace,
                 mem_latency=args.mem_latency,
-                fetch_latency=fetch_latency,
                 config=args.config,
             )
             model_compiled = True
@@ -456,7 +451,6 @@ def main() -> int:
 
     summary = {
         "mem_latency": args.mem_latency,
-        "fetch_latency": fetch_latency,
         "config": args.config or "default",
         "total": len(results),
         "matches": len([r for r in results if r.get("match")]),

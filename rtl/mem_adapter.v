@@ -1,6 +1,6 @@
 `default_nettype none
 // Request/response port in front of a combinational backing store, one transaction at a time:
-// the core holds req, addr, we, be and wdata until gnt, and the response comes on rvalid/rdata.
+// gnt takes req with addr, we, be and wdata, and the response comes on rvalid/rdata.
 // RESPONSE_LATENCY 0 answers in the same cycle, as the memory always has; 1 or more registers
 // the response, as a BRAM or a DDR bridge does.
 module mem_adapter #(

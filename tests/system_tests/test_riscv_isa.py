@@ -153,10 +153,7 @@ def runCocotbTests():
         simulator="verilator",
         timescale="1ns/1ps",
         defines=[f'INSTR_HEX_FILE="{hex_file}"'],
-        parameters={**config,
-                    "MEM_LATENCY": int(os.environ.get("ISA_MEM_LATENCY", "0")),
-                    "FETCH_LATENCY": int(os.environ.get("ISA_FETCH_LATENCY",
-                                                        os.environ.get("ISA_MEM_LATENCY", "0")))},
+        parameters={**config, "MEM_LATENCY": int(os.environ.get("ISA_MEM_LATENCY", "0"))},
         sim_build=str(sim_build),
         force_compile=force_compile,
     )

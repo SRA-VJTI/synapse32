@@ -17,28 +17,30 @@ module riscv_cpu #(
     parameter DCACHE_WAYS = 4,
     parameter DCACHE_SET_INDEX_BITS = 6,
     parameter DCACHE_WORD_OFFSET_BITS = 2,
-    parameter TLB_ENTRIES = 8
+    parameter TLB_ENTRIES = 8,
+    parameter MEM_PORTS = 1  // 1: fetch and data share mem_*; 2: fetch on fetch_mem_*, data on mem_*
 ) (
     input wire clk,
     input wire rst,
 
-    // Fetch port: instruction cache line fills and uncached fetches
-    output wire instr_mem_req,
-    output wire [31:0] instr_mem_addr,
-    input wire instr_mem_gnt,
-    input wire instr_mem_rvalid,
-    input wire [31:0] instr_mem_rdata,
+    // Memory port: data, and fetch too with MEM_PORTS 1, one transaction at a time
+    output wire mem_req,
+    output wire [31:0] mem_addr,
+    output wire mem_we,
+    output wire [3:0] mem_be,
+    output wire [31:0] mem_wdata,
+    output wire [2:0] mem_load_type,  // Fetches, lines and page-table reads are whole words
+    output wire mem_instr,            // The access is a fetch (always 0 with MEM_PORTS 2)
+    input wire mem_gnt,
+    input wire mem_rvalid,
+    input wire [31:0] mem_rdata,
 
-    // Data port: data cache line transfers, uncached accesses and page-table reads
-    output wire data_mem_req,
-    output wire [31:0] data_mem_addr,
-    output wire data_mem_we,
-    output wire [3:0] data_mem_be,
-    output wire [31:0] data_mem_wdata,
-    output wire [2:0] data_mem_load_type,  // Lines and page-table reads are whole words
-    input wire data_mem_gnt,
-    input wire data_mem_rvalid,
-    input wire [31:0] data_mem_rdata,
+    // Fetch port, MEM_PORTS 2 only (idle with 1): whole words, one transaction at a time
+    output wire fetch_mem_req,
+    output wire [31:0] fetch_mem_addr,
+    input wire fetch_mem_gnt,
+    input wire fetch_mem_rvalid,
+    input wire [31:0] fetch_mem_rdata,
 
     output wire [31:0] module_pc_out,
     output wire [31:0] module_instr_out,
@@ -50,6 +52,24 @@ module riscv_cpu #(
     input wire supervisor_external_interrupt,  // SEIP
     input wire [63:0] mtime_in
 );
+
+    // Fetch side: instruction cache line fills and uncached fetches
+    wire instr_mem_req;
+    wire [31:0] instr_mem_addr;
+    wire instr_mem_gnt;
+    wire instr_mem_rvalid;
+    wire [31:0] instr_mem_rdata;
+
+    // Data side: data cache line transfers, uncached accesses and page-table reads
+    wire data_mem_req;
+    wire [31:0] data_mem_addr;
+    wire data_mem_we;
+    wire [3:0] data_mem_be;
+    wire [31:0] data_mem_wdata;
+    wire [2:0] data_mem_load_type;
+    wire data_mem_gnt;
+    wire data_mem_rvalid;
+    wire [31:0] data_mem_rdata = mem_rdata;
 
     // Between the pipeline and the memory system below
     wire [31:0] module_instr_in;
@@ -1004,9 +1024,9 @@ module riscv_cpu #(
     end
     assign cpu_device_access = !cpu_ram_access;
 
-    // At least one region; a region of size 0 is empty.
+    // At least one region (a region of size 0 is empty), and one or two memory ports.
     generate
-        if (CACHEABLE_REGIONS < 1) begin : g_invalid_parameters
+        if ((CACHEABLE_REGIONS < 1) || (MEM_PORTS < 1) || (MEM_PORTS > 2)) begin : g_invalid_parameters
             riscv_cpu_parameters_out_of_range invalid_parameters ();
         end
     endgenerate
@@ -1216,6 +1236,77 @@ module riscv_cpu #(
                     data_pending_q <= 1'b1;
                 end
             end
+        end
+    endgenerate
+
+    generate
+        if (MEM_PORTS == 2) begin : g_two_ports
+            // One access at a time per port: the caches keep asking for the word in flight.
+            reg fetch_port_pending_q;
+            reg data_port_pending_q;
+
+            assign fetch_mem_req = instr_mem_req && !fetch_port_pending_q;
+            assign fetch_mem_addr = instr_mem_addr;
+            assign instr_mem_gnt = fetch_mem_req && fetch_mem_gnt;
+            assign instr_mem_rvalid = fetch_mem_rvalid;
+            assign instr_mem_rdata = fetch_mem_rdata;
+            assign mem_req = data_mem_req && !data_port_pending_q;
+            assign mem_addr = data_mem_addr;
+            assign mem_we = data_mem_we;
+            assign mem_be = data_mem_be;
+            assign mem_wdata = data_mem_wdata;
+            assign mem_load_type = data_mem_load_type;
+            assign mem_instr = 1'b0;
+            assign data_mem_gnt = mem_req && mem_gnt;
+            assign data_mem_rvalid = mem_rvalid;
+
+            always @(posedge clk or posedge rst) begin
+                if (rst) begin
+                    fetch_port_pending_q <= 1'b0;
+                    data_port_pending_q <= 1'b0;
+                end else begin
+                    if (fetch_mem_rvalid) begin
+                        fetch_port_pending_q <= 1'b0;
+                    end else if (fetch_mem_req && fetch_mem_gnt) begin
+                        fetch_port_pending_q <= 1'b1;
+                    end
+                    if (mem_rvalid) begin
+                        data_port_pending_q <= 1'b0;
+                    end else if (mem_req && mem_gnt) begin
+                        data_port_pending_q <= 1'b1;
+                    end
+                end
+            end
+        end else begin : g_one_port
+            assign fetch_mem_req = 1'b0;
+            assign fetch_mem_addr = 32'b0;
+            assign instr_mem_rdata = mem_rdata;
+
+            mem_arbiter mem_arbiter_inst (
+                .clk(clk),
+                .rst(rst),
+                .fetch_req(instr_mem_req),
+                .fetch_addr(instr_mem_addr),
+                .fetch_gnt(instr_mem_gnt),
+                .fetch_rvalid(instr_mem_rvalid),
+                .data_req(data_mem_req),
+                .data_addr(data_mem_addr),
+                .data_we(data_mem_we),
+                .data_be(data_mem_be),
+                .data_wdata(data_mem_wdata),
+                .data_load_type(data_mem_load_type),
+                .data_gnt(data_mem_gnt),
+                .data_rvalid(data_mem_rvalid),
+                .mem_req(mem_req),
+                .mem_addr(mem_addr),
+                .mem_we(mem_we),
+                .mem_be(mem_be),
+                .mem_wdata(mem_wdata),
+                .mem_load_type(mem_load_type),
+                .mem_instr(mem_instr),
+                .mem_gnt(mem_gnt),
+                .mem_rvalid(mem_rvalid)
+            );
         end
     endgenerate
 

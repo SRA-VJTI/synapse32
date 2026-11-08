@@ -1,6 +1,7 @@
 """The RTL a board instantiates elaborates and synthesizes with Yosys.
 
-The core and the top level are synthesized; the peripherals around the core are elaborated and checked.
+The core and the top level are synthesized with one memory port and with two; the peripherals around the core are
+elaborated and checked.
 unified_mem is the simulation backing store and is not part of a board design, so the top level sees it
 as a black box. An out-of-range select becomes undefined logic in hardware, so its warning fails the test.
 The core divides over several cycles, so it holds no combinational divider.
@@ -49,6 +50,8 @@ def runCocotbTests():
         stub = _unified_mem_blackbox(rtl_dir, Path(tmp))
         checks = [(CORE, f"synth -flatten -top {CORE}; check -assert", "")]
         checks += [(TOP, f"synth -flatten -top {TOP}; check -assert", str(stub))]
+        checks += [(f"{name} with two memory ports", f"chparam -set MEM_PORTS 2 {name}; synth -flatten -top {name}; "
+                    "check -assert", extra) for name, extra in ((CORE, ""), (TOP, str(stub)))]
         checks += [(f"{CORE} divider", f"hierarchy -check -top {CORE}; proc; opt -fast; "
                     "select -assert-none t:$div t:$mod t:$divfloor t:$modfloor", "")]
         checks += [(name, f"hierarchy -check -top {name}; proc; flatten; opt_clean; check -assert", "")

@@ -271,7 +271,7 @@ def runCocotbTests():
             verilog_sources=sources,
             toplevel="top",
             module="test_uart_baud",
-            parameters={"MEM_LATENCY": latency, "FETCH_LATENCY": latency},
+            parameters={"MEM_LATENCY": latency},
             includes=[str(rtl_dir / "include")],
             simulator="verilator",
             timescale="1ns/1ps",
