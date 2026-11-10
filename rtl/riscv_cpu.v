@@ -460,8 +460,16 @@ module riscv_cpu #(
     assign mem_wait = (module_mem_rd_en || module_mem_wr_en) &&
                       !(module_data_rvalid_in && !amo_read_phase) &&
                       !mem_stage_page_fault_taken;
-    assign ex_stage_active = !mem_wait && !fence_drain_stall;
-    wire pipeline_hold = wfi_stall || fence_drain_stall || mem_wait;
+    // A divide holds EX until the divider answers, but not an interrupt: a divide has no effect until it retires, so
+    // EX takes the interrupt against it and the divide runs again after the handler; the divider drops the division
+    // with its request. If an older access faults instead, its trap squashes the divide all the same.
+    wire div_in_ex = id_ex_inst0_instr_valid_out && !id_ex_inst0_instr_page_fault_out &&
+                     ((id_ex_inst0_instr_id_out == INSTR_DIV) || (id_ex_inst0_instr_id_out == INSTR_DIVU) ||
+                      (id_ex_inst0_instr_id_out == INSTR_REM) || (id_ex_inst0_instr_id_out == INSTR_REMU));
+    wire div_done;
+    wire div_stall = div_in_ex && !div_done && !interrupt_pending;
+    assign ex_stage_active = !mem_wait && !fence_drain_stall && !div_stall;
+    wire pipeline_hold = wfi_stall || fence_drain_stall || mem_wait || div_stall;
     assign pipeline_stall = hazard_stall || pipeline_hold;
 
     always @(posedge clk or posedge rst) begin
@@ -649,6 +657,28 @@ module riscv_cpu #(
         .execute_trigger_hit(execute_trigger_hit)
     );
 
+    wire [31:0] div_quotient;
+    wire [31:0] div_remainder;
+
+    divider divider_inst (
+        .clk(clk),
+        .rst(rst),
+        .req(div_in_ex),
+        // Forwarded operands are valid once MEM is not waiting.
+        .start(!mem_wait),
+        .ack(!pipeline_hold),
+        .is_signed((id_ex_inst0_instr_id_out == INSTR_DIV) || (id_ex_inst0_instr_id_out == INSTR_REM)),
+        .dividend(ex_inst0_rs1_value_out),
+        .divisor(ex_inst0_rs2_value_out),
+        .done(div_done),
+        .quotient(div_quotient),
+        .remainder(div_remainder)
+    );
+
+    wire [31:0] ex_result = !div_in_ex ? ex_inst0_exec_output_out :
+                            ((id_ex_inst0_instr_id_out == INSTR_REM) || (id_ex_inst0_instr_id_out == INSTR_REMU)) ?
+                            div_remainder : div_quotient;
+
     // Memory Stage
 
     // Instantiate EX_MEM pipeline register
@@ -669,10 +699,12 @@ module riscv_cpu #(
         .clk(clk),
         .rst(rst),
         .hold(mem_wait),
+        // No partial quotient reaches WB while the divider runs.
         .flush(mem_stage_page_fault_taken ||
                instr_stage_page_fault_taken ||
                synchronous_exception_taken ||
-               interrupt_taken_qualified),
+               interrupt_taken_qualified ||
+               (div_stall && !mem_wait)),
         .rs1_addr_in(id_ex_inst0_rs1_addr_out),
         .rs2_addr_in(id_ex_inst0_rs2_addr_out),
         .rd_addr_in(id_ex_inst0_rd_addr_out),
@@ -680,7 +712,7 @@ module riscv_cpu #(
         .rs2_value_in(ex_inst0_rs2_value_out),
         .pc_in(id_ex_inst0_pc_out),
         .mem_addr_in(ex_inst0_mem_addr_out),
-        .exec_output_in(ex_inst0_exec_output_out),
+        .exec_output_in(ex_result),
         .jump_signal_in(ex_inst0_jump_signal_out),
         .jump_addr_in(ex_inst0_jump_addr_out),
         .instr_id_in(id_ex_inst0_instr_id_out),
