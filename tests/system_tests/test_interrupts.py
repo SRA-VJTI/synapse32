@@ -55,9 +55,9 @@ async def monitor_execution(dut, test_name, max_cycles=100):
     for cycle in range(max_cycles):
         # Monitor memory writes
         try:
-            if hasattr(dut, 'cpu_mem_write_en') and int(dut.cpu_mem_write_en.value):
-                addr = int(dut.cpu_mem_write_addr.value)
-                data = int(dut.cpu_mem_write_data.value)
+            if hasattr(dut.cpu_inst, 'module_mem_wr_en') and int(dut.cpu_inst.module_mem_wr_en.value):
+                addr = int(dut.cpu_inst.module_write_addr.value)
+                data = int(dut.cpu_inst.module_wr_data_out.value)
                 mem_writes[addr] = data
                 print(f"Cycle {cycle}: Memory write: addr=0x{addr:08x}, data=0x{data:08x}")
         except Exception:
@@ -295,9 +295,9 @@ async def test_wfi_interrupt(dut):
     irq_pulse = 0
 
     for cycle in range(max_cycles):
-        if int(dut.cpu_mem_write_en.value):
-            addr = int(dut.cpu_mem_write_addr.value)
-            data = int(dut.cpu_mem_write_data.value)
+        if int(dut.cpu_inst.module_mem_wr_en.value):
+            addr = int(dut.cpu_inst.module_write_addr.value)
+            data = int(dut.cpu_inst.module_wr_data_out.value)
             mem_writes[addr] = data
             if addr not in first_write_cycle:
                 first_write_cycle[addr] = cycle
@@ -351,9 +351,9 @@ async def test_wfi_interrupt_with_global_mie_clear(dut):
     irq_pulse = 0
 
     for _ in range(400):
-        if int(dut.cpu_mem_write_en.value):
-            addr = int(dut.cpu_mem_write_addr.value)
-            mem_writes[addr] = int(dut.cpu_mem_write_data.value)
+        if int(dut.cpu_inst.module_mem_wr_en.value):
+            addr = int(dut.cpu_inst.module_write_addr.value)
+            mem_writes[addr] = int(dut.cpu_inst.module_wr_data_out.value)
 
         # Pulse once WFI sleeps: a pulse that ends before WFI executes leaves nothing pending.
         if not irq_armed and mem_writes.get(0x03000000) == 0x11 and int(dut.cpu_inst.wfi_active.value):
@@ -397,9 +397,9 @@ async def test_wfi_pending_no_global(dut):
     max_cycles = 120
 
     for cycle in range(max_cycles):
-        if int(dut.cpu_mem_write_en.value):
-            addr = int(dut.cpu_mem_write_addr.value)
-            data = int(dut.cpu_mem_write_data.value)
+        if int(dut.cpu_inst.module_mem_wr_en.value):
+            addr = int(dut.cpu_inst.module_write_addr.value)
+            data = int(dut.cpu_inst.module_wr_data_out.value)
             mem_writes[addr] = data
             print(f"Cycle {cycle}: Memory write addr=0x{addr:08x} data=0x{data:08x}")
 
@@ -502,9 +502,9 @@ async def test_arch_cpu_idle_resume(dut):
         if sample["pc"] == return_pc:
             reached_return = True
 
-        if int(dut.cpu_mem_write_en.value):
-            addr = int(dut.cpu_mem_write_addr.value) & 0xFFFFFFFF
-            data = int(dut.cpu_mem_write_data.value) & 0xFFFFFFFF
+        if int(dut.cpu_inst.module_mem_wr_en.value):
+            addr = int(dut.cpu_inst.module_write_addr.value) & 0xFFFFFFFF
+            data = int(dut.cpu_inst.module_wr_data_out.value) & 0xFFFFFFFF
             mem_writes[addr] = data
             print(f"Cycle {cycle}: Memory write addr=0x{addr:08x} data=0x{data:08x}")
 
@@ -607,11 +607,11 @@ async def test_arch_cpu_idle_resume_mmu(dut):
             "cycle": cycle,
             "pc": int(dut.pc_debug.value) & 0xFFFFFFFF,
             "instr": int(dut.instr_debug.value) & 0xFFFFFFFF,
-            "ipaddr": int(dut.phys_instr_addr.value) & 0xFFFFFFFF,
-            "dpaddr": int(dut.phys_data_addr.value) & 0xFFFFFFFF,
-            "ifault": int(dut.cpu_instr_page_fault.value),
-            "lfault": int(dut.cpu_load_page_fault.value),
-            "sfault": int(dut.cpu_store_page_fault.value),
+            "ipaddr": int(dut.cpu_inst.phys_instr_addr.value) & 0xFFFFFFFF,
+            "dpaddr": int(dut.cpu_inst.phys_data_addr.value) & 0xFFFFFFFF,
+            "ifault": int(dut.cpu_inst.module_instr_page_fault_in.value),
+            "lfault": int(dut.cpu_inst.module_load_page_fault_in.value),
+            "sfault": int(dut.cpu_inst.module_store_page_fault_in.value),
             "wfi_active": int(dut.cpu_inst.wfi_active.value),
             "wfi_stall": int(dut.cpu_inst.wfi_stall.value),
             "wake": int(dut.cpu_inst.wfi_resume_pending.value),
@@ -631,11 +631,11 @@ async def test_arch_cpu_idle_resume_mmu(dut):
         if sample["pc"] == return_pc:
             reached_return = True
 
-        # cpu_mem_write_addr is the pre-translation address, so these keys are
+        # module_write_addr is the pre-translation address, so these keys are
         # the scratch page's virtual addresses.
-        if int(dut.cpu_mem_write_en.value):
-            addr = int(dut.cpu_mem_write_addr.value) & 0xFFFFFFFF
-            data = int(dut.cpu_mem_write_data.value) & 0xFFFFFFFF
+        if int(dut.cpu_inst.module_mem_wr_en.value):
+            addr = int(dut.cpu_inst.module_write_addr.value) & 0xFFFFFFFF
+            data = int(dut.cpu_inst.module_wr_data_out.value) & 0xFFFFFFFF
             mem_writes[addr] = data
             print(f"Cycle {cycle}: Memory write addr=0x{addr:08x} data=0x{data:08x}")
 

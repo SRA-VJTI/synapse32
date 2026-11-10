@@ -126,8 +126,8 @@ async def _run_misaligned_test(dut, expected_cause: int):
     writes = {}
     for _ in range(300):
         await RisingEdge(dut.clk)
-        if int(dut.cpu_mem_write_en.value):
-            writes[int(dut.cpu_mem_write_addr.value)] = int(dut.cpu_mem_write_data.value)
+        if int(dut.cpu_inst.module_mem_wr_en.value):
+            writes[int(dut.cpu_inst.module_write_addr.value)] = int(dut.cpu_inst.module_wr_data_out.value)
         if writes.get(DONE_ADDR) == 1:
             break
 

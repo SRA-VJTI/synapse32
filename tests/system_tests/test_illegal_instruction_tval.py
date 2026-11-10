@@ -280,8 +280,8 @@ async def run_case(dut, privilege, medeleg, mstatus_bits, body_index, limit=3000
     for _ in range(limit):
         await RisingEdge(dut.clk)
         await ReadOnly()
-        if (int(dut.cpu_mem_write_en.value) and int(dut.cpu_mem_write_addr.value) == DONE_ADDR
-                and int(dut.cpu_mem_write_data.value) == DONE_VALUE):
+        if (int(dut.cpu_inst.module_mem_wr_en.value) and int(dut.cpu_inst.module_write_addr.value) == DONE_ADDR
+                and int(dut.cpu_inst.module_wr_data_out.value) == DONE_VALUE):
             done = True
             break
     await RisingEdge(dut.clk)

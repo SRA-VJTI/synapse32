@@ -12,7 +12,7 @@ from pathlib import Path
 
 CORE = "riscv_cpu"
 TOP = "top"
-PERIPHERALS = ["sv32_mmu", "mem_adapter", "store_buffer", "uart", "plic", "timer"]
+PERIPHERALS = ["mem_adapter", "uart", "plic", "timer"]
 
 
 def _find_repo_root() -> Path:

@@ -278,16 +278,16 @@ async def run_program(dut, inject_cycle=None, limit=20000):
             result.prologue_hold = max(result.prologue_hold, held)
         else:
             held = 0
-        if int(dut.cpu_mem_write_en.value) and not int(dut.cpu_store_page_fault.value):
-            addr = int(dut.cpu_mem_write_addr.value)
+        if int(dut.cpu_inst.module_mem_wr_en.value) and not int(dut.cpu_inst.module_store_page_fault_in.value):
+            addr = int(dut.cpu_inst.module_write_addr.value)
             # Count the write once, in the cycle the core's write completes.
-            if int(dut.cpu_data_rvalid.value):
+            if int(dut.cpu_inst.module_data_rvalid_in.value):
                 if RESULT_LO <= addr < RESULT_HI:
-                    result.stores.append((addr, int(dut.cpu_mem_write_data.value),
-                                          int(dut.cpu_write_byte_enable.value)))
+                    result.stores.append((addr, int(dut.cpu_inst.module_wr_data_out.value),
+                                          int(dut.cpu_inst.module_write_byte_enable.value)))
                 elif addr == ACK_ADDR and pin_high:
                     lower_pin = True
-                elif addr == DONE_ADDR and int(dut.cpu_mem_write_data.value) == DONE_VALUE:
+                elif addr == DONE_ADDR and int(dut.cpu_inst.module_wr_data_out.value) == DONE_VALUE:
                     result.cycles = cycle
     # the done store ends the run
         if result.cycles is not None:

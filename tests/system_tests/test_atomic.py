@@ -266,9 +266,9 @@ async def test_atomic_smoke(dut):
         prev_pc = pc
         prev_instr = instr
 
-        if int(dut.cpu_mem_write_en.value):
-            addr = int(dut.cpu_mem_write_addr.value)
-            data = int(dut.cpu_mem_write_data.value)
+        if int(dut.cpu_inst.module_mem_wr_en.value):
+            addr = int(dut.cpu_inst.module_write_addr.value)
+            data = int(dut.cpu_inst.module_wr_data_out.value)
             mem_writes[addr] = data
             if addr == DONE_ADDR and (data & 0xFF) == 1:
                 done_seen = True

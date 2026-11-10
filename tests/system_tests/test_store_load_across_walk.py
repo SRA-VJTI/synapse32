@@ -192,8 +192,8 @@ async def test_store_is_visible_to_a_load_after_a_walk(dut):
     for _ in range(20000):
         await RisingEdge(dut.clk)
         await ReadOnly()
-        if (int(dut.cpu_data_gnt.value) and int(dut.cpu_mem_write_en.value) and int(dut.cpu_mem_write_addr.value) == DONE_ADDR
-                and int(dut.cpu_mem_write_data.value) == DONE_VALUE):
+        if (int(dut.cpu_inst.module_data_gnt_in.value) and int(dut.cpu_inst.module_mem_wr_en.value) and int(dut.cpu_inst.module_write_addr.value) == DONE_ADDR
+                and int(dut.cpu_inst.module_wr_data_out.value) == DONE_VALUE):
             done = True
             break
     await RisingEdge(dut.clk)

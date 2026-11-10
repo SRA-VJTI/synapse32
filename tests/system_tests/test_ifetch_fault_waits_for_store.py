@@ -177,9 +177,9 @@ async def test_ifetch_fault_waits_for_store(dut):
         await RisingEdge(dut.clk)
         await ReadOnly()
         # A write is done when the data port takes it from the store buffer (into the data cache).
-        if int(dut.drain_done.value):
-            addr = int(dut.drain_addr.value) & ~0x3
-            data = int(dut.drain_data.value)
+        if int(dut.cpu_inst.drain_done.value):
+            addr = int(dut.cpu_inst.drain_addr.value) & ~0x3
+            data = int(dut.cpu_inst.drain_data.value)
             if addr == STORE_PA:
                 writes.append(data)
             if addr == DONE_ADDR and data == DONE_VALUE:

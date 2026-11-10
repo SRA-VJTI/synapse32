@@ -171,9 +171,9 @@ async def test_fibonacci_program(dut):
         if cycle % 1000 == 0:
             log.info(f"Cycle {cycle}...")
         # Check for memory writes
-        if dut.cpu_mem_write_en.value:
-            addr = int(dut.cpu_mem_write_addr.value)
-            data = int(dut.cpu_mem_write_data.value)
+        if dut.cpu_inst.module_mem_wr_en.value:
+            addr = int(dut.cpu_inst.module_write_addr.value)
+            data = int(dut.cpu_inst.module_wr_data_out.value)
             mem_accesses[addr] = data
             log.info(f"Cycle {cycle}: Memory write: addr=0x{addr:08x}, data=0x{data:08x}")
             # Check if CPU_DONE flag was set

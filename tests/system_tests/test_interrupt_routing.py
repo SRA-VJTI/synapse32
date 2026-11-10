@@ -272,8 +272,8 @@ async def test_each_mip_bit_follows_its_own_source(dut):
             dut.external_interrupt.value = 0
             lower_pin = False
         await ReadOnly()
-        if int(dut.cpu_mem_write_en.value):
-            addr = int(dut.cpu_mem_write_addr.value)
+        if int(dut.cpu_inst.module_mem_wr_en.value):
+            addr = int(dut.cpu_inst.module_write_addr.value)
             raise_pin = raise_pin or addr == READY_ADDR
             lower_pin = lower_pin or addr == ACK_ADDR
         if _peek(dut, DONE_ADDR) == DONE_VALUE:

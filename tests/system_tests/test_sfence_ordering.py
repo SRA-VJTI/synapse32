@@ -246,10 +246,10 @@ async def test_instructions_after_a_fence_use_the_new_mapping(dut):
     for _ in range(20000):
         await RisingEdge(dut.clk)
         await ReadOnly()
-        if int(dut.mmu_walk_gnt.value):
+        if int(dut.cpu_inst.mmu_walk_gnt.value):
             walks_seen += 1
-        if (int(dut.cpu_data_gnt.value) and int(dut.cpu_mem_write_en.value) and int(dut.cpu_mem_write_addr.value) == DONE_ADDR
-                and int(dut.cpu_mem_write_data.value) == DONE_VALUE):
+        if (int(dut.cpu_inst.module_data_gnt_in.value) and int(dut.cpu_inst.module_mem_wr_en.value) and int(dut.cpu_inst.module_write_addr.value) == DONE_ADDR
+                and int(dut.cpu_inst.module_wr_data_out.value) == DONE_VALUE):
             done = True
             break
     await RisingEdge(dut.clk)

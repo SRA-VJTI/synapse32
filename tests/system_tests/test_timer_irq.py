@@ -118,9 +118,9 @@ async def test_timer_irq(dut):
 
     for cycle in range(max_cycles):
         await RisingEdge(dut.clk)
-        if int(dut.cpu_mem_write_en.value):
-            addr = int(dut.cpu_mem_write_addr.value)
-            data = int(dut.cpu_mem_write_data.value)
+        if int(dut.cpu_inst.module_mem_wr_en.value):
+            addr = int(dut.cpu_inst.module_write_addr.value)
+            data = int(dut.cpu_inst.module_wr_data_out.value)
             mem_writes[addr] = data
 
             if addr == HANDLER_MARKER_ADDR and data == SENTINEL and handler_fired_cycle is None:

@@ -340,14 +340,14 @@ async def test_walker_and_tlb(dut):
         await RisingEdge(dut.clk)
         await ReadOnly()
         # A PTE read is a walker read of the page-table region; it may hit in the data cache.
-        if int(dut.mmu_walk_gnt.value):
-            addr = int(dut.mmu_walk_addr.value)
+        if int(dut.cpu_inst.mmu_walk_gnt.value):
+            addr = int(dut.cpu_inst.mmu_walk_addr.value)
             if ROOT_TABLE <= addr < PT_REGION_END:
                 walk_reads[phase] = walk_reads.get(phase, 0) + 1
         # A store is committed when it leaves MEM; it may stay in the data cache.
-        if int(dut.cpu_data_gnt.value) and int(dut.cpu_mem_write_en.value):
-            addr = int(dut.cpu_mem_write_addr.value)
-            data = int(dut.cpu_mem_write_data.value)
+        if int(dut.cpu_inst.module_data_gnt_in.value) and int(dut.cpu_inst.module_mem_wr_en.value):
+            addr = int(dut.cpu_inst.module_write_addr.value)
+            data = int(dut.cpu_inst.module_wr_data_out.value)
             if addr == MARK_ADDR:
                 phase = data
             elif addr == DONE_ADDR and data == DONE_VALUE:

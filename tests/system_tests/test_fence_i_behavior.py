@@ -129,9 +129,9 @@ async def test_fence_i_self_modifying_code(dut):
 
     for _cycle in range(20_000):
         await RisingEdge(dut.clk)
-        if int(dut.cpu_mem_write_en.value):
-            addr = int(dut.cpu_mem_write_addr.value)
-            data = int(dut.cpu_mem_write_data.value) & 0xFFFFFFFF
+        if int(dut.cpu_inst.module_mem_wr_en.value):
+            addr = int(dut.cpu_inst.module_write_addr.value)
+            data = int(dut.cpu_inst.module_wr_data_out.value) & 0xFFFFFFFF
             mem_writes[addr] = data
             if addr == DONE_ADDR and (data & 0xFF) == 1:
                 done_seen = True

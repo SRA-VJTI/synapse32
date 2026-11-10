@@ -1,48 +1,33 @@
 `default_nettype none
 `include "memory_map.vh"
 `include "instr_defines.vh"
-module riscv_cpu (
+module riscv_cpu #(
+    parameter STORE_BUFFER_DEPTH = 4,
+    parameter NUM_MSHR = 8
+) (
     input wire clk,
     input wire rst,
-    input wire [31:0] module_instr_in,
-    input wire [31:0] module_read_data_in,
+
+    // Fetch port: instruction cache line fills and uncached fetches
+    output wire instr_mem_req,
+    output wire [31:0] instr_mem_addr,
+    input wire instr_mem_gnt,
+    input wire instr_mem_rvalid,
+    input wire [31:0] instr_mem_rdata,
+
+    // Data port: data cache line transfers, uncached accesses and page-table reads
+    output wire data_mem_req,
+    output wire [31:0] data_mem_addr,
+    output wire data_mem_we,
+    output wire [3:0] data_mem_be,
+    output wire [31:0] data_mem_wdata,
+    output wire [2:0] data_mem_load_type,  // Lines and page-table reads are whole words
+    input wire data_mem_gnt,
+    input wire data_mem_rvalid,
+    input wire [31:0] data_mem_rdata,
+
     output wire [31:0] module_pc_out,
-    output wire [31:0] module_wr_data_out,
-    output wire module_mem_wr_en,
-    output wire module_mem_rd_en,
-    output wire [31:0] module_read_addr,
-    output wire [31:0] module_write_addr,
-    output wire [3:0] module_write_byte_enable,  // Write byte enables
-    output wire [2:0] module_load_type,          // Load type
-    input wire module_load_page_fault_in,
-    input wire module_store_page_fault_in,
-    input wire [31:0] module_page_fault_addr_in,
-    input wire module_instr_page_fault_in,
-    // Memory interface: a request is outstanding until its response arrives.
-    input wire module_instr_gnt_in,
-    input wire module_instr_rvalid_in,
-    input wire module_data_gnt_in,
-    input wire module_data_rvalid_in,
-    input wire module_store_buffer_empty_in,  // Store buffer empty once this cycle ends
-    // The MMU treats a whole AMO as a write, its read transaction included.
-    output wire module_data_write_intent_out,
-    // SFENCE.VMA or a write to satp: the TLB may hold stale translations.
-    output wire module_tlb_flush_out,
-    // FENCE.I: instruction caches may hold stale lines.
-    output wire module_instr_cache_flush_out,
-    output wire [31:0] module_next_pc_out,
-    // Address MEM holds after this edge, for the data cache's array read.
-    output wire [31:0] module_next_data_addr_out,
-    // FENCE.I also waits until the data cache has written every dirty line back.
-    output wire module_data_cache_clean_req_out,
-    input wire module_data_cache_clean_in,
-    output wire module_data_mmu_enable_out,
-    output wire [1:0] module_data_privilege_out,
-    output wire [31:0] module_satp_out,
-    output wire module_data_sum_out,
-    output wire module_data_mxr_out,
-    output wire module_instr_mmu_enable_out,
-    output wire [1:0] module_instr_privilege_out,
+    output wire [31:0] module_instr_out,
 
     // Interrupt inputs
     input wire timer_interrupt,                // MTIP
@@ -51,6 +36,46 @@ module riscv_cpu (
     input wire supervisor_external_interrupt,  // SEIP
     input wire [63:0] mtime_in
 );
+
+    // Between the pipeline and the memory system below
+    wire [31:0] module_instr_in;
+    wire [31:0] module_read_data_in;
+    wire [31:0] module_wr_data_out;
+    wire module_mem_wr_en;
+    wire module_mem_rd_en;
+    wire [31:0] module_read_addr;
+    wire [31:0] module_write_addr;
+    wire [3:0] module_write_byte_enable;  // Write byte enables
+    wire [2:0] module_load_type;          // Load type
+    wire module_load_page_fault_in;
+    wire module_store_page_fault_in;
+    wire [31:0] module_page_fault_addr_in;
+    wire module_instr_page_fault_in;
+    // Memory interface: a request is outstanding until its response arrives.
+    wire module_instr_gnt_in;
+    wire module_instr_rvalid_in;
+    wire module_data_gnt_in;
+    wire module_data_rvalid_in;
+    wire module_store_buffer_empty_in;  // Store buffer empty once this cycle ends
+    // The MMU treats a whole AMO as a write, its read transaction included.
+    wire module_data_write_intent_out;
+    // SFENCE.VMA or a write to satp: the TLB may hold stale translations.
+    wire module_tlb_flush_out;
+    // FENCE.I: instruction caches may hold stale lines.
+    wire module_instr_cache_flush_out;
+    wire [31:0] module_next_pc_out;
+    // Address MEM holds after this edge, for the data cache's array read.
+    wire [31:0] module_next_data_addr_out;
+    // FENCE.I also waits until the data cache has written every dirty line back.
+    wire module_data_cache_clean_req_out;
+    wire module_data_cache_clean_in;
+    wire module_data_mmu_enable_out;
+    wire [1:0] module_data_privilege_out;
+    wire [31:0] module_satp_out;
+    wire module_data_sum_out;
+    wire module_data_mxr_out;
+    wire module_instr_mmu_enable_out;
+    wire [1:0] module_instr_privilege_out;
 
     // Instantiate PC
     wire [31:0] pc_inst0_out;
@@ -872,5 +897,223 @@ module riscv_cpu (
     );
 
     // Write Back Stage
+
+    // Memory system: MMU, store buffer, caches and the data-port arbitration
+    wire [31:0] data_virtual_addr;
+    wire translated_data_access;
+    wire [31:0] phys_data_addr;   // physical address after MMU walk (or virtual if MMU off)
+    wire [31:0] phys_instr_addr;
+    wire mmu_instr_ready;
+    wire mmu_data_ready;
+    wire mmu_walk_req;
+    wire [31:0] mmu_walk_addr;
+    wire mmu_walk_gnt;
+    wire mmu_walk_rvalid;
+    wire data_bus_walk_sel;
+    wire data_bus_walk_owns;
+    reg data_bus_walk_owner_q;
+    wire dcache_gnt;
+    wire dcache_rvalid;
+    wire cpu_data_bus_req;
+    wire cpu_data_req;
+    wire [31:0] cpu_data_rdata;
+    wire cpu_ram_access;
+    wire cpu_device_access;
+    wire cpu_load_go;
+    wire store_buf_push_req;
+    wire store_buf_push;
+    wire store_buf_pop;
+    wire store_buf_empty;
+    wire store_buf_full;
+    wire store_buf_match;
+    wire store_buf_forward;
+    wire [31:0] store_buf_forward_data;
+    wire store_buf_forward_go;
+    reg store_buf_forward_pending_q;
+    reg [31:0] store_buf_forward_data_q;
+    wire [31:0] store_buf_head_addr;
+    wire [3:0] store_buf_head_be;
+    wire [31:0] store_buf_head_data;
+    wire drain_req;
+    wire data_bus_drain_sel;
+    wire data_bus_drain_owns;
+    reg data_bus_drain_owner_q;
+    wire drain_done;
+    wire [31:0] drain_addr;
+    wire [3:0] drain_be;
+    wire [31:0] drain_data;
+    wire dcache_clean;
+    wire dcache_mem_line;
+
+    assign translated_data_access = module_data_mmu_enable_out && (module_mem_wr_en || module_mem_rd_en);
+    // Outside RAM is a device: uncached, never forwarded, and its loads wait for earlier writes.
+    assign cpu_ram_access = `IS_DATA_MEM(phys_data_addr) || `IS_INSTR_MEM(phys_data_addr);
+    assign cpu_device_access = !cpu_ram_access;
+    // Select the appropriate address for memory access
+    assign data_virtual_addr = module_mem_wr_en ? module_write_addr : module_read_addr;
+
+    // A faulting access is never accepted, or it would commit after the trap.
+    assign cpu_data_req = (module_mem_rd_en || module_mem_wr_en) &&
+                          !module_load_page_fault_in && !module_store_page_fault_in;
+    // The core may only go to memory once its translation is available.
+    assign cpu_data_bus_req = cpu_data_req && mmu_data_ready;
+    // A load waits for buffered writes to its word; a device load waits for all of them.
+    assign store_buf_push_req = cpu_data_bus_req && module_mem_wr_en && !store_buf_full;
+    assign cpu_load_go = cpu_data_bus_req && !module_mem_wr_en && !store_buf_match &&
+                         !(cpu_device_access && !store_buf_empty) && !store_buf_forward_pending_q;
+    // A load fully covered by the last buffered write to its word takes its bytes from the buffer,
+    // registered: the next cycle, so the translation and the buffer compare do not reach the core.
+    assign store_buf_forward_go = cpu_data_bus_req && !module_mem_wr_en && store_buf_forward &&
+                                  !store_buf_forward_pending_q;
+    // An empty buffer issues the entering write at once.
+    assign drain_req = !store_buf_empty || store_buf_push_req;
+    assign drain_addr = store_buf_empty ? phys_data_addr : store_buf_head_addr;
+    assign drain_be = store_buf_empty ? module_write_byte_enable : store_buf_head_be;
+    assign drain_data = store_buf_empty ? module_wr_data_out : store_buf_head_data;
+    assign drain_done = dcache_rvalid && data_bus_drain_owns;
+    assign store_buf_push = store_buf_push_req && !(store_buf_empty && drain_done);
+    assign store_buf_pop = drain_done && !store_buf_empty;
+
+    // One master at a time: the core's load, then the buffer, then the walker, which waits for an
+    // empty buffer so it reads updated page-table entries.
+    assign data_bus_drain_sel = drain_req && !cpu_load_go;
+    assign data_bus_walk_sel = mmu_walk_req && !cpu_load_go && !drain_req;
+    assign data_bus_walk_owns = data_bus_walk_owner_q || (data_bus_walk_sel && dcache_gnt);
+    assign data_bus_drain_owns = data_bus_drain_owner_q || (data_bus_drain_sel && dcache_gnt);
+    assign mmu_walk_gnt = dcache_gnt && data_bus_walk_sel;
+    assign mmu_walk_rvalid = dcache_rvalid && data_bus_walk_owns;
+    assign module_data_gnt_in = module_mem_wr_en ? store_buf_push_req :
+                                ((dcache_gnt && cpu_load_go) || store_buf_forward_go);
+    assign module_data_rvalid_in = module_mem_wr_en ? store_buf_push_req :
+                                   ((dcache_rvalid && !data_bus_walk_owns && !data_bus_drain_owns) ||
+                                    store_buf_forward_pending_q);
+    assign module_read_data_in = store_buf_forward_pending_q ? store_buf_forward_data_q : cpu_data_rdata;
+    // Also no write entering the cache this cycle.
+    assign module_data_cache_clean_in = dcache_clean && !drain_req;
+    // Line transfers and walks read whole words; the core's load type applies to its own accesses.
+    assign data_mem_load_type = (dcache_mem_line || data_bus_walk_owns) ? 3'b010 : module_load_type;
+    assign module_instr_out = module_instr_in;
+
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            store_buf_forward_pending_q <= 1'b0;
+            store_buf_forward_data_q <= 32'b0;
+        end else begin
+            store_buf_forward_pending_q <= store_buf_forward_go;
+            if (store_buf_forward_go) begin
+                store_buf_forward_data_q <= store_buf_forward_data;
+            end
+        end
+    end
+
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            data_bus_walk_owner_q <= 1'b0;
+            data_bus_drain_owner_q <= 1'b0;
+        end else if (dcache_rvalid) begin
+            data_bus_walk_owner_q <= 1'b0;
+            data_bus_drain_owner_q <= 1'b0;
+        end else if (dcache_gnt) begin
+            data_bus_walk_owner_q <= data_bus_walk_sel;
+            data_bus_drain_owner_q <= data_bus_drain_sel;
+        end
+    end
+
+    store_buffer #(.DEPTH(STORE_BUFFER_DEPTH)) store_buffer_inst (
+        .clk(clk),
+        .rst(rst),
+        .push(store_buf_push),
+        .push_addr(phys_data_addr),
+        .push_be(module_write_byte_enable),
+        .push_data(module_wr_data_out),
+        .push_ram(cpu_ram_access),
+        .pop(store_buf_pop),
+        .empty(store_buf_empty),
+        .full(store_buf_full),
+        .drained(module_store_buffer_empty_in),
+        .head_addr(store_buf_head_addr),
+        .head_be(store_buf_head_be),
+        .head_data(store_buf_head_data),
+        .head_ram(),
+        .match_addr(phys_data_addr),
+        .match_type(module_load_type),
+        .match(store_buf_match),
+        .forward(store_buf_forward),
+        .forward_data(store_buf_forward_data)
+    );
+
+    icache icache_inst (
+        .clk(clk),
+        .rst(rst),
+        .flush(module_instr_cache_flush_out),
+        .next_pc(module_next_pc_out),
+        // A fetch goes to memory only once translated; a fetch that faults never does.
+        .req(mmu_instr_ready && !module_instr_page_fault_in),
+        .addr(phys_instr_addr),
+        .gnt(module_instr_gnt_in),
+        .rvalid(module_instr_rvalid_in),
+        .rdata(module_instr_in),
+        .mem_req(instr_mem_req),
+        .mem_addr(instr_mem_addr),
+        .mem_gnt(instr_mem_gnt),
+        .mem_rvalid(instr_mem_rvalid),
+        .mem_rdata(instr_mem_rdata)
+    );
+
+    dcache #(.NUM_MSHR(NUM_MSHR)) dcache_inst (
+        .clk(clk),
+        .rst(rst),
+        .next_addr(module_next_data_addr_out),
+        .clean_req(module_data_cache_clean_req_out),
+        .clean(dcache_clean),
+        .req(data_bus_walk_sel || data_bus_drain_sel || cpu_load_go),
+        .addr(data_bus_walk_sel ? mmu_walk_addr : data_bus_drain_sel ? drain_addr : phys_data_addr),
+        .we(data_bus_drain_sel),
+        .be(data_bus_walk_sel ? 4'b1111 : data_bus_drain_sel ? drain_be : module_write_byte_enable),
+        .wdata(data_bus_drain_sel ? drain_data : 32'b0),
+        .load_type(data_bus_walk_sel ? 3'b010 : module_load_type),
+        .gnt(dcache_gnt),
+        .rvalid(dcache_rvalid),
+        .rdata(cpu_data_rdata),
+        .mem_req(data_mem_req),
+        .mem_addr(data_mem_addr),
+        .mem_we(data_mem_we),
+        .mem_be(data_mem_be),
+        .mem_wdata(data_mem_wdata),
+        .mem_line(dcache_mem_line),
+        .mem_gnt(data_mem_gnt),
+        .mem_rvalid(data_mem_rvalid),
+        .mem_rdata(data_mem_rdata)
+    );
+
+    sv32_mmu mmu_inst (
+        .clk(clk),
+        .rst(rst),
+        .flush_tlb(module_tlb_flush_out),
+        .satp(module_satp_out),
+        .data_sum(module_data_sum_out),
+        .data_mxr(module_data_mxr_out),
+        .instr_translate_enable(module_instr_mmu_enable_out),
+        .instr_virtual_addr(module_pc_out),
+        .instr_priv_mode(module_instr_privilege_out),
+        .instr_phys_addr(phys_instr_addr),
+        .instr_ready(mmu_instr_ready),
+        .instr_page_fault(module_instr_page_fault_in),
+        .data_translate_enable(translated_data_access),
+        .data_virtual_addr(data_virtual_addr),
+        .data_rd_en(module_mem_rd_en),
+        .data_wr_req(module_data_write_intent_out),
+        .data_priv_mode(module_data_privilege_out),
+        .data_phys_addr(phys_data_addr),
+        .data_ready(mmu_data_ready),
+        .data_load_page_fault(module_load_page_fault_in),
+        .data_store_page_fault(module_store_page_fault_in),
+        .data_fault_addr(module_page_fault_addr_in),
+        .walk_req(mmu_walk_req),
+        .walk_addr(mmu_walk_addr),
+        .walk_gnt(mmu_walk_gnt),
+        .walk_rvalid(mmu_walk_rvalid),
+        .walk_rdata(cpu_data_rdata)
+    );
 
 endmodule

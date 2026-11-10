@@ -271,13 +271,13 @@ async def test_a_fence_during_a_walk_does_not_leave_a_stale_translation(dut):
     for _ in range(40000):
         await RisingEdge(dut.clk)
         await ReadOnly()
-        walking = int(dut.mmu_inst.walk_state.value) != WALK_IDLE
+        walking = int(dut.cpu_inst.mmu_inst.walk_state.value) != WALK_IDLE
         if not walking:
             reads_this_walk = 0
-        if int(dut.mmu_walk_gnt.value):
+        if int(dut.cpu_inst.mmu_walk_gnt.value):
             pte_reads += 1
             reads_this_walk += 1
-        if int(dut.cpu_tlb_flush.value):
+        if int(dut.cpu_inst.module_tlb_flush_out.value):
             flushes += 1
             # A walk is under way when software fences.
             if walking:
@@ -285,9 +285,9 @@ async def test_a_fence_during_a_walk_does_not_leave_a_stale_translation(dut):
             # The walk has already read a PTE, so it carries a pointer the fence retires.
             if walking and reads_this_walk:
                 flush_after_first_read += 1
-        if (int(dut.cpu_mem_write_en.value) and int(dut.cpu_data_rvalid.value)
-                and int(dut.cpu_mem_write_addr.value) == DONE_ADDR
-                and int(dut.cpu_mem_write_data.value) == DONE_VALUE):
+        if (int(dut.cpu_inst.module_mem_wr_en.value) and int(dut.cpu_inst.module_data_rvalid_in.value)
+                and int(dut.cpu_inst.module_write_addr.value) == DONE_ADDR
+                and int(dut.cpu_inst.module_wr_data_out.value) == DONE_VALUE):
             done = True
             break
     await RisingEdge(dut.clk)

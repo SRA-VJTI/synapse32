@@ -232,9 +232,9 @@ async def run_c_code(dut):
         await RisingEdge(dut.clk)
         
         # Check for memory writes
-        if dut.cpu_mem_write_en.value:
-            addr = int(dut.cpu_mem_write_addr.value)
-            data = int(dut.cpu_mem_write_data.value)
+        if dut.cpu_inst.module_mem_wr_en.value:
+            addr = int(dut.cpu_inst.module_write_addr.value)
+            data = int(dut.cpu_inst.module_wr_data_out.value)
             mem_accesses[addr] = data
             
             # Only log important memory writes to reduce noise

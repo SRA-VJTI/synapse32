@@ -26,46 +26,30 @@ module top #(
 
     // Wires to connect CPU and memories
     wire [31:0] cpu_pc_out;
-    wire [31:0] instr_to_cpu;
-    wire [31:0] cpu_mem_read_addr;
-    wire [31:0] cpu_mem_write_addr;
-    wire [31:0] cpu_mem_write_data;
+    wire [31:0] cpu_instr_out;
     wire [31:0] mem_read_data;
-    wire cpu_mem_write_en;
-    wire cpu_mem_read_en;
-    wire cpu_data_write_intent;
-    wire [31:0] data_mem_addr;
-    wire [3:0] cpu_write_byte_enable;  // Write byte enables
-    wire [2:0] cpu_load_type;          // Load type
-    wire cpu_load_page_fault;
-    wire cpu_store_page_fault;
-    wire [31:0] cpu_page_fault_addr;
-    wire cpu_data_mmu_enable;
-    wire [1:0] cpu_data_privilege;
-    wire [31:0] cpu_satp;
-    wire cpu_data_sum;
-    wire cpu_data_mxr;
     wire [31:0] instr_read_data;
-    // Memory interface: the core's requests and the adapters' responses.
-    wire cpu_instr_gnt;
-    wire cpu_instr_rvalid;
-    wire [31:0] cpu_next_pc;
-    wire cpu_instr_cache_flush;
-    wire icache_mem_req;
-    wire [31:0] icache_mem_addr;
-    wire icache_mem_gnt;
-    wire icache_mem_rvalid;
-    wire [31:0] icache_mem_rdata;
-    wire cpu_data_req;
-    wire cpu_data_gnt;
-    wire cpu_data_rvalid;
-    wire [31:0] cpu_data_rdata;
-    wire [31:0] cpu_load_rdata;
+    // The CPU's memory ports, each in front of an adapter
+    wire instr_mem_req;
+    wire [31:0] instr_mem_addr;
+    wire instr_mem_gnt;
+    wire instr_mem_rvalid;
+    wire [31:0] instr_mem_rdata;
+    wire data_mem_req;
+    wire [31:0] data_mem_addr;
+    wire data_mem_we;
+    wire [3:0] data_mem_be;
+    wire [31:0] data_mem_wdata;
+    wire [2:0] data_mem_load_type;
+    wire data_mem_gnt;
+    wire data_mem_rvalid;
+    wire [31:0] data_mem_rdata;
     wire [31:0] instr_store_addr;
     wire [31:0] instr_store_rdata;
     wire [31:0] data_store_addr;
     wire [3:0] data_store_be;
     wire [31:0] data_store_wdata;
+    wire data_store_req;
     wire data_store_we;
     wire data_write_fire;
     wire data_read_fire;
@@ -89,14 +73,8 @@ module top #(
     wire plic_access;
     
     // Memory address decoding using memory map
-    wire data_mem_access;
     wire timer_access;
-    wire instr_mem_access;
     wire ram_access;
-    wire translated_data_access;
-    wire [31:0] phys_data_addr;   // physical address after MMU walk (or virtual if MMU off)
-    wire [31:0] phys_instr_addr;
-    wire [31:0] mmu_data_fault_addr;
     wire [31:0] mmu_instr_l1_pte_addr;
     wire [31:0] mmu_instr_l0_pte_addr;
     wire [31:0] mmu_data_l1_pte_addr;
@@ -109,87 +87,12 @@ module top #(
     wire mmu_instr_l0_pte_backed;
     wire mmu_data_l1_pte_backed;
     wire mmu_data_l0_pte_backed;
-    // Sequential walker: the MMU reads PTEs over the data memory interface.
-    wire mmu_instr_ready;
-    wire mmu_data_ready;
-    wire mmu_walk_req;
-    wire [31:0] mmu_walk_addr;
-    wire mmu_walk_gnt;
-    wire mmu_walk_rvalid;
-    wire cpu_tlb_flush;
-    wire data_bus_walk_sel;
-    wire data_bus_walk_owns;
-    reg data_bus_walk_owner_q;
-    wire data_store_req;
-    wire dcache_gnt;
-    wire dcache_rvalid;
-    wire cpu_data_bus_req;
-    // Store buffer wires
-    wire cpu_ram_access;
-    wire cpu_device_access;
-    wire cpu_load_go;
-    wire store_buf_push_req;
-    wire store_buf_push;
-    wire store_buf_pop;
-    wire store_buf_empty;
-    wire store_buf_full;
-    wire store_buf_drained;
-    wire store_buf_match;
-    wire store_buf_forward;
-    wire [31:0] store_buf_forward_data;
-    wire store_buf_forward_go;
-    reg store_buf_forward_pending_q;
-    reg [31:0] store_buf_forward_data_q;
-    wire [31:0] store_buf_head_addr;
-    wire [3:0] store_buf_head_be;
-    wire [31:0] store_buf_head_data;
-    wire store_buf_head_ram;
-    wire drain_req;
-    wire data_bus_drain_sel;
-    wire data_bus_drain_owns;
-    reg data_bus_drain_owner_q;
-    wire drain_done;
-    wire [31:0] drain_addr;
-    wire [3:0] drain_be;
-    wire [31:0] drain_data;
-    wire drain_ram;
-    wire bus_ram_access;
-    // Data cache wires
-    wire [31:0] cpu_next_data_addr;
-    wire cpu_data_cache_clean_req;
-    wire dcache_clean;
-    wire dcache_mem_req;
-    wire [31:0] dcache_mem_addr;
-    wire dcache_mem_we;
-    wire [3:0] dcache_mem_be;
-    wire [31:0] dcache_mem_wdata;
-    wire dcache_mem_line;
-    wire dcache_mem_gnt;
-    wire dcache_mem_rvalid;
-    wire [31:0] dcache_mem_rdata;
 
     // Use memory map macros for clean address decoding
-    assign translated_data_access = cpu_data_mmu_enable && (cpu_mem_write_en || cpu_mem_read_en);
-    assign cpu_page_fault_addr = mmu_data_fault_addr;
-    assign data_mem_access = !translated_data_access && `IS_DATA_MEM(data_store_addr);
     assign timer_access    = `IS_TIMER_MEM(data_store_addr);
     assign uart_access     = `IS_UART_MEM(data_store_addr);
     assign plic_access     = `IS_PLIC_MEM(data_store_addr);
-    assign instr_mem_access = !translated_data_access && `IS_INSTR_MEM(data_store_addr);
-    // RAM covers translated accesses that aren't peripheral, plus direct RAM accesses.
-    assign ram_access = (translated_data_access && !timer_access && !uart_access && !plic_access)
-                        || data_mem_access || instr_mem_access;
-    
-    // Kept with each buffered write, which drains after the core has moved on.
-    assign cpu_device_access = `IS_TIMER_MEM(phys_data_addr) || `IS_UART_MEM(phys_data_addr) ||
-                               `IS_PLIC_MEM(phys_data_addr);
-    assign cpu_ram_access = (translated_data_access && !cpu_device_access) ||
-                            (!translated_data_access &&
-                             (`IS_DATA_MEM(phys_data_addr) || `IS_INSTR_MEM(phys_data_addr)));
-    assign bus_ram_access = dcache_mem_line || (data_bus_drain_owns ? drain_ram : ram_access);
-
-    // Select the appropriate address for memory access
-    assign data_mem_addr = cpu_mem_write_en ? cpu_mem_write_addr : cpu_mem_read_addr;
+    assign ram_access      = `IS_DATA_MEM(data_store_addr) || `IS_INSTR_MEM(data_store_addr);
     
     // Multiplex read data based on address
     assign mem_read_data = timer_access ? timer_read_data :
@@ -199,124 +102,19 @@ module top #(
     
     // Debug outputs
     assign pc_debug = cpu_pc_out;
-    assign instr_debug = instr_to_cpu;
-    
-    // Memory adapters: the core presents a physical address and waits for the response.
-    // A faulting access is never accepted, or it would commit after the trap.
-    assign cpu_data_req = (cpu_mem_read_en || cpu_mem_write_en) &&
-                          !cpu_load_page_fault && !cpu_store_page_fault;
-    // The core may only go to memory once its translation is available.
-    assign cpu_data_bus_req = cpu_data_req && mmu_data_ready;
-    // A load waits for buffered writes to its word; a device load waits for all of them.
-    assign store_buf_push_req = cpu_data_bus_req && cpu_mem_write_en && !store_buf_full;
-    assign cpu_load_go = cpu_data_bus_req && !cpu_mem_write_en && !store_buf_match &&
-                         !(cpu_device_access && !store_buf_empty) && !store_buf_forward_pending_q;
-    // A load fully covered by the last buffered write to its word takes its bytes from the buffer,
-    // registered: the next cycle, so the translation and the buffer compare do not reach the core.
-    assign store_buf_forward_go = cpu_data_bus_req && !cpu_mem_write_en && store_buf_forward &&
-                                  !store_buf_forward_pending_q;
-    // An empty buffer issues the entering write at once.
-    assign drain_req = !store_buf_empty || store_buf_push_req;
-    assign drain_addr = store_buf_empty ? phys_data_addr : store_buf_head_addr;
-    assign drain_be = store_buf_empty ? cpu_write_byte_enable : store_buf_head_be;
-    assign drain_data = store_buf_empty ? cpu_mem_write_data : store_buf_head_data;
-    assign drain_ram = store_buf_empty ? cpu_ram_access : store_buf_head_ram;
-    assign drain_done = dcache_rvalid && data_bus_drain_owns;
-    assign store_buf_push = store_buf_push_req && !(store_buf_empty && drain_done);
-    assign store_buf_pop = drain_done && !store_buf_empty;
-
-    // One master at a time: the core's load, then the buffer, then the walker, which waits for an
-    // empty buffer so it reads updated page-table entries.
-    assign data_bus_drain_sel = drain_req && !cpu_load_go;
-    assign data_bus_walk_sel = mmu_walk_req && !cpu_load_go && !drain_req;
-    assign data_bus_walk_owns = data_bus_walk_owner_q || (data_bus_walk_sel && dcache_gnt);
-    assign data_bus_drain_owns = data_bus_drain_owner_q || (data_bus_drain_sel && dcache_gnt);
-    assign mmu_walk_gnt = dcache_gnt && data_bus_walk_sel;
-    assign mmu_walk_rvalid = dcache_rvalid && data_bus_walk_owns;
-    assign cpu_data_gnt = cpu_mem_write_en ? store_buf_push_req :
-                          ((dcache_gnt && cpu_load_go) || store_buf_forward_go);
-    assign cpu_data_rvalid = cpu_mem_write_en ? store_buf_push_req :
-                             ((dcache_rvalid && !data_bus_walk_owns && !data_bus_drain_owns) ||
-                              store_buf_forward_pending_q);
-    assign cpu_load_rdata = store_buf_forward_pending_q ? store_buf_forward_data_q : cpu_data_rdata;
-
-    always @(posedge clk or posedge rst) begin
-        if (rst) begin
-            store_buf_forward_pending_q <= 1'b0;
-            store_buf_forward_data_q <= 32'b0;
-        end else begin
-            store_buf_forward_pending_q <= store_buf_forward_go;
-            if (store_buf_forward_go) begin
-                store_buf_forward_data_q <= store_buf_forward_data;
-            end
-        end
-    end
-
-    always @(posedge clk or posedge rst) begin
-        if (rst) begin
-            data_bus_walk_owner_q <= 1'b0;
-            data_bus_drain_owner_q <= 1'b0;
-        end else if (dcache_rvalid) begin
-            data_bus_walk_owner_q <= 1'b0;
-            data_bus_drain_owner_q <= 1'b0;
-        end else if (dcache_gnt) begin
-            data_bus_walk_owner_q <= data_bus_walk_sel;
-            data_bus_drain_owner_q <= data_bus_drain_sel;
-        end
-    end
-
-    store_buffer #(.DEPTH(STORE_BUFFER_DEPTH)) store_buffer_inst (
-        .clk(clk),
-        .rst(rst),
-        .push(store_buf_push),
-        .push_addr(phys_data_addr),
-        .push_be(cpu_write_byte_enable),
-        .push_data(cpu_mem_write_data),
-        .push_ram(cpu_ram_access),
-        .pop(store_buf_pop),
-        .empty(store_buf_empty),
-        .full(store_buf_full),
-        .drained(store_buf_drained),
-        .head_addr(store_buf_head_addr),
-        .head_be(store_buf_head_be),
-        .head_data(store_buf_head_data),
-        .head_ram(store_buf_head_ram),
-        .match_addr(phys_data_addr),
-        .match_type(cpu_load_type),
-        .match(store_buf_match),
-        .forward(store_buf_forward),
-        .forward_data(store_buf_forward_data)
-    );
-
-    icache icache_inst (
-        .clk(clk),
-        .rst(rst),
-        .flush(cpu_instr_cache_flush),
-        .next_pc(cpu_next_pc),
-        // A fetch goes to memory only once translated; a fetch that faults never does.
-        .req(mmu_instr_ready && !cpu_instr_page_fault),
-        .addr(phys_instr_addr),
-        .gnt(cpu_instr_gnt),
-        .rvalid(cpu_instr_rvalid),
-        .rdata(instr_to_cpu),
-        .mem_req(icache_mem_req),
-        .mem_addr(icache_mem_addr),
-        .mem_gnt(icache_mem_gnt),
-        .mem_rvalid(icache_mem_rvalid),
-        .mem_rdata(icache_mem_rdata)
-    );
+    assign instr_debug = cpu_instr_out;
 
     mem_adapter #(.RESPONSE_LATENCY(FETCH_LATENCY)) instr_adapter (
         .clk(clk),
         .rst(rst),
-        .req(icache_mem_req),
-        .addr(icache_mem_addr),
+        .req(instr_mem_req),
+        .addr(instr_mem_addr),
         .we(1'b0),
         .be(4'b0),
         .wdata(32'b0),
-        .gnt(icache_mem_gnt),
-        .rvalid(icache_mem_rvalid),
-        .rdata(icache_mem_rdata),
+        .gnt(instr_mem_gnt),
+        .rvalid(instr_mem_rvalid),
+        .rdata(instr_mem_rdata),
         .store_req(),
         .store_addr(instr_store_addr),
         .store_we(),
@@ -327,43 +125,17 @@ module top #(
         .store_rdata(instr_store_rdata)
     );
 
-    dcache #(.NUM_MSHR(NUM_MSHR)) dcache_inst (
-        .clk(clk),
-        .rst(rst),
-        .next_addr(cpu_next_data_addr),
-        .clean_req(cpu_data_cache_clean_req),
-        .clean(dcache_clean),
-        .req(data_bus_walk_sel || data_bus_drain_sel || cpu_load_go),
-        .addr(data_bus_walk_sel ? mmu_walk_addr : data_bus_drain_sel ? drain_addr : phys_data_addr),
-        .we(data_bus_drain_sel),
-        .be(data_bus_walk_sel ? 4'b1111 : data_bus_drain_sel ? drain_be : cpu_write_byte_enable),
-        .wdata(data_bus_drain_sel ? drain_data : 32'b0),
-        .load_type(data_bus_walk_sel ? 3'b010 : cpu_load_type),
-        .gnt(dcache_gnt),
-        .rvalid(dcache_rvalid),
-        .rdata(cpu_data_rdata),
-        .mem_req(dcache_mem_req),
-        .mem_addr(dcache_mem_addr),
-        .mem_we(dcache_mem_we),
-        .mem_be(dcache_mem_be),
-        .mem_wdata(dcache_mem_wdata),
-        .mem_line(dcache_mem_line),
-        .mem_gnt(dcache_mem_gnt),
-        .mem_rvalid(dcache_mem_rvalid),
-        .mem_rdata(dcache_mem_rdata)
-    );
-
     mem_adapter #(.RESPONSE_LATENCY(MEM_LATENCY)) data_adapter (
         .clk(clk),
         .rst(rst),
-        .req(dcache_mem_req),
-        .addr(dcache_mem_addr),
-        .we(dcache_mem_we),
-        .be(dcache_mem_be),
-        .wdata(dcache_mem_wdata),
-        .gnt(dcache_mem_gnt),
-        .rvalid(dcache_mem_rvalid),
-        .rdata(dcache_mem_rdata),
+        .req(data_mem_req),
+        .addr(data_mem_addr),
+        .we(data_mem_we),
+        .be(data_mem_be),
+        .wdata(data_mem_wdata),
+        .gnt(data_mem_gnt),
+        .rvalid(data_mem_rvalid),
+        .rdata(data_mem_rdata),
         .store_req(data_store_req),
         .store_addr(data_store_addr),
         .store_we(data_store_we),
@@ -375,82 +147,33 @@ module top #(
     );
 
     // Instantiate the RISC-V CPU core
-    riscv_cpu cpu_inst (
+    riscv_cpu #(
+        .STORE_BUFFER_DEPTH(STORE_BUFFER_DEPTH),
+        .NUM_MSHR(NUM_MSHR)
+    ) cpu_inst (
         .clk(clk),
         .rst(rst),
+        .instr_mem_req(instr_mem_req),
+        .instr_mem_addr(instr_mem_addr),
+        .instr_mem_gnt(instr_mem_gnt),
+        .instr_mem_rvalid(instr_mem_rvalid),
+        .instr_mem_rdata(instr_mem_rdata),
+        .data_mem_req(data_mem_req),
+        .data_mem_addr(data_mem_addr),
+        .data_mem_we(data_mem_we),
+        .data_mem_be(data_mem_be),
+        .data_mem_wdata(data_mem_wdata),
+        .data_mem_load_type(data_mem_load_type),
+        .data_mem_gnt(data_mem_gnt),
+        .data_mem_rvalid(data_mem_rvalid),
+        .data_mem_rdata(data_mem_rdata),
+        .module_pc_out(cpu_pc_out),
+        .module_instr_out(cpu_instr_out),
         .timer_interrupt(timer_interrupt),
         .machine_software_interrupt(machine_software_interrupt || software_interrupt),
         .machine_external_interrupt(plic_machine_interrupt),
         .supervisor_external_interrupt(plic_supervisor_interrupt),
-        .mtime_in(mtime),
-        .module_instr_in(instr_to_cpu),
-        .module_read_data_in(cpu_load_rdata),
-        .module_pc_out(cpu_pc_out),
-        .module_wr_data_out(cpu_mem_write_data),
-        .module_mem_wr_en(cpu_mem_write_en),
-        .module_mem_rd_en(cpu_mem_read_en),
-        .module_read_addr(cpu_mem_read_addr),
-        .module_write_addr(cpu_mem_write_addr),
-        .module_write_byte_enable(cpu_write_byte_enable),
-        .module_load_type(cpu_load_type),
-        .module_load_page_fault_in(cpu_load_page_fault),
-        .module_store_page_fault_in(cpu_store_page_fault),
-        .module_page_fault_addr_in(cpu_page_fault_addr),
-        .module_instr_page_fault_in(cpu_instr_page_fault),
-        .module_instr_gnt_in(cpu_instr_gnt),
-        .module_instr_rvalid_in(cpu_instr_rvalid),
-        .module_data_gnt_in(cpu_data_gnt),
-        .module_data_rvalid_in(cpu_data_rvalid),
-        .module_store_buffer_empty_in(store_buf_drained),
-        .module_data_write_intent_out(cpu_data_write_intent),
-        .module_tlb_flush_out(cpu_tlb_flush),
-        .module_instr_cache_flush_out(cpu_instr_cache_flush),
-        .module_next_pc_out(cpu_next_pc),
-        .module_next_data_addr_out(cpu_next_data_addr),
-        .module_data_cache_clean_req_out(cpu_data_cache_clean_req),
-        // Also no write entering the cache this cycle.
-        .module_data_cache_clean_in(dcache_clean && !drain_req),
-        .module_data_mmu_enable_out(cpu_data_mmu_enable),
-        .module_data_privilege_out(cpu_data_privilege),
-        .module_satp_out(cpu_satp),
-        .module_data_sum_out(cpu_data_sum),
-        .module_data_mxr_out(cpu_data_mxr),
-        .module_instr_mmu_enable_out(cpu_instr_mmu_enable),
-        .module_instr_privilege_out(cpu_instr_privilege)
-    );
-
-    wire cpu_instr_mmu_enable;
-    wire [1:0] cpu_instr_privilege;
-    wire cpu_instr_page_fault;
-
-    sv32_mmu mmu_inst (
-        .clk(clk),
-        .rst(rst),
-        .flush_tlb(cpu_tlb_flush),
-        .satp(cpu_satp),
-        .data_sum(cpu_data_sum),
-        .data_mxr(cpu_data_mxr),
-        .instr_translate_enable(cpu_instr_mmu_enable),
-        .instr_virtual_addr(cpu_pc_out),
-        .instr_priv_mode(cpu_instr_privilege),
-        .instr_phys_addr(phys_instr_addr),
-        .instr_ready(mmu_instr_ready),
-        .instr_page_fault(cpu_instr_page_fault),
-        .data_translate_enable(translated_data_access),
-        .data_virtual_addr(data_mem_addr),
-        .data_rd_en(cpu_mem_read_en),
-        .data_wr_req(cpu_data_write_intent),
-        .data_priv_mode(cpu_data_privilege),
-        .data_phys_addr(phys_data_addr),
-        .data_ready(mmu_data_ready),
-        .data_load_page_fault(cpu_load_page_fault),
-        .data_store_page_fault(cpu_store_page_fault),
-        .data_fault_addr(mmu_data_fault_addr),
-        .walk_req(mmu_walk_req),
-        .walk_addr(mmu_walk_addr),
-        .walk_gnt(mmu_walk_gnt),
-        .walk_rvalid(mmu_walk_rvalid),
-        .walk_rdata(cpu_data_rdata)
+        .mtime_in(mtime)
     );
 
     // Instantiate unified memory
@@ -462,14 +185,13 @@ module top #(
         .clk(clk),
         .instr_addr(instr_store_addr),
         .instr_addr_p2(data_store_addr),
-        .data_wr_req(data_store_req && data_store_we && bus_ram_access),
-        .data_rd_en(data_store_req && !data_store_we && bus_ram_access),
+        .data_wr_req(data_store_req && data_store_we && ram_access),
+        .data_rd_en(data_store_req && !data_store_we && ram_access),
         // A write lands once, in the cycle the adapter commits it.
-        .wr_en(data_write_fire && bus_ram_access),
+        .wr_en(data_write_fire && ram_access),
         .write_byte_enable(data_store_be),
         .wr_data(data_store_wdata),
-        // Line transfers and walks read whole words; the core's load type applies to its own accesses.
-        .load_type((dcache_mem_line || data_bus_walk_owns) ? 3'b010 : cpu_load_type),
+        .load_type(data_mem_load_type),
         // The walker reads PTEs over the data interface now, so the side channel is unused.
         .pte_wr_en_a(1'b0),
         .pte_wr_addr_a(32'b0),
