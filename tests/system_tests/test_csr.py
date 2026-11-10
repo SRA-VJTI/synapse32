@@ -1,140 +1,13 @@
 import cocotb
-from cocotb.triggers import ClockCycles, FallingEdge, ReadOnly, RisingEdge, Timer
-from cocotb.clock import Clock
-import pytest
-import os
 
-RESET_PC_BASE = 0x80000000
-NOP = 0x00000013
+from cpu_program import INSTR_MEM_BASE, NOP, run_program, run_tests
 
-
-async def run_csr_test_program(dut, instr_mem, max_cycles=None):
-    """Helper function to run a CSR test program.
-
-    ``max_cycles`` overrides the default budget for programs that stall long
-    enough that one cycle per instruction is not enough to retire them.
-    """
-    # Dictionary to track register values
-    reg_values = {i: 0 for i in range(32)}
-    trace_pipeline = os.getenv("TRACE_PIPELINE", "0") == "1"
-    
-    # Simulate instruction memory fetch
-    def get_instr(pc):
-        if pc >= RESET_PC_BASE:
-            idx = (pc - RESET_PC_BASE) // 4
-        else:
-            idx = pc // 4
-        if 0 <= idx < len(instr_mem):
-            return instr_mem[idx]
-        return NOP
-
-    async def drive_instruction_memory():
-        while True:
-            pc = int(dut.module_pc_out.value)
-            dut.module_instr_in.value = get_instr(pc)
-            await FallingEdge(dut.clk)
-
-    # Prime fetch so the first post-reset cycle never sees the default 0x00000000.
-    dut.module_instr_in.value = get_instr(int(dut.module_pc_out.value))
-    cocotb.start_soon(drive_instruction_memory())
-    
-    # Feed instructions and track CSR operations
-    if max_cycles is None:
-        max_cycles = len(instr_mem) + 10
-    for cycle in range(max_cycles):
-        await RisingEdge(dut.clk)
-        await ReadOnly()
-        
-        # Track register writes
-        try:
-            wb_reg = int(dut.rf_inst0_rd_in.value)
-            wb_val = int(dut.rf_inst0_rd_value_in.value)
-            wb_en = int(dut.rf_inst0_wr_en.value)
-            
-            if wb_en and wb_reg != 0:
-                reg_values[wb_reg] = wb_val
-                print(f"Cycle {cycle}: Register x{wb_reg} = {wb_val:#x}")
-        except Exception as e:
-            print(f"Error tracking registers: {e}")
-        
-        # Track CSR operations
-        try:
-            csr_addr = int(dut.csr_addr.value)
-            csr_read_en = int(dut.csr_read_enable.value)
-            csr_write_en = int(dut.csr_write_enable.value)
-            csr_read_data = int(dut.csr_read_data.value)
-            csr_write_data = int(dut.csr_write_data.value)
-            
-            if csr_read_en or csr_write_en:
-                operation = ""
-                if csr_read_en and csr_write_en:
-                    operation = f"CSR RW: CSR[{csr_addr:#x}] read={csr_read_data:#x}, write={csr_write_data:#x}"
-                elif csr_read_en:
-                    operation = f"CSR R: CSR[{csr_addr:#x}] read={csr_read_data:#x}"
-                elif csr_write_en:
-                    operation = f"CSR W: CSR[{csr_addr:#x}] write={csr_write_data:#x}"
-                print(f"Cycle {cycle}: {operation}")
-        except Exception as e:
-            # CSR signals might not be ready yet
-            pass
-
-        if trace_pipeline:
-            try:
-                print(
-                    "Cycle {}: fetch_pc={} if_id_pc={} if_id_instr={} if_id_valid={} "
-                    "module_instr={} id_ex_pc={} id_ex_id={} id_ex_valid={} jump={} jump_addr={} "
-                    "flush={} mepc={} priv={}".format(
-                        cycle,
-                        int(dut.module_pc_out.value),
-                        int(dut.if_id_pc_out.value),
-                        int(dut.if_id_instr_out.value),
-                        int(dut.if_id_instr_valid_out.value),
-                        int(dut.module_instr_in.value),
-                        int(dut.id_ex_inst0_pc_out.value),
-                        int(dut.id_ex_inst0_instr_id_out.value),
-                        int(dut.id_ex_inst0_instr_valid_out.value),
-                        int(dut.ex_inst0_jump_signal_out.value),
-                        int(dut.ex_inst0_jump_addr_out.value),
-                        int(dut.execution_flush.value),
-                        int(dut.csr_file_inst.mepc.value),
-                        int(dut.csr_file_inst.privilege_mode.value),
-                    )
-                )
-            except Exception:
-                pass
-
-    # Allow the final writeback value to reach the clocked register file.
-    await ClockCycles(dut.clk, 15)
-            
-    # Print final register values
-    print("\nFinal register values:")
-    for reg, value in reg_values.items():
-        if value != 0:  # Only print non-zero registers
-            print(f"x{reg} = {value:#x}")
-    
-    return reg_values
 
 @cocotb.test()
 async def test_csr_basic_operations(dut):
     """Test basic CSR read/write operations"""
     print("Starting CSR basic operations test...")
     
-    # Attach a clock
-    clock = Clock(dut.clk, 10, units="ns")
-    cocotb.start_soon(clock.start())
-
-    # Reset
-    dut.module_instr_in.value = 0
-    dut.module_read_data_in.value = 0
-    dut.module_instr_gnt_in.value = 1
-    dut.module_instr_rvalid_in.value = 1
-    dut.module_data_gnt_in.value = 1
-    dut.module_data_rvalid_in.value = 1
-    dut.rst.value = 1
-    await Timer(20, units="ns")
-    dut.rst.value = 0
-    await RisingEdge(dut.clk)
-
     # Program to test CSR operations:
     instr_mem = [
         # Test CSRRW (Read/Write)
@@ -159,7 +32,7 @@ async def test_csr_basic_operations(dut):
     ]
 
     # Run the program
-    reg_values = await run_csr_test_program(dut, instr_mem)
+    await run_program(dut, instr_mem)
     
     # Expected register values after execution
     expected_values = {
@@ -177,12 +50,12 @@ async def test_csr_basic_operations(dut):
     # Verify register values
     print("\nVerifying register values:")
     for reg, expected in expected_values.items():
-        actual = int(dut.rf_inst0.register_file[reg].value)
+        actual = int(dut.cpu_inst.rf_inst0.register_file[reg].value)
         print(f"x{reg}: expected={expected:#x}, actual={actual:#x}")
         assert actual == expected, f"Register x{reg} value mismatch: expected {expected:#x}, got {actual:#x}"
     
     # Check final CSR value
-    final_mscratch = int(dut.csr_file_inst.mscratch.value)
+    final_mscratch = int(dut.cpu_inst.csr_file_inst.mscratch.value)
     expected_mscratch = 6  # Final value after all operations
     print(f"mscratch: expected={expected_mscratch:#x}, actual={final_mscratch:#x}")
     assert final_mscratch == expected_mscratch, f"mscratch value mismatch: expected {expected_mscratch:#x}, got {final_mscratch:#x}"
@@ -194,21 +67,6 @@ async def test_csr_mstatus_operations(dut):
     """Test operations on MSTATUS CSR"""
     print("Starting MSTATUS CSR test...")
     
-    clock = Clock(dut.clk, 10, units="ns")
-    cocotb.start_soon(clock.start())
-
-    # Reset
-    dut.module_instr_in.value = 0
-    dut.module_read_data_in.value = 0
-    dut.module_instr_gnt_in.value = 1
-    dut.module_instr_rvalid_in.value = 1
-    dut.module_data_gnt_in.value = 1
-    dut.module_data_rvalid_in.value = 1
-    dut.rst.value = 1
-    await Timer(20, units="ns")
-    dut.rst.value = 0
-    await RisingEdge(dut.clk)
-
     # Program to test MSTATUS operations:
     instr_mem = [
         # Read initial MSTATUS value
@@ -228,7 +86,7 @@ async def test_csr_mstatus_operations(dut):
         0x30015573,  # csrrsi x10, mstatus, 2  # Set bit 1, x10 = old mstatus
     ]
 
-    await run_csr_test_program(dut, instr_mem)
+    await run_program(dut, instr_mem)
     
     # Verify that MSTATUS operations worked correctly
     # Note: Initial MSTATUS = 0x1800 (MPP = 11)
@@ -243,7 +101,7 @@ async def test_csr_mstatus_operations(dut):
     
     print("\nVerifying MSTATUS register values:")
     for reg, expected in expected_values.items():
-        actual = int(dut.rf_inst0.register_file[reg].value)
+        actual = int(dut.cpu_inst.rf_inst0.register_file[reg].value)
         print(f"x{reg}: expected={expected:#x}, actual={actual:#x}")
         assert actual == expected, f"Register x{reg} value mismatch: expected {expected:#x}, got {actual:#x}"
     
@@ -254,21 +112,6 @@ async def test_csr_cycle_counter(dut):
     """Test cycle counter CSRs"""
     print("Starting cycle counter CSR test...")
     
-    clock = Clock(dut.clk, 10, units="ns")
-    cocotb.start_soon(clock.start())
-
-    # Reset
-    dut.module_instr_in.value = 0
-    dut.module_read_data_in.value = 0
-    dut.module_instr_gnt_in.value = 1
-    dut.module_instr_rvalid_in.value = 1
-    dut.module_data_gnt_in.value = 1
-    dut.module_data_rvalid_in.value = 1
-    dut.rst.value = 1
-    await Timer(20, units="ns")
-    dut.rst.value = 0
-    await RisingEdge(dut.clk)
-
     # Program to test cycle counter:
     instr_mem = [
         # Read cycle counter at different times
@@ -286,13 +129,13 @@ async def test_csr_cycle_counter(dut):
         0xc8002473,  # csrrs x8, cycleh, x0    # x8 = cycle high (later)
     ]
 
-    await run_csr_test_program(dut, instr_mem)
+    await run_program(dut, instr_mem)
     
     # Verify that cycle counter is advancing
-    cycle_low_1 = int(dut.rf_inst0.register_file[2].value)
-    cycle_high_1 = int(dut.rf_inst0.register_file[4].value)
-    cycle_low_2 = int(dut.rf_inst0.register_file[6].value)
-    cycle_high_2 = int(dut.rf_inst0.register_file[8].value)
+    cycle_low_1 = int(dut.cpu_inst.rf_inst0.register_file[2].value)
+    cycle_high_1 = int(dut.cpu_inst.rf_inst0.register_file[4].value)
+    cycle_low_2 = int(dut.cpu_inst.rf_inst0.register_file[6].value)
+    cycle_high_2 = int(dut.cpu_inst.rf_inst0.register_file[8].value)
     
     print(f"First cycle read: low={cycle_low_1:#x}, high={cycle_high_1:#x}")
     print(f"Second cycle read: low={cycle_low_2:#x}, high={cycle_high_2:#x}")
@@ -307,20 +150,6 @@ async def test_csr_machine_mode_same_reg_hazard(dut):
     """Exercise back-to-back machine CSR ops that use the same register as rs1 and rd."""
     print("Starting machine-mode CSR same-reg hazard test...")
 
-    clock = Clock(dut.clk, 10, units="ns")
-    cocotb.start_soon(clock.start())
-
-    dut.module_instr_in.value = 0
-    dut.module_read_data_in.value = 0
-    dut.module_instr_gnt_in.value = 1
-    dut.module_instr_rvalid_in.value = 1
-    dut.module_data_gnt_in.value = 1
-    dut.module_data_rvalid_in.value = 1
-    dut.rst.value = 1
-    await Timer(20, units="ns")
-    dut.rst.value = 0
-    await RisingEdge(dut.clk)
-
     instr_mem = [
         0x00700093,  # addi x1,  x0, 7
         0x34009073,  # csrrw x0, mscratch, x1      ; mscratch = 7
@@ -331,11 +160,11 @@ async def test_csr_machine_mode_same_reg_hazard(dut):
         0x340025f3,  # csrrs x11, mscratch, x0     ; x11 = 14
     ]
 
-    await run_csr_test_program(dut, instr_mem)
+    await run_program(dut, instr_mem)
 
-    x10 = int(dut.rf_inst0.register_file[10].value)
-    x11 = int(dut.rf_inst0.register_file[11].value)
-    mscratch = int(dut.csr_file_inst.mscratch.value)
+    x10 = int(dut.cpu_inst.rf_inst0.register_file[10].value)
+    x11 = int(dut.cpu_inst.rf_inst0.register_file[11].value)
+    mscratch = int(dut.cpu_inst.csr_file_inst.mscratch.value)
 
     print(f"x10={x10:#x}, x11={x11:#x}, mscratch={mscratch:#x}")
 
@@ -350,20 +179,6 @@ async def test_csr_machine_mode_same_reg_hazard(dut):
 async def test_csr_machine_mode_riscv_tests_sequence(dut):
     """Mirror the rv32mi/rv64si csr.S machine-mode mscratch sequence."""
     print("Starting machine-mode riscv-tests CSR sequence...")
-
-    clock = Clock(dut.clk, 10, units="ns")
-    cocotb.start_soon(clock.start())
-
-    dut.module_instr_in.value = 0
-    dut.module_read_data_in.value = 0
-    dut.module_instr_gnt_in.value = 1
-    dut.module_instr_rvalid_in.value = 1
-    dut.module_data_gnt_in.value = 1
-    dut.module_data_rvalid_in.value = 1
-    dut.rst.value = 1
-    await Timer(20, units="ns")
-    dut.rst.value = 0
-    await RisingEdge(dut.clk)
 
     instr_mem = [
         0x3401D073,  # csrwi  x0,  mscratch, 3
@@ -392,15 +207,13 @@ async def test_csr_machine_mode_riscv_tests_sequence(dut):
         0x34002573,  # csrr   a0,  mscratch
     ]
 
-    # Every CSR op here stalls the pipeline for several cycles, so the default
-    # one-cycle-per-instruction budget retires only part of the program.
-    await run_csr_test_program(dut, instr_mem, max_cycles=len(instr_mem) * 8 + 20)
+    await run_program(dut, instr_mem)
 
-    a0 = int(dut.rf_inst0.register_file[10].value)
-    a1 = int(dut.rf_inst0.register_file[11].value)
-    a2 = int(dut.rf_inst0.register_file[12].value)
-    a3 = int(dut.rf_inst0.register_file[13].value)
-    mscratch = int(dut.csr_file_inst.mscratch.value)
+    a0 = int(dut.cpu_inst.rf_inst0.register_file[10].value)
+    a1 = int(dut.cpu_inst.rf_inst0.register_file[11].value)
+    a2 = int(dut.cpu_inst.rf_inst0.register_file[12].value)
+    a3 = int(dut.cpu_inst.rf_inst0.register_file[13].value)
+    mscratch = int(dut.cpu_inst.csr_file_inst.mscratch.value)
 
     print(f"a0={a0:#x}, a1={a1:#x}, a2={a2:#x}, a3={a3:#x}, mscratch={mscratch:#x}")
 
@@ -418,27 +231,14 @@ async def test_counteren_allows_user_cycle_read(dut):
     """Machine mode can enable user-mode cycle reads via mcounteren/scounteren."""
     print("Starting counteren user-cycle access test...")
 
-    clock = Clock(dut.clk, 10, units="ns")
-    cocotb.start_soon(clock.start())
-
-    dut.module_instr_in.value = 0
-    dut.module_read_data_in.value = 0
-    dut.module_instr_gnt_in.value = 1
-    dut.module_instr_rvalid_in.value = 1
-    dut.module_data_gnt_in.value = 1
-    dut.module_data_rvalid_in.value = 1
-    dut.rst.value = 1
-    await Timer(20, units="ns")
-    dut.rst.value = 0
-    await RisingEdge(dut.clk)
-
     instr_mem = [
         0x00100093,  # addi  x1, x0, 1
         0x30609073,  # csrrw x0, mcounteren, x1
         0x10609073,  # csrrw x0, scounteren, x1
         0x30602173,  # csrrs x2, mcounteren, x0
         0x106021F3,  # csrrs x3, scounteren, x0
-        0x02C00213,  # addi  x4, x0, 0x2c
+        0x80000237,  # lui   x4, 0x80000
+        0x03020213,  # addi  x4, x4, 0x30       -> the cycle read below
         0x34121073,  # csrrw x0, mepc, x4
         0x000022B7,  # lui   x5, 0x2
         0x80028293,  # addi  x5, x5, -2048      -> 0x1800
@@ -449,15 +249,15 @@ async def test_counteren_allows_user_cycle_read(dut):
         0x0000006F,  # jal   x0, 0
     ]
 
-    await run_csr_test_program(dut, instr_mem)
+    await run_program(dut, instr_mem)
 
-    x2 = int(dut.rf_inst0.register_file[2].value)
-    x3 = int(dut.rf_inst0.register_file[3].value)
-    x6 = int(dut.rf_inst0.register_file[6].value)
-    x7 = int(dut.rf_inst0.register_file[7].value)
-    privilege_mode = int(dut.csr_file_inst.privilege_mode.value)
-    mcounteren = int(dut.csr_file_inst.mcounteren.value)
-    scounteren = int(dut.csr_file_inst.scounteren.value)
+    x2 = int(dut.cpu_inst.rf_inst0.register_file[2].value)
+    x3 = int(dut.cpu_inst.rf_inst0.register_file[3].value)
+    x6 = int(dut.cpu_inst.rf_inst0.register_file[6].value)
+    x7 = int(dut.cpu_inst.rf_inst0.register_file[7].value)
+    privilege_mode = int(dut.cpu_inst.csr_file_inst.privilege_mode.value)
+    mcounteren = int(dut.cpu_inst.csr_file_inst.mcounteren.value)
+    scounteren = int(dut.cpu_inst.csr_file_inst.scounteren.value)
 
     print(
         f"x2={x2:#x}, x3={x3:#x}, x6={x6:#x}, x7={x7:#x}, "
@@ -480,33 +280,19 @@ async def test_sfence_vma_executes_without_trapping_in_machine_mode(dut):
     """SFENCE.VMA should decode and execute as a legal system instruction in M-mode."""
     print("Starting SFENCE.VMA decode/execute test...")
 
-    clock = Clock(dut.clk, 10, units="ns")
-    cocotb.start_soon(clock.start())
-
-    dut.module_instr_in.value = 0
-    dut.module_read_data_in.value = 0
-    dut.module_instr_gnt_in.value = 1
-    dut.module_instr_rvalid_in.value = 1
-    dut.module_data_gnt_in.value = 1
-    dut.module_data_rvalid_in.value = 1
-    dut.rst.value = 1
-    await Timer(20, units="ns")
-    dut.rst.value = 0
-    await RisingEdge(dut.clk)
-
     instr_mem = [
         0x01100093,  # addi x1, x0, 0x11
-        0x34201073,  # csrrw x0, mcause, x0      # clear any startup artifact
+        0x34201073,  # csrrw x0, mcause, x0      # mcause = 0
         0x12000073,  # sfence.vma x0, x0
         0x02200113,  # addi x2, x0, 0x22
         0x00000013,  # nop
     ]
 
-    await run_csr_test_program(dut, instr_mem)
+    await run_program(dut, instr_mem)
 
-    x1 = int(dut.rf_inst0.register_file[1].value)
-    x2 = int(dut.rf_inst0.register_file[2].value)
-    mcause = int(dut.csr_file_inst.mcause.value)
+    x1 = int(dut.cpu_inst.rf_inst0.register_file[1].value)
+    x2 = int(dut.cpu_inst.rf_inst0.register_file[2].value)
+    mcause = int(dut.cpu_inst.csr_file_inst.mcause.value)
 
     print(f"x1={x1:#x}, x2={x2:#x}, mcause={mcause:#x}")
 
@@ -521,35 +307,22 @@ async def test_mret_enters_supervisor_mode(dut):
     """Test that MRET can drop from M-mode into S-mode."""
     print("Starting MRET-to-S-mode test...")
 
-    clock = Clock(dut.clk, 10, units="ns")
-    cocotb.start_soon(clock.start())
-
-    dut.module_instr_in.value = 0
-    dut.module_read_data_in.value = 0
-    dut.module_instr_gnt_in.value = 1
-    dut.module_instr_rvalid_in.value = 1
-    dut.module_data_gnt_in.value = 1
-    dut.module_data_rvalid_in.value = 1
-    dut.rst.value = 1
-    await Timer(20, units="ns")
-    dut.rst.value = 0
-    await RisingEdge(dut.clk)
-
-    NOP = 0x00000013
     instr_mem = [NOP] * 16
 
     # 0x00: lui x1, 0x1                  # x1 = 0x1000 (MPP bit 12)
     instr_mem[0] = 0x000010B7
     # 0x04: csrrc x0, mstatus, x1        # clear MPP[1], leaving MPP=S (01)
     instr_mem[1] = 0x3000B073
-    # 0x08: addi x2, x0, 0x20            # S payload address
-    instr_mem[2] = 0x02000113
-    # 0x0C: csrrw x0, mepc, x2           # mepc = 0x20
-    instr_mem[3] = 0x34111073
-    # 0x10: mret                         # enter S-mode at mepc
-    instr_mem[4] = 0x30200073
-    # 0x14: addi x6, x0, 0x66            # must be skipped by mret redirect
-    instr_mem[5] = 0x06600313
+    # 0x08: lui x2, 0x80000
+    instr_mem[2] = 0x80000137
+    # 0x0C: addi x2, x2, 0x20            # S payload address
+    instr_mem[3] = 0x02010113
+    # 0x10: csrrw x0, mepc, x2           # mepc = 0x20
+    instr_mem[4] = 0x34111073
+    # 0x14: mret                         # enter S-mode at mepc
+    instr_mem[5] = 0x30200073
+    # 0x18: addi x6, x0, 0x66            # must be skipped by mret redirect
+    instr_mem[6] = 0x06600313
 
     # S-mode payload at 0x20 (word index 8).
     # 0x20: addi x5, x0, 0x5A            # S-mode sentinel
@@ -557,12 +330,12 @@ async def test_mret_enters_supervisor_mode(dut):
     # 0x24: jal x0, 0                    # hold PC here
     instr_mem[9] = 0x0000006F
 
-    await run_csr_test_program(dut, instr_mem)
+    await run_program(dut, instr_mem)
 
-    x5 = int(dut.rf_inst0.register_file[5].value)
-    x6 = int(dut.rf_inst0.register_file[6].value)
-    privilege_mode = int(dut.csr_file_inst.privilege_mode.value)
-    mstatus = int(dut.csr_file_inst.mstatus.value)
+    x5 = int(dut.cpu_inst.rf_inst0.register_file[5].value)
+    x6 = int(dut.cpu_inst.rf_inst0.register_file[6].value)
+    privilege_mode = int(dut.cpu_inst.csr_file_inst.privilege_mode.value)
+    mstatus = int(dut.cpu_inst.csr_file_inst.mstatus.value)
     mpp = (mstatus >> 11) & 0x3
 
     print(f"x5 (S-mode sentinel): {x5:#x}")
@@ -581,37 +354,26 @@ async def test_supervisor_ecall_traps_to_machine_mode(dut):
     """Test that an ECALL from S-mode traps to M-mode with cause 9."""
     print("Starting S-mode ECALL-to-M-mode test...")
 
-    clock = Clock(dut.clk, 10, units="ns")
-    cocotb.start_soon(clock.start())
-
-    dut.module_instr_in.value = 0
-    dut.module_read_data_in.value = 0
-    dut.module_instr_gnt_in.value = 1
-    dut.module_instr_rvalid_in.value = 1
-    dut.module_data_gnt_in.value = 1
-    dut.module_data_rvalid_in.value = 1
-    dut.rst.value = 1
-    await Timer(20, units="ns")
-    dut.rst.value = 0
-    await RisingEdge(dut.clk)
-
-    NOP = 0x00000013
     instr_mem = [NOP] * 40
 
     # 0x00: lui x1, 0x1                  # x1 = 0x1000 (MPP bit 12)
     instr_mem[0] = 0x000010B7
     # 0x04: csrrc x0, mstatus, x1        # clear MPP[1], leaving MPP=S (01)
     instr_mem[1] = 0x3000B073
-    # 0x08: addi x2, x0, 0x60            # S payload address
-    instr_mem[2] = 0x06000113
-    # 0x0C: csrrw x0, mepc, x2           # mepc = 0x60
-    instr_mem[3] = 0x34111073
-    # 0x10: addi x3, x0, 0x80            # M-mode trap handler address
-    instr_mem[4] = 0x08000193
-    # 0x14: csrrw x0, mtvec, x3          # mtvec = 0x80
-    instr_mem[5] = 0x30519073
-    # 0x18: mret                         # enter S-mode at mepc
-    instr_mem[6] = 0x30200073
+    # 0x08: lui x2, 0x80000
+    instr_mem[2] = 0x80000137
+    # 0x0C: addi x2, x2, 0x60            # S payload address
+    instr_mem[3] = 0x06010113
+    # 0x10: csrrw x0, mepc, x2           # mepc = 0x60
+    instr_mem[4] = 0x34111073
+    # 0x14: lui x3, 0x80000
+    instr_mem[5] = 0x800001B7
+    # 0x18: addi x3, x3, 0x80            # M-mode trap handler address
+    instr_mem[6] = 0x08018193
+    # 0x1C: csrrw x0, mtvec, x3          # mtvec = 0x80
+    instr_mem[7] = 0x30519073
+    # 0x20: mret                         # enter S-mode at mepc
+    instr_mem[8] = 0x30200073
 
     # S-mode payload at 0x60 (word index 24).
     # 0x60: addi x5, x0, 0x5A            # S-mode sentinel before ecall
@@ -627,14 +389,14 @@ async def test_supervisor_ecall_traps_to_machine_mode(dut):
     # 0x84: jal x0, 0                    # hold PC here
     instr_mem[33] = 0x0000006F
 
-    await run_csr_test_program(dut, instr_mem)
+    await run_program(dut, instr_mem)
 
-    x5 = int(dut.rf_inst0.register_file[5].value)
-    x6 = int(dut.rf_inst0.register_file[6].value)
-    x7 = int(dut.rf_inst0.register_file[7].value)
-    privilege_mode = int(dut.csr_file_inst.privilege_mode.value)
-    mcause = int(dut.csr_file_inst.mcause.value)
-    mstatus = int(dut.csr_file_inst.mstatus.value)
+    x5 = int(dut.cpu_inst.rf_inst0.register_file[5].value)
+    x6 = int(dut.cpu_inst.rf_inst0.register_file[6].value)
+    x7 = int(dut.cpu_inst.rf_inst0.register_file[7].value)
+    privilege_mode = int(dut.cpu_inst.csr_file_inst.privilege_mode.value)
+    mcause = int(dut.cpu_inst.csr_file_inst.mcause.value)
+    mstatus = int(dut.cpu_inst.csr_file_inst.mstatus.value)
     mpp = (mstatus >> 11) & 0x3
 
     print(f"x5 (S-mode pre-ecall sentinel): {x5:#x}")
@@ -656,21 +418,6 @@ async def test_supervisor_ecall_machine_mret_returns_to_supervisor(dut):
     """Test S-mode ECALL handled in M-mode can return to S-mode with MRET."""
     print("Starting S-mode ECALL/M-mode MRET return test...")
 
-    clock = Clock(dut.clk, 10, units="ns")
-    cocotb.start_soon(clock.start())
-
-    dut.module_instr_in.value = 0
-    dut.module_read_data_in.value = 0
-    dut.module_instr_gnt_in.value = 1
-    dut.module_instr_rvalid_in.value = 1
-    dut.module_data_gnt_in.value = 1
-    dut.module_data_rvalid_in.value = 1
-    dut.rst.value = 1
-    await Timer(20, units="ns")
-    dut.rst.value = 0
-    await RisingEdge(dut.clk)
-
-    NOP = 0x00000013
     instr_mem = [NOP] * 56
 
     # M-mode setup.
@@ -678,16 +425,20 @@ async def test_supervisor_ecall_machine_mret_returns_to_supervisor(dut):
     instr_mem[0] = 0x000010B7
     # 0x04: csrrc x0, mstatus, x1        # clear MPP[1], leaving MPP=S (01)
     instr_mem[1] = 0x3000B073
-    # 0x08: addi x2, x0, 0x60            # S payload address
-    instr_mem[2] = 0x06000113
-    # 0x0C: csrrw x0, mepc, x2           # mepc = 0x60
-    instr_mem[3] = 0x34111073
-    # 0x10: addi x3, x0, 0xA0            # M-mode trap handler address
-    instr_mem[4] = 0x0A000193
-    # 0x14: csrrw x0, mtvec, x3          # mtvec = 0xA0
-    instr_mem[5] = 0x30519073
-    # 0x18: mret                         # enter S-mode at mepc
-    instr_mem[6] = 0x30200073
+    # 0x08: lui x2, 0x80000
+    instr_mem[2] = 0x80000137
+    # 0x0C: addi x2, x2, 0x60            # S payload address
+    instr_mem[3] = 0x06010113
+    # 0x10: csrrw x0, mepc, x2           # mepc = 0x60
+    instr_mem[4] = 0x34111073
+    # 0x14: lui x3, 0x80000
+    instr_mem[5] = 0x800001B7
+    # 0x18: addi x3, x3, 0xA0            # M-mode trap handler address
+    instr_mem[6] = 0x0A018193
+    # 0x1C: csrrw x0, mtvec, x3          # mtvec = 0xA0
+    instr_mem[7] = 0x30519073
+    # 0x20: mret                         # enter S-mode at mepc
+    instr_mem[8] = 0x30200073
 
     # S-mode payload at 0x60 (word index 24).
     # 0x60: addi x5, x0, 0x5A            # S-mode pre-ecall sentinel
@@ -711,16 +462,16 @@ async def test_supervisor_ecall_machine_mret_returns_to_supervisor(dut):
     # 0xB0: mret                         # return to S payload after ecall
     instr_mem[44] = 0x30200073
 
-    await run_csr_test_program(dut, instr_mem)
+    await run_program(dut, instr_mem)
 
-    x5 = int(dut.rf_inst0.register_file[5].value)
-    x6 = int(dut.rf_inst0.register_file[6].value)
-    x7 = int(dut.rf_inst0.register_file[7].value)
-    x8 = int(dut.rf_inst0.register_file[8].value)
-    privilege_mode = int(dut.csr_file_inst.privilege_mode.value)
-    mcause = int(dut.csr_file_inst.mcause.value)
-    mepc = int(dut.csr_file_inst.mepc.value)
-    mstatus = int(dut.csr_file_inst.mstatus.value)
+    x5 = int(dut.cpu_inst.rf_inst0.register_file[5].value)
+    x6 = int(dut.cpu_inst.rf_inst0.register_file[6].value)
+    x7 = int(dut.cpu_inst.rf_inst0.register_file[7].value)
+    x8 = int(dut.cpu_inst.rf_inst0.register_file[8].value)
+    privilege_mode = int(dut.cpu_inst.csr_file_inst.privilege_mode.value)
+    mcause = int(dut.cpu_inst.csr_file_inst.mcause.value)
+    mepc = int(dut.cpu_inst.csr_file_inst.mepc.value)
+    mstatus = int(dut.cpu_inst.csr_file_inst.mstatus.value)
     mpp = (mstatus >> 11) & 0x3
 
     print(f"x5 (S pre-ecall): {x5:#x}")
@@ -731,11 +482,11 @@ async def test_supervisor_ecall_machine_mret_returns_to_supervisor(dut):
 
     assert x5 == 0x5A, f"S-mode payload did not execute before ecall: x5={x5:#x}"
     assert x7 == 0x77, f"M-mode ecall handler did not execute: x7={x7:#x}"
-    assert x8 == 0x68, f"Handler did not observe/advance mepc correctly: x8={x8:#x}"
+    assert x8 == INSTR_MEM_BASE + 0x68, f"Handler did not observe/advance mepc correctly: x8={x8:#x}"
     assert x6 == 0x66, f"MRET did not resume S-mode after ecall: x6={x6:#x}"
     assert privilege_mode == 0x1, f"Expected S-mode after MRET, got {privilege_mode:#x}"
     assert mcause == 0x9, f"Expected S-mode ecall mcause=9, got {mcause:#x}"
-    assert mepc == 0x68, f"Expected final mepc=0x68, got {mepc:#x}"
+    assert mepc == INSTR_MEM_BASE + 0x68, f"Unexpected final mepc {mepc:#x}"
     assert mpp == 0x0, f"MRET should clear MPP after return, got {mpp:#x}"
 
     print("S-mode ECALL/M-mode MRET return test passed!")
@@ -745,21 +496,6 @@ async def test_delegated_supervisor_timer_interrupt_sret(dut):
     """Test delegated supervisor timer interrupt traps to stvec and resumes."""
     print("Starting delegated S-mode timer interrupt/SRET test...")
 
-    clock = Clock(dut.clk, 10, units="ns")
-    cocotb.start_soon(clock.start())
-
-    dut.module_instr_in.value = 0
-    dut.module_read_data_in.value = 0
-    dut.module_instr_gnt_in.value = 1
-    dut.module_instr_rvalid_in.value = 1
-    dut.module_data_gnt_in.value = 1
-    dut.module_data_rvalid_in.value = 1
-    dut.rst.value = 1
-    await Timer(20, units="ns")
-    dut.rst.value = 0
-    await RisingEdge(dut.clk)
-
-    NOP = 0x00000013
     instr_mem = [NOP] * 56
 
     # M-mode setup.
@@ -767,26 +503,30 @@ async def test_delegated_supervisor_timer_interrupt_sret(dut):
     instr_mem[0] = 0x000010B7
     # 0x04: csrrc x0, mstatus, x1        # clear MPP[1], leaving MPP=S (01)
     instr_mem[1] = 0x3000B073
-    # 0x08: addi x2, x0, 0x60            # S payload address
-    instr_mem[2] = 0x06000113
-    # 0x0C: csrrw x0, mepc, x2           # mepc = 0x60
-    instr_mem[3] = 0x34111073
-    # 0x10: addi x3, x0, 0xA0            # S trap handler address
-    instr_mem[4] = 0x0A000193
-    # 0x14: csrrw x0, stvec, x3          # stvec = 0xA0
-    instr_mem[5] = 0x10519073
-    # 0x18: addi x4, x0, 0x20            # supervisor timer bit
-    instr_mem[6] = 0x02000213
-    # 0x1C: csrrw x0, mideleg, x4        # mideleg[5] = 1
-    instr_mem[7] = 0x30321073
-    # 0x20: csrrw x0, sie, x4            # sie.STIE = 1
-    instr_mem[8] = 0x10421073
-    # 0x24: csrrw x0, mip, x4            # mip.STIP = 1 (M-mode software, as an SBI does)
-    instr_mem[9] = 0x34421073
-    # 0x28: csrrsi x0, sstatus, 2        # sstatus.SIE = 1
-    instr_mem[10] = 0x10016073
-    # 0x2C: mret                         # enter S-mode at mepc
-    instr_mem[11] = 0x30200073
+    # 0x08: lui x2, 0x80000
+    instr_mem[2] = 0x80000137
+    # 0x0C: addi x2, x2, 0x60            # S payload address
+    instr_mem[3] = 0x06010113
+    # 0x10: csrrw x0, mepc, x2           # mepc = 0x60
+    instr_mem[4] = 0x34111073
+    # 0x14: lui x3, 0x80000
+    instr_mem[5] = 0x800001B7
+    # 0x18: addi x3, x3, 0xA0            # S trap handler address
+    instr_mem[6] = 0x0A018193
+    # 0x1C: csrrw x0, stvec, x3          # stvec = 0xA0
+    instr_mem[7] = 0x10519073
+    # 0x20: addi x4, x0, 0x20            # supervisor timer bit
+    instr_mem[8] = 0x02000213
+    # 0x24: csrrw x0, mideleg, x4        # mideleg[5] = 1
+    instr_mem[9] = 0x30321073
+    # 0x28: csrrw x0, sie, x4            # sie.STIE = 1
+    instr_mem[10] = 0x10421073
+    # 0x2C: csrrw x0, mip, x4            # mip.STIP = 1 (M-mode software, as an SBI does)
+    instr_mem[11] = 0x34421073
+    # 0x30: csrrsi x0, sstatus, 2        # sstatus.SIE = 1
+    instr_mem[12] = 0x10016073
+    # 0x34: mret                         # enter S-mode at mepc
+    instr_mem[13] = 0x30200073
 
     # S-mode payload at 0x60 (word index 24).
     # 0x60: addi x5, x0, 0x5A            # runs after interrupt handler returns
@@ -804,15 +544,15 @@ async def test_delegated_supervisor_timer_interrupt_sret(dut):
     # 0xAC: sret                         # return to interrupted S-mode code
     instr_mem[43] = 0x10200073
 
-    await run_csr_test_program(dut, instr_mem)
+    await run_program(dut, instr_mem)
 
-    x5 = int(dut.rf_inst0.register_file[5].value)
-    x7 = int(dut.rf_inst0.register_file[7].value)
-    x8 = int(dut.rf_inst0.register_file[8].value)
-    privilege_mode = int(dut.csr_file_inst.privilege_mode.value)
-    scause = int(dut.csr_file_inst.scause.value)
-    sip = int(dut.csr_file_inst.sip.value)
-    mstatus = int(dut.csr_file_inst.mstatus.value)
+    x5 = int(dut.cpu_inst.rf_inst0.register_file[5].value)
+    x7 = int(dut.cpu_inst.rf_inst0.register_file[7].value)
+    x8 = int(dut.cpu_inst.rf_inst0.register_file[8].value)
+    privilege_mode = int(dut.cpu_inst.csr_file_inst.privilege_mode.value)
+    scause = int(dut.cpu_inst.csr_file_inst.scause.value)
+    sip = int(dut.cpu_inst.csr_file_inst.sip.value)
+    mstatus = int(dut.cpu_inst.csr_file_inst.mstatus.value)
     spp = (mstatus >> 8) & 0x1
 
     print(f"x5 (S payload): {x5:#x}")
@@ -822,7 +562,7 @@ async def test_delegated_supervisor_timer_interrupt_sret(dut):
 
     assert x7 == 0x77, f"S-mode timer handler did not execute: x7={x7:#x}"
     assert x5 == 0x5A, f"SRET did not resume S-mode payload: x5={x5:#x}"
-    assert x8 in (0x60, 0x64), f"Unexpected interrupted S-mode PC in sepc: x8={x8:#x}"
+    assert x8 in (INSTR_MEM_BASE + 0x60, INSTR_MEM_BASE + 0x64), f"Unexpected interrupted S-mode PC in sepc: x8={x8:#x}"
     assert privilege_mode == 0x1, f"Expected S-mode after timer sret, got {privilege_mode:#x}"
     assert scause == 0x80000005, f"Expected supervisor timer interrupt scause, got {scause:#x}"
     assert (sip & 0x20) != 0, f"sip.STIP is read-only to S-mode, yet the handler cleared it: sip={sip:#x}"
@@ -835,21 +575,6 @@ async def test_delegated_supervisor_ebreak_sret(dut):
     """Test delegated S-mode EBREAK traps to stvec and resumes with SRET."""
     print("Starting delegated S-mode EBREAK/SRET test...")
 
-    clock = Clock(dut.clk, 10, units="ns")
-    cocotb.start_soon(clock.start())
-
-    dut.module_instr_in.value = 0
-    dut.module_read_data_in.value = 0
-    dut.module_instr_gnt_in.value = 1
-    dut.module_instr_rvalid_in.value = 1
-    dut.module_data_gnt_in.value = 1
-    dut.module_data_rvalid_in.value = 1
-    dut.rst.value = 1
-    await Timer(20, units="ns")
-    dut.rst.value = 0
-    await RisingEdge(dut.clk)
-
-    NOP = 0x00000013
     instr_mem = [NOP] * 56
 
     # M-mode setup.
@@ -857,22 +582,26 @@ async def test_delegated_supervisor_ebreak_sret(dut):
     instr_mem[0] = 0x000010B7
     # 0x04: csrrc x0, mstatus, x1        # clear MPP[1], leaving MPP=S (01)
     instr_mem[1] = 0x3000B073
-    # 0x08: addi x2, x0, 0x60            # S payload address
-    instr_mem[2] = 0x06000113
-    # 0x0C: csrrw x0, mepc, x2           # mepc = 0x60
-    instr_mem[3] = 0x34111073
-    # 0x10: addi x3, x0, 0xA0            # S trap handler address
-    instr_mem[4] = 0x0A000193
-    # 0x14: csrrw x0, stvec, x3          # stvec = 0xA0
-    instr_mem[5] = 0x10519073
-    # 0x18: addi x4, x0, 0x8             # delegate exception cause 3
-    instr_mem[6] = 0x00800213
-    # 0x1C: csrrw x0, medeleg, x4        # medeleg[3] = 1
-    instr_mem[7] = 0x30221073
-    # 0x20: csrrw x0, mcause, x0         # clear stale harness/reset artifact
-    instr_mem[8] = 0x34201073
-    # 0x24: mret                         # enter S-mode at mepc
-    instr_mem[9] = 0x30200073
+    # 0x08: lui x2, 0x80000
+    instr_mem[2] = 0x80000137
+    # 0x0C: addi x2, x2, 0x60            # S payload address
+    instr_mem[3] = 0x06010113
+    # 0x10: csrrw x0, mepc, x2           # mepc = 0x60
+    instr_mem[4] = 0x34111073
+    # 0x14: lui x3, 0x80000
+    instr_mem[5] = 0x800001B7
+    # 0x18: addi x3, x3, 0xA0            # S trap handler address
+    instr_mem[6] = 0x0A018193
+    # 0x1C: csrrw x0, stvec, x3          # stvec = 0xA0
+    instr_mem[7] = 0x10519073
+    # 0x20: addi x4, x0, 0x8             # delegate exception cause 3
+    instr_mem[8] = 0x00800213
+    # 0x24: csrrw x0, medeleg, x4        # medeleg[3] = 1
+    instr_mem[9] = 0x30221073
+    # 0x28: csrrw x0, mcause, x0         # mcause = 0
+    instr_mem[10] = 0x34201073
+    # 0x2C: mret                         # enter S-mode at mepc
+    instr_mem[11] = 0x30200073
 
     # S-mode payload at 0x60 (word index 24).
     # 0x60: addi x5, x0, 0x5A            # S-mode pre-ebreak sentinel
@@ -896,17 +625,17 @@ async def test_delegated_supervisor_ebreak_sret(dut):
     # 0xB0: sret                         # return to S payload after ecall
     instr_mem[44] = 0x10200073
 
-    await run_csr_test_program(dut, instr_mem)
+    await run_program(dut, instr_mem)
 
-    x5 = int(dut.rf_inst0.register_file[5].value)
-    x6 = int(dut.rf_inst0.register_file[6].value)
-    x7 = int(dut.rf_inst0.register_file[7].value)
-    x8 = int(dut.rf_inst0.register_file[8].value)
-    privilege_mode = int(dut.csr_file_inst.privilege_mode.value)
-    scause = int(dut.csr_file_inst.scause.value)
-    sepc = int(dut.csr_file_inst.sepc.value)
-    mcause = int(dut.csr_file_inst.mcause.value)
-    mstatus = int(dut.csr_file_inst.mstatus.value)
+    x5 = int(dut.cpu_inst.rf_inst0.register_file[5].value)
+    x6 = int(dut.cpu_inst.rf_inst0.register_file[6].value)
+    x7 = int(dut.cpu_inst.rf_inst0.register_file[7].value)
+    x8 = int(dut.cpu_inst.rf_inst0.register_file[8].value)
+    privilege_mode = int(dut.cpu_inst.csr_file_inst.privilege_mode.value)
+    scause = int(dut.cpu_inst.csr_file_inst.scause.value)
+    sepc = int(dut.cpu_inst.csr_file_inst.sepc.value)
+    mcause = int(dut.cpu_inst.csr_file_inst.mcause.value)
+    mstatus = int(dut.cpu_inst.csr_file_inst.mstatus.value)
     spp = (mstatus >> 8) & 0x1
 
     print(f"x5 (S pre-ebreak): {x5:#x}")
@@ -917,11 +646,11 @@ async def test_delegated_supervisor_ebreak_sret(dut):
 
     assert x5 == 0x5A, f"S-mode payload did not execute before ebreak: x5={x5:#x}"
     assert x7 == 0x77, f"S-mode trap handler did not execute: x7={x7:#x}"
-    assert x8 == 0x68, f"Handler did not observe/advance sepc correctly: x8={x8:#x}"
+    assert x8 == INSTR_MEM_BASE + 0x68, f"Handler did not observe/advance sepc correctly: x8={x8:#x}"
     assert x6 == 0x66, f"SRET did not resume after ebreak: x6={x6:#x}"
     assert privilege_mode == 0x1, f"Expected S-mode after sret, got {privilege_mode:#x}"
     assert scause == 0x3, f"Expected delegated S-mode ebreak scause=3, got {scause:#x}"
-    assert sepc == 0x68, f"Expected final sepc=0x68, got {sepc:#x}"
+    assert sepc == INSTR_MEM_BASE + 0x68, f"Unexpected final sepc {sepc:#x}"
     assert mcause == 0x0, f"Delegated S-mode ebreak should not update mcause, got {mcause:#x}"
     assert spp == 0x0, f"SRET should clear SPP, got {spp:#x}"
 
@@ -932,35 +661,23 @@ async def test_delegated_user_ecall_sret(dut):
     """Test delegated U-mode ECALL traps to S-mode and resumes via SRET."""
     print("Starting delegated U-mode ECALL/SRET test...")
 
-    clock = Clock(dut.clk, 10, units="ns")
-    cocotb.start_soon(clock.start())
-
-    dut.module_instr_in.value = 0
-    dut.module_read_data_in.value = 0
-    dut.module_instr_gnt_in.value = 1
-    dut.module_instr_rvalid_in.value = 1
-    dut.module_data_gnt_in.value = 1
-    dut.module_data_rvalid_in.value = 1
-    dut.rst.value = 1
-    await Timer(20, units="ns")
-    dut.rst.value = 0
-    await RisingEdge(dut.clk)
-
     instr_mem = [NOP] * 56
 
     # M-mode setup.
-    instr_mem[0] = 0x06000113  # addi x2, x0, 0x60
-    instr_mem[1] = 0x34111073  # csrrw x0, mepc, x2
-    instr_mem[2] = 0x0A000193  # addi x3, x0, 0xA0
-    instr_mem[3] = 0x10519073  # csrrw x0, stvec, x3
-    instr_mem[4] = 0x00100213  # addi x4, x0, 1
-    instr_mem[5] = 0x00821213  # slli x4, x4, 8        -> medeleg[8]
-    instr_mem[6] = 0x30221073  # csrrw x0, medeleg, x4
-    instr_mem[7] = 0x34201073  # csrrw x0, mcause, x0
-    instr_mem[8] = 0x000022B7  # lui  x5, 0x2
-    instr_mem[9] = 0x80028293  # addi x5, x5, -2048    -> 0x1800
-    instr_mem[10] = 0x3002B073 # csrrc x0, mstatus, x5 -> MPP=U
-    instr_mem[11] = 0x30200073 # mret
+    instr_mem[0] = 0x80000137  # lui  x2, 0x80000
+    instr_mem[1] = 0x06010113  # addi x2, x2, 0x60
+    instr_mem[2] = 0x34111073  # csrrw x0, mepc, x2
+    instr_mem[3] = 0x800001B7  # lui  x3, 0x80000
+    instr_mem[4] = 0x0A018193  # addi x3, x3, 0xA0
+    instr_mem[5] = 0x10519073  # csrrw x0, stvec, x3
+    instr_mem[6] = 0x00100213  # addi x4, x0, 1
+    instr_mem[7] = 0x00821213  # slli x4, x4, 8        -> medeleg[8]
+    instr_mem[8] = 0x30221073  # csrrw x0, medeleg, x4
+    instr_mem[9] = 0x34201073  # csrrw x0, mcause, x0
+    instr_mem[10] = 0x000022B7 # lui  x5, 0x2
+    instr_mem[11] = 0x80028293 # addi x5, x5, -2048    -> 0x1800
+    instr_mem[12] = 0x3002B073 # csrrc x0, mstatus, x5 -> MPP=U
+    instr_mem[13] = 0x30200073 # mret
 
     # U-mode payload at 0x60 (word index 24).
     instr_mem[24] = 0x05A00293  # addi x5, x0, 0x5A
@@ -976,18 +693,18 @@ async def test_delegated_user_ecall_sret(dut):
     instr_mem[44] = 0x14141073  # csrrw x0, sepc, x8
     instr_mem[45] = 0x10200073  # sret
 
-    await run_csr_test_program(dut, instr_mem)
+    await run_program(dut, instr_mem)
 
-    x5 = int(dut.rf_inst0.register_file[5].value)
-    x6 = int(dut.rf_inst0.register_file[6].value)
-    x7 = int(dut.rf_inst0.register_file[7].value)
-    x8 = int(dut.rf_inst0.register_file[8].value)
-    x9 = int(dut.rf_inst0.register_file[9].value)
-    privilege_mode = int(dut.csr_file_inst.privilege_mode.value)
-    scause = int(dut.csr_file_inst.scause.value)
-    sepc = int(dut.csr_file_inst.sepc.value)
-    mcause = int(dut.csr_file_inst.mcause.value)
-    mstatus = int(dut.csr_file_inst.mstatus.value)
+    x5 = int(dut.cpu_inst.rf_inst0.register_file[5].value)
+    x6 = int(dut.cpu_inst.rf_inst0.register_file[6].value)
+    x7 = int(dut.cpu_inst.rf_inst0.register_file[7].value)
+    x8 = int(dut.cpu_inst.rf_inst0.register_file[8].value)
+    x9 = int(dut.cpu_inst.rf_inst0.register_file[9].value)
+    privilege_mode = int(dut.cpu_inst.csr_file_inst.privilege_mode.value)
+    scause = int(dut.cpu_inst.csr_file_inst.scause.value)
+    sepc = int(dut.cpu_inst.csr_file_inst.sepc.value)
+    mcause = int(dut.cpu_inst.csr_file_inst.mcause.value)
+    mstatus = int(dut.cpu_inst.csr_file_inst.mstatus.value)
     spp = (mstatus >> 8) & 0x1
 
     print(f"x5 (U pre-ecall): {x5:#x}")
@@ -999,12 +716,12 @@ async def test_delegated_user_ecall_sret(dut):
 
     assert x5 == 0x5A, f"U-mode payload did not execute before ecall: x5={x5:#x}"
     assert x7 == 0x77, f"S-mode handler did not execute for delegated user ecall: x7={x7:#x}"
-    assert x8 == 0x68, f"Handler did not observe/advance sepc correctly: x8={x8:#x}"
+    assert x8 == INSTR_MEM_BASE + 0x68, f"Handler did not observe/advance sepc correctly: x8={x8:#x}"
     assert x9 == 0x8, f"Handler did not observe user ecall scause=8: x9={x9:#x}"
     assert x6 == 0x66, f"SRET did not resume user payload after ecall: x6={x6:#x}"
     assert privilege_mode == 0x0, f"Expected U-mode after sret, got {privilege_mode:#x}"
     assert scause == 0x8, f"Expected delegated user ecall scause=8, got {scause:#x}"
-    assert sepc == 0x68, f"Expected final sepc=0x68, got {sepc:#x}"
+    assert sepc == INSTR_MEM_BASE + 0x68, f"Unexpected final sepc {sepc:#x}"
     assert mcause == 0x0, f"Delegated user ecall should not update mcause, got {mcause:#x}"
     assert spp == 0x0, f"Delegated U-mode trap should restore/clear SPP to 0, got {spp:#x}"
 
@@ -1015,34 +732,22 @@ async def test_delegated_user_illegal_instruction_sret(dut):
     """Test delegated U-mode illegal instruction traps to S-mode and resumes via SRET."""
     print("Starting delegated U-mode illegal-instruction/SRET test...")
 
-    clock = Clock(dut.clk, 10, units="ns")
-    cocotb.start_soon(clock.start())
-
-    dut.module_instr_in.value = 0
-    dut.module_read_data_in.value = 0
-    dut.module_instr_gnt_in.value = 1
-    dut.module_instr_rvalid_in.value = 1
-    dut.module_data_gnt_in.value = 1
-    dut.module_data_rvalid_in.value = 1
-    dut.rst.value = 1
-    await Timer(20, units="ns")
-    dut.rst.value = 0
-    await RisingEdge(dut.clk)
-
     instr_mem = [NOP] * 56
 
     # M-mode setup.
-    instr_mem[0] = 0x06000113  # addi x2, x0, 0x60
-    instr_mem[1] = 0x34111073  # csrrw x0, mepc, x2
-    instr_mem[2] = 0x0A000193  # addi x3, x0, 0xA0
-    instr_mem[3] = 0x10519073  # csrrw x0, stvec, x3
-    instr_mem[4] = 0x00400213  # addi x4, x0, 4        -> medeleg[2]
-    instr_mem[5] = 0x30221073  # csrrw x0, medeleg, x4
-    instr_mem[6] = 0x34201073  # csrrw x0, mcause, x0
-    instr_mem[7] = 0x000022B7  # lui  x5, 0x2
-    instr_mem[8] = 0x80028293  # addi x5, x5, -2048    -> 0x1800
-    instr_mem[9] = 0x3002B073  # csrrc x0, mstatus, x5 -> MPP=U
-    instr_mem[10] = 0x30200073 # mret
+    instr_mem[0] = 0x80000137  # lui  x2, 0x80000
+    instr_mem[1] = 0x06010113  # addi x2, x2, 0x60
+    instr_mem[2] = 0x34111073  # csrrw x0, mepc, x2
+    instr_mem[3] = 0x800001B7  # lui  x3, 0x80000
+    instr_mem[4] = 0x0A018193  # addi x3, x3, 0xA0
+    instr_mem[5] = 0x10519073  # csrrw x0, stvec, x3
+    instr_mem[6] = 0x00400213  # addi x4, x0, 4        -> medeleg[2]
+    instr_mem[7] = 0x30221073  # csrrw x0, medeleg, x4
+    instr_mem[8] = 0x34201073  # csrrw x0, mcause, x0
+    instr_mem[9] = 0x000022B7  # lui  x5, 0x2
+    instr_mem[10] = 0x80028293 # addi x5, x5, -2048    -> 0x1800
+    instr_mem[11] = 0x3002B073 # csrrc x0, mstatus, x5 -> MPP=U
+    instr_mem[12] = 0x30200073 # mret
 
     # U-mode payload at 0x60 (word index 24).
     instr_mem[24] = 0x05A00293  # addi x5, x0, 0x5A
@@ -1058,18 +763,18 @@ async def test_delegated_user_illegal_instruction_sret(dut):
     instr_mem[44] = 0x14141073  # csrrw x0, sepc, x8
     instr_mem[45] = 0x10200073  # sret
 
-    await run_csr_test_program(dut, instr_mem)
+    await run_program(dut, instr_mem)
 
-    x5 = int(dut.rf_inst0.register_file[5].value)
-    x6 = int(dut.rf_inst0.register_file[6].value)
-    x7 = int(dut.rf_inst0.register_file[7].value)
-    x8 = int(dut.rf_inst0.register_file[8].value)
-    x9 = int(dut.rf_inst0.register_file[9].value)
-    privilege_mode = int(dut.csr_file_inst.privilege_mode.value)
-    scause = int(dut.csr_file_inst.scause.value)
-    sepc = int(dut.csr_file_inst.sepc.value)
-    mcause = int(dut.csr_file_inst.mcause.value)
-    mstatus = int(dut.csr_file_inst.mstatus.value)
+    x5 = int(dut.cpu_inst.rf_inst0.register_file[5].value)
+    x6 = int(dut.cpu_inst.rf_inst0.register_file[6].value)
+    x7 = int(dut.cpu_inst.rf_inst0.register_file[7].value)
+    x8 = int(dut.cpu_inst.rf_inst0.register_file[8].value)
+    x9 = int(dut.cpu_inst.rf_inst0.register_file[9].value)
+    privilege_mode = int(dut.cpu_inst.csr_file_inst.privilege_mode.value)
+    scause = int(dut.cpu_inst.csr_file_inst.scause.value)
+    sepc = int(dut.cpu_inst.csr_file_inst.sepc.value)
+    mcause = int(dut.cpu_inst.csr_file_inst.mcause.value)
+    mstatus = int(dut.cpu_inst.csr_file_inst.mstatus.value)
     spp = (mstatus >> 8) & 0x1
 
     print(f"x5 (U pre-illegal): {x5:#x}")
@@ -1081,12 +786,12 @@ async def test_delegated_user_illegal_instruction_sret(dut):
 
     assert x5 == 0x5A, f"U-mode payload did not execute before illegal instruction: x5={x5:#x}"
     assert x7 == 0x77, f"S-mode handler did not execute for delegated illegal instruction: x7={x7:#x}"
-    assert x8 == 0x68, f"Handler did not observe/advance sepc correctly: x8={x8:#x}"
+    assert x8 == INSTR_MEM_BASE + 0x68, f"Handler did not observe/advance sepc correctly: x8={x8:#x}"
     assert x9 == 0x2, f"Handler did not observe illegal-instruction scause=2: x9={x9:#x}"
     assert x6 == 0x66, f"SRET did not resume user payload after illegal instruction: x6={x6:#x}"
     assert privilege_mode == 0x0, f"Expected U-mode after sret, got {privilege_mode:#x}"
     assert scause == 0x2, f"Expected delegated illegal-instruction scause=2, got {scause:#x}"
-    assert sepc == 0x68, f"Expected final sepc=0x68, got {sepc:#x}"
+    assert sepc == INSTR_MEM_BASE + 0x68, f"Unexpected final sepc {sepc:#x}"
     assert mcause == 0x0, f"Delegated user illegal instruction should not update mcause, got {mcause:#x}"
     assert spp == 0x0, f"Delegated U-mode trap should restore/clear SPP to 0, got {spp:#x}"
 
@@ -1097,36 +802,24 @@ async def test_delegated_user_timer_interrupt_sret(dut):
     """Test delegated supervisor timer interrupt traps from U-mode to S-mode and resumes via SRET."""
     print("Starting delegated U-mode timer interrupt/SRET test...")
 
-    clock = Clock(dut.clk, 10, units="ns")
-    cocotb.start_soon(clock.start())
-
-    dut.module_instr_in.value = 0
-    dut.module_read_data_in.value = 0
-    dut.module_instr_gnt_in.value = 1
-    dut.module_instr_rvalid_in.value = 1
-    dut.module_data_gnt_in.value = 1
-    dut.module_data_rvalid_in.value = 1
-    dut.rst.value = 1
-    await Timer(20, units="ns")
-    dut.rst.value = 0
-    await RisingEdge(dut.clk)
-
     instr_mem = [NOP] * 56
 
     # M-mode setup.
-    instr_mem[0] = 0x06000113  # addi x2, x0, 0x60
-    instr_mem[1] = 0x34111073  # csrrw x0, mepc, x2
-    instr_mem[2] = 0x0A000193  # addi x3, x0, 0xA0
-    instr_mem[3] = 0x10519073  # csrrw x0, stvec, x3
-    instr_mem[4] = 0x02000213  # addi x4, x0, 0x20     -> mideleg[5], sie.STIE, mip.STIP
-    instr_mem[5] = 0x30321073  # csrrw x0, mideleg, x4
-    instr_mem[6] = 0x10421073  # csrrw x0, sie, x4
-    instr_mem[7] = 0x34421073  # csrrw x0, mip, x4     (M-mode software, as an SBI does)
-    instr_mem[8] = 0x10016073  # csrrsi x0, sstatus, 2
-    instr_mem[9] = 0x000022B7  # lui  x5, 0x2
-    instr_mem[10] = 0x80028293 # addi x5, x5, -2048    -> 0x1800
-    instr_mem[11] = 0x3002B073 # csrrc x0, mstatus, x5 -> MPP=U
-    instr_mem[12] = 0x30200073 # mret
+    instr_mem[0] = 0x80000137  # lui  x2, 0x80000
+    instr_mem[1] = 0x06010113  # addi x2, x2, 0x60
+    instr_mem[2] = 0x34111073  # csrrw x0, mepc, x2
+    instr_mem[3] = 0x800001B7  # lui  x3, 0x80000
+    instr_mem[4] = 0x0A018193  # addi x3, x3, 0xA0
+    instr_mem[5] = 0x10519073  # csrrw x0, stvec, x3
+    instr_mem[6] = 0x02000213  # addi x4, x0, 0x20     -> mideleg[5], sie.STIE, mip.STIP
+    instr_mem[7] = 0x30321073  # csrrw x0, mideleg, x4
+    instr_mem[8] = 0x10421073  # csrrw x0, sie, x4
+    instr_mem[9] = 0x34421073  # csrrw x0, mip, x4     (M-mode software, as an SBI does)
+    instr_mem[10] = 0x10016073 # csrrsi x0, sstatus, 2
+    instr_mem[11] = 0x000022B7 # lui  x5, 0x2
+    instr_mem[12] = 0x80028293 # addi x5, x5, -2048    -> 0x1800
+    instr_mem[13] = 0x3002B073 # csrrc x0, mstatus, x5 -> MPP=U
+    instr_mem[14] = 0x30200073 # mret
 
     # U-mode payload at 0x60 (word index 24).
     instr_mem[24] = 0x05A00293  # addi x5, x0, 0x5A
@@ -1138,15 +831,15 @@ async def test_delegated_user_timer_interrupt_sret(dut):
     instr_mem[42] = 0x10423073  # csrrc x0, sie, x4    (sip.STIP is read-only to S-mode)
     instr_mem[43] = 0x10200073  # sret
 
-    await run_csr_test_program(dut, instr_mem)
+    await run_program(dut, instr_mem)
 
-    x5 = int(dut.rf_inst0.register_file[5].value)
-    x7 = int(dut.rf_inst0.register_file[7].value)
-    x8 = int(dut.rf_inst0.register_file[8].value)
-    privilege_mode = int(dut.csr_file_inst.privilege_mode.value)
-    scause = int(dut.csr_file_inst.scause.value)
-    sip = int(dut.csr_file_inst.sip.value)
-    mstatus = int(dut.csr_file_inst.mstatus.value)
+    x5 = int(dut.cpu_inst.rf_inst0.register_file[5].value)
+    x7 = int(dut.cpu_inst.rf_inst0.register_file[7].value)
+    x8 = int(dut.cpu_inst.rf_inst0.register_file[8].value)
+    privilege_mode = int(dut.cpu_inst.csr_file_inst.privilege_mode.value)
+    scause = int(dut.cpu_inst.csr_file_inst.scause.value)
+    sip = int(dut.cpu_inst.csr_file_inst.sip.value)
+    mstatus = int(dut.cpu_inst.csr_file_inst.mstatus.value)
     spp = (mstatus >> 8) & 0x1
 
     print(f"x5 (U payload): {x5:#x}")
@@ -1156,7 +849,7 @@ async def test_delegated_user_timer_interrupt_sret(dut):
 
     assert x7 == 0x77, f"S-mode timer handler did not execute from U-mode: x7={x7:#x}"
     assert x5 == 0x5A, f"SRET did not resume U-mode payload: x5={x5:#x}"
-    assert x8 in (0x60, 0x64), f"Unexpected interrupted U-mode PC in sepc: x8={x8:#x}"
+    assert x8 in (INSTR_MEM_BASE + 0x60, INSTR_MEM_BASE + 0x64), f"Unexpected interrupted U-mode PC in sepc: x8={x8:#x}"
     assert privilege_mode == 0x0, f"Expected U-mode after delegated timer sret, got {privilege_mode:#x}"
     assert scause == 0x80000005, f"Expected supervisor timer interrupt scause, got {scause:#x}"
     assert (sip & 0x20) != 0, f"sip.STIP is read-only to S-mode, yet the handler cleared it: sip={sip:#x}"
@@ -1174,33 +867,20 @@ async def test_mpp_set_on_m_mode_illegal_instruction(dut):
     """
     print("Starting M-mode illegal instruction MPP test...")
 
-    clock = Clock(dut.clk, 10, units="ns")
-    cocotb.start_soon(clock.start())
-
-    dut.module_instr_in.value = 0
-    dut.module_read_data_in.value = 0
-    dut.module_instr_gnt_in.value = 1
-    dut.module_instr_rvalid_in.value = 1
-    dut.module_data_gnt_in.value = 1
-    dut.module_data_rvalid_in.value = 1
-    dut.rst.value = 1
-    await Timer(20, units="ns")
-    dut.rst.value = 0
-    await RisingEdge(dut.clk)
-
-    NOP = 0x00000013
     instr_mem = [NOP] * 32
 
-    # 0x00: addi x1, x0, 0x40          # handler address
-    instr_mem[0] = 0x04000093
-    # 0x04: csrrw x0, mtvec, x1        # install handler
-    instr_mem[1] = 0x30509073
-    # 0x08: 0xFFFFFFFF                  # illegal instruction → trap
-    instr_mem[2] = 0xFFFFFFFF
-    # 0x0C: addi x3, x0, 0x33          # post-mret M-mode sentinel
-    instr_mem[3] = 0x03300193
-    # 0x10: jal x0, 0                   # hang
-    instr_mem[4] = 0x0000006F
+    # 0x00: lui x1, 0x80000
+    instr_mem[0] = 0x800000B7
+    # 0x04: addi x1, x1, 0x40          # handler address
+    instr_mem[1] = 0x04008093
+    # 0x08: csrrw x0, mtvec, x1        # install handler
+    instr_mem[2] = 0x30509073
+    # 0x0C: 0xFFFFFFFF                  # illegal instruction → trap
+    instr_mem[3] = 0xFFFFFFFF
+    # 0x10: addi x3, x0, 0x33          # post-mret M-mode sentinel
+    instr_mem[4] = 0x03300193
+    # 0x14: jal x0, 0                   # hang
+    instr_mem[5] = 0x0000006F
 
     # Handler at 0x40 (word 16):
     # 0x40: csrrs x2, mstatus, x0       # x2 = mstatus at trap time (check MPP in bits 12-11)
@@ -1214,13 +894,13 @@ async def test_mpp_set_on_m_mode_illegal_instruction(dut):
     # 0x50: mret
     instr_mem[20] = 0x30200073
 
-    await run_csr_test_program(dut, instr_mem)
+    await run_program(dut, instr_mem)
 
-    x2 = int(dut.rf_inst0.register_file[2].value)
-    x3 = int(dut.rf_inst0.register_file[3].value)
-    x4 = int(dut.rf_inst0.register_file[4].value)
-    mcause = int(dut.csr_file_inst.mcause.value)
-    privilege_mode = int(dut.csr_file_inst.privilege_mode.value)
+    x2 = int(dut.cpu_inst.rf_inst0.register_file[2].value)
+    x3 = int(dut.cpu_inst.rf_inst0.register_file[3].value)
+    x4 = int(dut.cpu_inst.rf_inst0.register_file[4].value)
+    mcause = int(dut.cpu_inst.csr_file_inst.mcause.value)
+    privilege_mode = int(dut.cpu_inst.csr_file_inst.privilege_mode.value)
     mpp = (x2 >> 11) & 0x3
 
     print(f"x2 (mstatus at trap): {x2:#x}, MPP={mpp:#x}")
@@ -1230,7 +910,7 @@ async def test_mpp_set_on_m_mode_illegal_instruction(dut):
 
     assert mcause == 0x2, f"Expected illegal instruction mcause=2, got {mcause:#x}"
     assert mpp == 0x3, f"mstatus.MPP must be 3 (M-mode) when trapping in M-mode, got {mpp:#x}"
-    assert x4 == 0x08, f"mepc must point to faulting instruction, got {x4:#x}"
+    assert x4 == INSTR_MEM_BASE + 0x0C, f"mepc must point to faulting instruction, got {x4:#x}"
     assert x3 == 0x33, f"mret did not return to M-mode: post-mret sentinel missing (x3={x3:#x})"
     assert privilege_mode == 0x3, f"Expected M-mode after mret with MPP=3, got {privilege_mode:#x}"
 
@@ -1251,35 +931,22 @@ async def test_m_mode_illegal_csr_probe_pattern(dut):
     """
     print("Starting M-mode illegal CSR probe pattern test...")
 
-    clock = Clock(dut.clk, 10, units="ns")
-    cocotb.start_soon(clock.start())
-
-    dut.module_instr_in.value = 0
-    dut.module_read_data_in.value = 0
-    dut.module_instr_gnt_in.value = 1
-    dut.module_instr_rvalid_in.value = 1
-    dut.module_data_gnt_in.value = 1
-    dut.module_data_rvalid_in.value = 1
-    dut.rst.value = 1
-    await Timer(20, units="ns")
-    dut.rst.value = 0
-    await RisingEdge(dut.clk)
-
-    NOP = 0x00000013
     instr_mem = [NOP] * 32
 
-    # 0x00: addi x1, x0, 0x50          # probe handler address
-    instr_mem[0] = 0x05000093
-    # 0x04: csrrw x2, mtvec, x1        # save old mtvec in x2, install probe handler
-    instr_mem[1] = 0x30509173
-    # 0x08: csrr x0, 0x35C             # probe mtopei (AIA ext, unimplemented → illegal instr)
-    instr_mem[2] = 0x35C02073
-    # 0x0C: csrw mtvec, x2             # restore mtvec (reached after probe mret)
-    instr_mem[3] = 0x30511073
-    # 0x10: addi x5, x0, 0xAA         # sentinel: probe handled, execution continued
-    instr_mem[4] = 0x0AA00293
-    # 0x14: jal x0, 0                  # hang
-    instr_mem[5] = 0x0000006F
+    # 0x00: lui x1, 0x80000
+    instr_mem[0] = 0x800000B7
+    # 0x04: addi x1, x1, 0x50          # probe handler address
+    instr_mem[1] = 0x05008093
+    # 0x08: csrrw x2, mtvec, x1        # save old mtvec in x2, install probe handler
+    instr_mem[2] = 0x30509173
+    # 0x0C: csrr x0, 0x35C             # probe mtopei (AIA ext, unimplemented → illegal instr)
+    instr_mem[3] = 0x35C02073
+    # 0x10: csrw mtvec, x2             # restore mtvec (reached after probe mret)
+    instr_mem[4] = 0x30511073
+    # 0x14: addi x5, x0, 0xAA         # sentinel: probe handled, execution continued
+    instr_mem[5] = 0x0AA00293
+    # 0x18: jal x0, 0                  # hang
+    instr_mem[6] = 0x0000006F
 
     # Probe handler at 0x50 (word 20):
     # 0x50: csrrs x3, mepc, x0         # x3 = faulting PC
@@ -1291,23 +958,20 @@ async def test_m_mode_illegal_csr_probe_pattern(dut):
     # 0x5C: mret
     instr_mem[23] = 0x30200073
 
-    # The probe trap plus the handler's CSR ops stall well past the default
-    # one-cycle-per-instruction budget; the jal at 0x14 parks execution, so
-    # spare cycles are harmless.
-    await run_csr_test_program(dut, instr_mem, max_cycles=len(instr_mem) * 4 + 20)
+    await run_program(dut, instr_mem)
 
-    x3 = int(dut.rf_inst0.register_file[3].value)
-    x5 = int(dut.rf_inst0.register_file[5].value)
-    mcause = int(dut.csr_file_inst.mcause.value)
-    privilege_mode = int(dut.csr_file_inst.privilege_mode.value)
+    x3 = int(dut.cpu_inst.rf_inst0.register_file[3].value)
+    x5 = int(dut.cpu_inst.rf_inst0.register_file[5].value)
+    mcause = int(dut.cpu_inst.csr_file_inst.mcause.value)
+    privilege_mode = int(dut.cpu_inst.csr_file_inst.privilege_mode.value)
 
     print(f"x3 (probe handler observed mepc + 4): {x3:#x}")
     print(f"x5 (post-probe sentinel): {x5:#x}")
     print(f"mcause={mcause:#x}, privilege_mode={privilege_mode:#x}")
 
     assert mcause == 0x2, f"Expected illegal instruction mcause=2 from CSR probe, got {mcause:#x}"
-    assert x3 == 0x0C, \
-        f"Probe handler must observe mepc+4=0x0c, got {x3:#x}"
+    assert x3 == INSTR_MEM_BASE + 0x10, \
+        f"Probe handler must observe mepc + 4, got {x3:#x}"
     assert x5 == 0xAA, \
         f"Execution must continue after probe mret: sentinel missing (x5={x5:#x})"
     assert privilege_mode == 0x3, \
@@ -1321,40 +985,23 @@ async def test_csr_invalid_access(dut):
     """Test access to invalid CSR addresses"""
     print("Starting invalid CSR access test...")
     
-    clock = Clock(dut.clk, 10, units="ns")
-    cocotb.start_soon(clock.start())
-
-    # Reset
-    dut.module_instr_in.value = 0
-    dut.module_read_data_in.value = 0
-    dut.module_instr_gnt_in.value = 1
-    dut.module_instr_rvalid_in.value = 1
-    dut.module_data_gnt_in.value = 1
-    dut.module_data_rvalid_in.value = 1
-    dut.rst.value = 1
-    await Timer(20, units="ns")
-    dut.rst.value = 0
-    await RisingEdge(dut.clk)
-
     # Program to test invalid CSR access:
     instr_mem = [
         # Try to access an invalid CSR (address 0x123)
-        0x12302173,  # csrrs x2, 0x123, x0    # Should read 0 from invalid CSR
+        0x12302173,  # csrrs x2, 0x123, x0    # Illegal instruction: x2 is not written
         
-        # Valid CSR for comparison
-        0x34002273,  # csrrs x4, mscratch, x0  # Should read valid CSR
+        # Never reached: the access above traps
+        0x34002273,  # csrrs x4, mscratch, x0
     ]
 
-    await run_csr_test_program(dut, instr_mem)
+    # The access to 0x123 traps (mcause 2) and ends the program.
+    await run_program(dut, instr_mem, done=lambda dut: int(dut.cpu_inst.csr_file_inst.mcause.value) == 2)
     
-    # Verify invalid CSR returns 0
-    invalid_csr_value = int(dut.rf_inst0.register_file[2].value)
-    valid_csr_value = int(dut.rf_inst0.register_file[4].value)
-    
+    # The trapping CSR access must not write x2
+    invalid_csr_value = int(dut.cpu_inst.rf_inst0.register_file[2].value)
     print(f"Invalid CSR read: {invalid_csr_value:#x}")
-    print(f"Valid CSR read: {valid_csr_value:#x}")
     
-    assert invalid_csr_value == 0, "Invalid CSR should return 0"
+    assert invalid_csr_value == 0, "Illegal CSR access wrote x2"
 
     print("Invalid CSR access test passed!")
 
@@ -1369,43 +1016,28 @@ async def test_csr_mret(dut):
     """
     print("Starting mret test...")
 
-    clock = Clock(dut.clk, 10, units="ns")
-    cocotb.start_soon(clock.start())
-
-    # Reset
-    dut.module_instr_in.value = 0
-    dut.module_read_data_in.value = 0
-    dut.module_instr_gnt_in.value = 1
-    dut.module_instr_rvalid_in.value = 1
-    dut.module_data_gnt_in.value = 1
-    dut.module_data_rvalid_in.value = 1
-    dut.rst.value = 1
-    await Timer(20, units="ns")
-    dut.rst.value = 0
-    await RisingEdge(dut.clk)
-
-    # Pad instruction memory so the handler at PC=0x40 (word index 16)
-    # lands in a valid slot. run_csr_test_program fetches via pc//4.
-    NOP = 0x00000013
+    # Pad instruction memory so the handler at 0x40 (word index 16) lands in a valid slot.
     instr_mem = [NOP] * 32
 
-    # 0x00: addi x1, x0, 0x40              # handler address
-    instr_mem[0] = 0x04000093
-    # 0x04: csrrw x0, mtvec, x1            # mtvec = 0x40
-    instr_mem[1] = 0x30509073
-    # 0x08: csrrsi x0, mstatus, 8          # set MIE = 1
-    instr_mem[2] = 0x30046073
-    # 0x0C: addi x5, x0, 0xAA              # pre-ecall sentinel
-    instr_mem[3] = 0x0AA00293
-    # 0x10: ecall                          # trap to mtvec
-    instr_mem[4] = 0x00000073
-    # 0x14: addi x6, x0, 0xBB              # executes only if mret returned here
-    instr_mem[5] = 0x0BB00313
-    # 0x18: jal x0, 0                      # park here; without this the PC keeps
+    # 0x00: lui x1, 0x80000
+    instr_mem[0] = 0x800000B7
+    # 0x04: addi x1, x1, 0x40              # handler address
+    instr_mem[1] = 0x04008093
+    # 0x08: csrrw x0, mtvec, x1            # mtvec = 0x40
+    instr_mem[2] = 0x30509073
+    # 0x0C: csrrsi x0, mstatus, 8          # set MIE = 1
+    instr_mem[3] = 0x30046073
+    # 0x10: addi x5, x0, 0xAA              # pre-ecall sentinel
+    instr_mem[4] = 0x0AA00293
+    # 0x14: ecall                          # trap to mtvec
+    instr_mem[5] = 0x00000073
+    # 0x18: addi x6, x0, 0xBB              # executes only if mret returned here
+    instr_mem[6] = 0x0BB00313
+    # 0x1C: jal x0, 0                      # park here; without this the PC keeps
     #                                      # walking through the NOP padding into
     #                                      # the handler and re-executes it in
     #                                      # U-mode, trapping and clobbering mcause
-    instr_mem[6] = 0x0000006F
+    instr_mem[7] = 0x0000006F
 
     # Handler at 0x40 (word index 16):
     # 0x40: addi x7, x0, 0xCC              # handler sentinel
@@ -1419,53 +1051,35 @@ async def test_csr_mret(dut):
     # 0x50: mret                           # return from trap
     instr_mem[20] = 0x30200073
 
-    await run_csr_test_program(dut, instr_mem)
+    await run_program(dut, instr_mem)
 
     # Pre-ecall sentinel must have run.
-    x5 = int(dut.rf_inst0.register_file[5].value)
+    x5 = int(dut.cpu_inst.rf_inst0.register_file[5].value)
     print(f"x5 (pre-ecall sentinel): {x5:#x}")
     assert x5 == 0xAA, f"Pre-ecall path did not execute: x5={x5:#x}"
 
     # ecall must set mcause = 11 (env call from M-mode).
-    mcause = int(dut.csr_file_inst.mcause.value)
-    mepc   = int(dut.csr_file_inst.mepc.value)
+    mcause = int(dut.cpu_inst.csr_file_inst.mcause.value)
+    mepc   = int(dut.cpu_inst.csr_file_inst.mepc.value)
     print(f"mcause: {mcause:#x}, mepc: {mepc:#x}")
     assert mcause == 0xB, f"ecall should set mcause=11, got {mcause:#x}"
 
     # Handler must have executed - proves mtvec redirect worked.
-    x7 = int(dut.rf_inst0.register_file[7].value)
+    x7 = int(dut.cpu_inst.rf_inst0.register_file[7].value)
     print(f"x7 (handler sentinel): {x7:#x}")
     assert x7 == 0xCC, f"Handler did not execute: x7={x7:#x}"
 
     # mret must restore MIE from MPIE. MIE was set before ecall, so trap
     # entry moves MIE(1) -> MPIE, clears MIE; mret must restore MIE = 1.
-    mstatus = int(dut.csr_file_inst.mstatus.value)
+    mstatus = int(dut.cpu_inst.csr_file_inst.mstatus.value)
     mie_bit = (mstatus >> 3) & 1
     print(f"mstatus after mret: {mstatus:#x} (MIE={mie_bit})")
     assert mie_bit == 1, f"mret did not restore MIE from MPIE: mstatus={mstatus:#x}"
 
     print("mret test passed!")
 
-from cocotb_test.simulator import run
-
 def runCocotbTests():
-    # All Verilog sources under rtl directory and subdirectories
-    sources = []
-    root_dir = os.getcwd()
-    while not os.path.exists(os.path.join(root_dir, "rtl")):
-        if os.path.dirname(root_dir) == root_dir:
-            raise FileNotFoundError("rtl directory not found in the current or parent directories.")
-        root_dir = os.path.dirname(root_dir)
-    print(f"Using RTL directory: {root_dir}/rtl")
-    rtl_dir = os.path.join(root_dir, "rtl")
-    incl_dir = os.path.join(rtl_dir, "include")
-    for root, _, files in os.walk(rtl_dir):
-        for file in files:
-            if file.endswith(".v") or file.endswith(".sv"):
-                sources.append(os.path.join(root, file))
-    
-    # Define the CSR tests
-    tests = [
+    run_tests("test_csr", [
         "test_csr_basic_operations",
         "test_csr_mstatus_operations",
         "test_csr_cycle_counter",
@@ -1485,38 +1099,8 @@ def runCocotbTests():
         "test_m_mode_illegal_csr_probe_pattern",
         "test_csr_invalid_access",
         "test_csr_mret",
-    ]
-    
-    enable_waves = os.getenv("WAVES", "0") == "1"
-    waveform_dir = None
-    if enable_waves:
-        curr_dir = os.getcwd()
-        waveform_dir = os.path.join(curr_dir, "waveforms")
-        if not os.path.exists(waveform_dir):
-            os.makedirs(waveform_dir)
-        waveform_dir = os.path.abspath("waveforms")
-    
-    # Run each test with its own waveform file
-    for test_name in tests:
-        print(f"\n=== Running {test_name} ===")
-        plus_args = []
-        if enable_waves:
-            waveform_path = os.path.join(waveform_dir, f"{test_name}.fst")
-            plus_args = ["--trace", "--trace-file", waveform_path,
-                         f"+dumpfile={waveform_path}"]
-        
-        run(
-            verilog_sources=sources,
-            toplevel="riscv_cpu",
-            module="test_csr",
-            testcase=test_name,
-            includes=[str(incl_dir)],
-            simulator="verilator",
-            timescale="1ns/1ps",
-            sim_build=os.path.join(os.getcwd(), "sim_build", "sim_build_csr"),
-            waves=enable_waves,
-            plus_args=plus_args,
-        )
+    ])
+
 
 if __name__ == "__main__":
     runCocotbTests()
