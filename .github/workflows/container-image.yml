@@ -42,5 +42,6 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:linux
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            ${{ env.IMAGE_NAME }}:dockerfile-${{ hashFiles('.devcontainer/Dockerfile') }}
+          cache-from: type=gha,scope=devcontainer
+          cache-to: type=gha,mode=max,scope=devcontainer
