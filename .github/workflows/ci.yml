@@ -5,6 +5,10 @@ on:
     branches: ["main"]
   pull_request:
 
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -13,27 +17,54 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Prepare devcontainer mount paths for CI
-        run: |
-          mkdir -p /tmp/.X11-unix
-          touch "$HOME/.Xauthority"
-
-      - name: Cache Docker layers
-        uses: actions/cache@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
         with:
-          path: ~/.cache/devcontainers
-          key: devcontainer-${{ hashFiles('.devcontainer/Dockerfile', '.devcontainer/devcontainer.json') }}
-          restore-keys: |
-            devcontainer-
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The content-derived tag prevents a stale :linux image from masking
+      # Dockerfile changes, including changes proposed in pull requests.
+      - name: Pull matching development image
+        id: image
+        env:
+          IMAGE: ghcr.io/sra-vjti/synapse32-dev:dockerfile-${{ hashFiles('.devcontainer/Dockerfile') }}
+        run: |
+          if docker pull "$IMAGE"; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.image.outputs.available != 'true'
+        uses: docker/setup-buildx-action@v3
+
+      # A new Dockerfile may not have been published yet. Build it for this
+      # run, reusing the publisher's BuildKit cache when it is available.
+      - name: Build development image when unavailable
+        if: steps.image.outputs.available != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .devcontainer
+          file: .devcontainer/Dockerfile
+          load: true
+          tags: ghcr.io/sra-vjti/synapse32-dev:dockerfile-${{ hashFiles('.devcontainer/Dockerfile') }}
+          cache-from: type=gha,scope=devcontainer
+          cache-to: type=gha,mode=max,scope=devcontainer
 
       - name: Run tests in DevContainer
-        uses: devcontainers/ci@v0.3
-        with:
-          runCmd: |
-            verilator --version
-            verilator --version | grep -E '^Verilator 5\.'
-            python3 -m venv .venv
-            .venv/bin/pip install --upgrade pip
-            .venv/bin/pip install -r tests/requirements.txt
-            cd tests
-            ../.venv/bin/pytest -v
+        env:
+          IMAGE: ghcr.io/sra-vjti/synapse32-dev:dockerfile-${{ hashFiles('.devcontainer/Dockerfile') }}
+        run: |
+          docker run --rm --network host \
+            -v "$GITHUB_WORKSPACE:/workspace" -w /workspace "$IMAGE" bash -e -c '
+              verilator --version
+              verilator --version | grep -E "^Verilator 5\."
+              python3 -m venv .venv
+              .venv/bin/pip install --upgrade pip
+              .venv/bin/pip install -r tests/requirements.txt
+              cd tests
+              ../.venv/bin/pytest -v
+            '
