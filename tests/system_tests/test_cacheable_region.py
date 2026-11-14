@@ -8,6 +8,7 @@ import cocotb
 from cocotb.triggers import ReadOnly, RisingEdge
 
 from cpu_program import run_program, run_tests
+from memory_view import dcache
 
 INSTR_RAM_SIZE = 0x0400_0000
 DATA_RAM_BASE = 0x1000_0000
@@ -36,11 +37,12 @@ def _lw(rd, rs1, imm=0):
 async def _watch(dut, counts):
     """Count dcache lookups and store-to-load forwards by word address."""
     cpu = dut.cpu_inst
+    cache = dcache(dut)
     while True:
         await RisingEdge(dut.clk)
         await ReadOnly()
-        if int(cpu.dcache_inst.lookup.value):
-            word = int(cpu.dcache_inst.addr.value) & ~3
+        if int(cache.lookup.value):
+            word = int(cache.addr.value) & ~3
             counts["lookup", word] = counts.get(("lookup", word), 0) + 1
         if int(cpu.store_buf_forward_go.value):
             word = int(cpu.phys_data_addr.value) & ~3

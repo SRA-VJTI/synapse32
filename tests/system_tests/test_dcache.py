@@ -16,7 +16,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, FallingEdge, ReadOnly, RisingEdge
 from cocotb_test.simulator import run
-from memory_view import read_word
+from memory_view import dcache, read_word
 
 INSTR_MEM_BASE = 0x8000_0000
 INSTR_MEM_SIZE = 0x0400_0000
@@ -589,10 +589,7 @@ def _ram(dut, addr: int) -> int:
 
 
 def _cache(dut):
-    try:
-        return dut.cpu_inst.dcache_inst
-    except AttributeError:
-        return None
+    return dcache(dut)
 
 
 def _require_cache(dut):
