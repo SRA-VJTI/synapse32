@@ -8,7 +8,8 @@ module riscv_cpu #(
     // Region r is bits [32*r +: 32] of each list; outside every region is a device.
     parameter CACHEABLE_REGIONS = 2,
     parameter [32*CACHEABLE_REGIONS-1:0] CACHEABLE_BASES = {`DATA_MEM_BASE, `INSTR_MEM_BASE},
-    parameter [32*CACHEABLE_REGIONS-1:0] CACHEABLE_SIZES = {`DATA_MEM_SIZE, `INSTR_MEM_SIZE}
+    parameter [32*CACHEABLE_REGIONS-1:0] CACHEABLE_SIZES = {`DATA_MEM_SIZE, `INSTR_MEM_SIZE},
+    parameter ICACHE_ENABLE = 1
 ) (
     input wire clk,
     input wire rst,
@@ -1095,27 +1096,51 @@ module riscv_cpu #(
         .forward_data(store_buf_forward_data)
     );
 
-    icache #(
-        .CACHEABLE_REGIONS(CACHEABLE_REGIONS),
-        .CACHEABLE_BASES(CACHEABLE_BASES),
-        .CACHEABLE_SIZES(CACHEABLE_SIZES)
-    ) icache_inst (
-        .clk(clk),
-        .rst(rst),
-        .flush(module_instr_cache_flush_out),
-        .next_pc(module_next_pc_out),
-        // A fetch goes to memory only once translated; a fetch that faults never does.
-        .req(mmu_instr_ready && !module_instr_page_fault_in),
-        .addr(phys_instr_addr),
-        .gnt(module_instr_gnt_in),
-        .rvalid(module_instr_rvalid_in),
-        .rdata(module_instr_in),
-        .mem_req(instr_mem_req),
-        .mem_addr(instr_mem_addr),
-        .mem_gnt(instr_mem_gnt),
-        .mem_rvalid(instr_mem_rvalid),
-        .mem_rdata(instr_mem_rdata)
-    );
+    // A fetch goes to memory only once translated; a fetch that faults never does.
+    wire fetch_req = mmu_instr_ready && !module_instr_page_fault_in;
+
+    generate
+        if (ICACHE_ENABLE != 0) begin : g_icache
+            icache #(
+                .CACHEABLE_REGIONS(CACHEABLE_REGIONS),
+                .CACHEABLE_BASES(CACHEABLE_BASES),
+                .CACHEABLE_SIZES(CACHEABLE_SIZES)
+            ) icache_inst (
+                .clk(clk),
+                .rst(rst),
+                .flush(module_instr_cache_flush_out),
+                .next_pc(module_next_pc_out),
+                .req(fetch_req),
+                .addr(phys_instr_addr),
+                .gnt(module_instr_gnt_in),
+                .rvalid(module_instr_rvalid_in),
+                .rdata(module_instr_in),
+                .mem_req(instr_mem_req),
+                .mem_addr(instr_mem_addr),
+                .mem_gnt(instr_mem_gnt),
+                .mem_rvalid(instr_mem_rvalid),
+                .mem_rdata(instr_mem_rdata)
+            );
+        end else begin : g_no_icache
+            // The icache's uncached path: one fetch at a time, its response passed through.
+            reg fetch_pending_q;
+            assign instr_mem_req = fetch_req && !fetch_pending_q;
+            assign instr_mem_addr = phys_instr_addr;
+            assign module_instr_gnt_in = instr_mem_req && instr_mem_gnt;
+            assign module_instr_rvalid_in = instr_mem_rvalid && (instr_mem_req || fetch_pending_q);
+            assign module_instr_in = instr_mem_rdata;
+
+            always @(posedge clk or posedge rst) begin
+                if (rst) begin
+                    fetch_pending_q <= 1'b0;
+                end else if (instr_mem_rvalid) begin
+                    fetch_pending_q <= 1'b0;
+                end else if (module_instr_gnt_in) begin
+                    fetch_pending_q <= 1'b1;
+                end
+            end
+        end
+    endgenerate
 
     dcache #(
         .NUM_MSHR(NUM_MSHR),
