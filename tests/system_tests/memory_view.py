@@ -16,6 +16,26 @@ def _phys_addr(index: int) -> int:
     return DATA_MEM_BASE + 4 * (index - INSTR_MEM_WORDS)
 
 
+class _Scope:
+    """A module inside a generate block: Verilator's VPI finds its signals only by their full dotted name."""
+
+    def __init__(self, parent, path):
+        self._parent = parent
+        self._path = path
+
+    def __getattr__(self, name):
+        return self._parent._id(f"{self._path}.{name}", extended=False)
+
+
+def dcache(dut):
+    """The core's data cache, or None in a build without one."""
+    try:
+        dut.cpu_inst._id("g_dcache.dcache_inst", extended=False)
+    except AttributeError:
+        return None
+    return _Scope(dut.cpu_inst, "g_dcache.dcache_inst")
+
+
 def _locate(cache, index: int):
     """The word's data-array row, set, tag, line address and word in line, and the way holding it or None."""
     sets = len(cache.tag_mem)
@@ -44,9 +64,8 @@ def _lane(row: int, way: int) -> int:
 def read_word(dut, index: int) -> int:
     """The word at backing-memory word index `index` (the RAM array's index)."""
     word = int(dut.unified_mem_inst.instr_ram[index].value) & 0xFFFF_FFFF
-    try:
-        cache = dut.cpu_inst.dcache_inst
-    except AttributeError:
+    cache = dcache(dut)
+    if cache is None:
         return word
     row, set_index, tag, line, word_in_line, way = _locate(cache, index)
     if way is not None:

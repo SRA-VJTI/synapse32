@@ -9,7 +9,8 @@ module riscv_cpu #(
     parameter CACHEABLE_REGIONS = 2,
     parameter [32*CACHEABLE_REGIONS-1:0] CACHEABLE_BASES = {`DATA_MEM_BASE, `INSTR_MEM_BASE},
     parameter [32*CACHEABLE_REGIONS-1:0] CACHEABLE_SIZES = {`DATA_MEM_SIZE, `INSTR_MEM_SIZE},
-    parameter ICACHE_ENABLE = 1
+    parameter ICACHE_ENABLE = 1,
+    parameter DCACHE_ENABLE = 1
 ) (
     input wire clk,
     input wire rst,
@@ -1142,36 +1143,68 @@ module riscv_cpu #(
         end
     endgenerate
 
-    dcache #(
-        .NUM_MSHR(NUM_MSHR),
-        .CACHEABLE_REGIONS(CACHEABLE_REGIONS),
-        .CACHEABLE_BASES(CACHEABLE_BASES),
-        .CACHEABLE_SIZES(CACHEABLE_SIZES)
-    ) dcache_inst (
-        .clk(clk),
-        .rst(rst),
-        .next_addr(module_next_data_addr_out),
-        .clean_req(module_data_cache_clean_req_out),
-        .clean(dcache_clean),
-        .req(data_bus_walk_sel || data_bus_drain_sel || cpu_load_go),
-        .addr(data_bus_walk_sel ? mmu_walk_addr : data_bus_drain_sel ? drain_addr : phys_data_addr),
-        .we(data_bus_drain_sel),
-        .be(data_bus_walk_sel ? 4'b1111 : data_bus_drain_sel ? drain_be : module_write_byte_enable),
-        .wdata(data_bus_drain_sel ? drain_data : 32'b0),
-        .load_type(data_bus_walk_sel ? 3'b010 : module_load_type),
-        .gnt(dcache_gnt),
-        .rvalid(dcache_rvalid),
-        .rdata(cpu_data_rdata),
-        .mem_req(data_mem_req),
-        .mem_addr(data_mem_addr),
-        .mem_we(data_mem_we),
-        .mem_be(data_mem_be),
-        .mem_wdata(data_mem_wdata),
-        .mem_line(dcache_mem_line),
-        .mem_gnt(data_mem_gnt),
-        .mem_rvalid(data_mem_rvalid),
-        .mem_rdata(data_mem_rdata)
-    );
+    wire data_req = data_bus_walk_sel || data_bus_drain_sel || cpu_load_go;
+    wire [31:0] data_addr = data_bus_walk_sel ? mmu_walk_addr : data_bus_drain_sel ? drain_addr : phys_data_addr;
+    wire [3:0] data_be = data_bus_walk_sel ? 4'b1111 : data_bus_drain_sel ? drain_be : module_write_byte_enable;
+    wire [31:0] data_wdata = data_bus_drain_sel ? drain_data : 32'b0;
+
+    generate
+        if (DCACHE_ENABLE != 0) begin : g_dcache
+            dcache #(
+                .NUM_MSHR(NUM_MSHR),
+                .CACHEABLE_REGIONS(CACHEABLE_REGIONS),
+                .CACHEABLE_BASES(CACHEABLE_BASES),
+                .CACHEABLE_SIZES(CACHEABLE_SIZES)
+            ) dcache_inst (
+                .clk(clk),
+                .rst(rst),
+                .next_addr(module_next_data_addr_out),
+                .clean_req(module_data_cache_clean_req_out),
+                .clean(dcache_clean),
+                .req(data_req),
+                .addr(data_addr),
+                .we(data_bus_drain_sel),
+                .be(data_be),
+                .wdata(data_wdata),
+                .load_type(data_bus_walk_sel ? 3'b010 : module_load_type),
+                .gnt(dcache_gnt),
+                .rvalid(dcache_rvalid),
+                .rdata(cpu_data_rdata),
+                .mem_req(data_mem_req),
+                .mem_addr(data_mem_addr),
+                .mem_we(data_mem_we),
+                .mem_be(data_mem_be),
+                .mem_wdata(data_mem_wdata),
+                .mem_line(dcache_mem_line),
+                .mem_gnt(data_mem_gnt),
+                .mem_rvalid(data_mem_rvalid),
+                .mem_rdata(data_mem_rdata)
+            );
+        end else begin : g_no_dcache
+            // The dcache's uncached path: one access at a time, its response passed through; nothing to clean.
+            reg data_pending_q;
+            assign data_mem_req = data_req && !data_pending_q;
+            assign data_mem_addr = data_addr;
+            assign data_mem_we = data_bus_drain_sel;
+            assign data_mem_be = data_be;
+            assign data_mem_wdata = data_wdata;
+            assign dcache_mem_line = 1'b0;
+            assign dcache_gnt = data_mem_req && data_mem_gnt;
+            assign dcache_rvalid = data_mem_rvalid && (data_mem_req || data_pending_q);
+            assign cpu_data_rdata = data_mem_rdata;
+            assign dcache_clean = !data_pending_q;
+
+            always @(posedge clk or posedge rst) begin
+                if (rst) begin
+                    data_pending_q <= 1'b0;
+                end else if (data_mem_rvalid) begin
+                    data_pending_q <= 1'b0;
+                end else if (dcache_gnt) begin
+                    data_pending_q <= 1'b1;
+                end
+            end
+        end
+    endgenerate
 
     sv32_mmu mmu_inst (
         .clk(clk),

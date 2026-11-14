@@ -14,6 +14,7 @@ from cocotb.triggers import ReadOnly, RisingEdge
 from cocotb_test.simulator import run
 
 from cpu_program import run_program
+from memory_view import dcache
 
 RAM = 0x1000_0000
 DEVICE = 0x2000_1000
@@ -63,6 +64,7 @@ SFENCE_VMA = 0x1200_0073
 async def _watch(dut, counts):
     """Count translated accesses, dcache lookups and store-to-load forwards by word address."""
     cpu = dut.cpu_inst
+    cache = dcache(dut)
     while True:
         await RisingEdge(dut.clk)
         await ReadOnly()
@@ -71,8 +73,8 @@ async def _watch(dut, counts):
             counts["translated", word] = counts.get(("translated", word), 0) + 1
         if int(cpu.store_buf_forward_go.value):
             counts["forward", word] = counts.get(("forward", word), 0) + 1
-        if int(cpu.dcache_inst.lookup.value):
-            line_word = int(cpu.dcache_inst.addr.value) & ~3
+        if int(cache.lookup.value):
+            line_word = int(cache.addr.value) & ~3
             counts["lookup", line_word] = counts.get(("lookup", line_word), 0) + 1
 
 
