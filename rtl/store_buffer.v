@@ -33,14 +33,21 @@ module store_buffer #(
     localparam [31:0] DEPTH_FULL = DEPTH;
     localparam [COUNT_WIDTH-1:0] DEPTH_COUNT = DEPTH_FULL[COUNT_WIDTH-1:0];
 
-    reg [31:0] addr_q [0:DEPTH-1];
-    reg [3:0] be_q [0:DEPTH-1];
-    reg [31:0] data_q [0:DEPTH-1];
+    reg [DEPTH*32-1:0] addr_q;
+    reg [DEPTH*4-1:0] be_q;
+    reg [DEPTH*32-1:0] data_q;
     reg [DEPTH-1:0] ram_q;
     reg [COUNT_WIDTH-1:0] count;
 
     wire [COUNT_WIDTH-1:0] tail = pop ? count - 1'b1 : count;
     integer i, j;
+
+    // 1 to 255 entries: count is 8 bits.
+    generate
+        if ((DEPTH < 1) || (DEPTH > 255)) begin : g_invalid_parameters
+            store_buffer_parameters_out_of_range invalid_parameters ();
+        end
+    endgenerate
 
     // The last write to the word, in byte lanes (entries hold be and data relative to their address).
     reg [3:0] last_be;
@@ -59,9 +66,9 @@ module store_buffer #(
     assign empty = (count == {COUNT_WIDTH{1'b0}});
     assign full = (count == DEPTH_COUNT);
     assign drained = (tail == {COUNT_WIDTH{1'b0}}) && !push;
-    assign head_addr = addr_q[0];
-    assign head_be = be_q[0];
-    assign head_data = data_q[0];
+    assign head_addr = addr_q[31:0];
+    assign head_be = be_q[3:0];
+    assign head_data = data_q[31:0];
     assign head_ram = ram_q[0];
 
     always @(*) begin
@@ -70,10 +77,10 @@ module store_buffer #(
         last_data = 32'b0;
         last_ram = 1'b0;
         for (i = 0; i < DEPTH; i = i + 1) begin
-            if (({{(32-COUNT_WIDTH){1'b0}}, count} > i) && (addr_q[i][31:2] == match_addr[31:2])) begin
+            if (({{(32-COUNT_WIDTH){1'b0}}, count} > i) && (addr_q[i*32+2 +: 30] == match_addr[31:2])) begin
                 match = 1'b1;
-                last_be = be_q[i] << addr_q[i][1:0];
-                last_data = data_q[i] << {addr_q[i][1:0], 3'b000};
+                last_be = be_q[i*4 +: 4] << addr_q[i*32 +: 2];
+                last_data = data_q[i*32 +: 32] << {addr_q[i*32 +: 2], 3'b000};
                 last_ram = ram_q[i];
             end
         end
@@ -81,32 +88,30 @@ module store_buffer #(
 
     always @(posedge clk or posedge rst) begin
         if (rst) begin
-            for (j = 0; j < DEPTH; j = j + 1) begin
-                addr_q[j] <= 32'b0;
-                be_q[j] <= 4'b0;
-                data_q[j] <= 32'b0;
-            end
+            addr_q <= {(DEPTH*32){1'b0}};
+            be_q <= {(DEPTH*4){1'b0}};
+            data_q <= {(DEPTH*32){1'b0}};
             ram_q <= {DEPTH{1'b0}};
             count <= {COUNT_WIDTH{1'b0}};
         end else begin
             for (j = 0; j < DEPTH - 1; j = j + 1) begin
                 if (push && (j == {{(32-COUNT_WIDTH){1'b0}}, tail})) begin
-                    addr_q[j] <= push_addr;
-                    be_q[j] <= push_be;
-                    data_q[j] <= push_data;
+                    addr_q[j*32 +: 32] <= push_addr;
+                    be_q[j*4 +: 4] <= push_be;
+                    data_q[j*32 +: 32] <= push_data;
                     ram_q[j] <= push_ram;
                 end else if (pop) begin
-                    addr_q[j] <= addr_q[j + 1];
-                    be_q[j] <= be_q[j + 1];
-                    data_q[j] <= data_q[j + 1];
+                    addr_q[j*32 +: 32] <= addr_q[(j+1)*32 +: 32];
+                    be_q[j*4 +: 4] <= be_q[(j+1)*4 +: 4];
+                    data_q[j*32 +: 32] <= data_q[(j+1)*32 +: 32];
                     ram_q[j] <= ram_q[j + 1];
                 end
             end
             // The last entry has nothing behind it to shift in.
             if (push && (tail == DEPTH_COUNT - 1'b1)) begin
-                addr_q[DEPTH-1] <= push_addr;
-                be_q[DEPTH-1] <= push_be;
-                data_q[DEPTH-1] <= push_data;
+                addr_q[(DEPTH-1)*32 +: 32] <= push_addr;
+                be_q[(DEPTH-1)*4 +: 4] <= push_be;
+                data_q[(DEPTH-1)*32 +: 32] <= push_data;
                 ram_q[DEPTH-1] <= push_ram;
             end
             count <= tail + {{(COUNT_WIDTH-1){1'b0}}, push};

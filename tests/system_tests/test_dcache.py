@@ -16,7 +16,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, FallingEdge, ReadOnly, RisingEdge
 from cocotb_test.simulator import run
-from memory_view import dcache, read_word
+from memory_view import dcache, mshr_slots, read_word
 
 INSTR_MEM_BASE = 0x8000_0000
 INSTR_MEM_SIZE = 0x0400_0000
@@ -756,7 +756,7 @@ async def test_misses_beyond_the_mshrs_wait(dut):
     expected = 2 * [0x100 + i for i in range(FULL_COUNT)]
     assert got == expected, f"{_name()}: lines read back {[hex(v) for v in got]}, expected {[hex(v) for v in expected]}"
     cache = _require_cache(dut)
-    mshrs = len(cache.mshr_line_q)
+    mshrs = mshr_slots(cache)
     assert mshrs == _mshrs(), f"{_name()}: the cache has {mshrs} MSHRs"
     if _latency() == SWEEP_LATENCY:
         assert coverage.max_mshrs == mshrs, (

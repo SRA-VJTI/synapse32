@@ -10,7 +10,14 @@ module riscv_cpu #(
     parameter [32*CACHEABLE_REGIONS-1:0] CACHEABLE_BASES = {`DATA_MEM_BASE, `INSTR_MEM_BASE},
     parameter [32*CACHEABLE_REGIONS-1:0] CACHEABLE_SIZES = {`DATA_MEM_SIZE, `INSTR_MEM_SIZE},
     parameter ICACHE_ENABLE = 1,
-    parameter DCACHE_ENABLE = 1
+    parameter DCACHE_ENABLE = 1,
+    parameter ICACHE_WAYS = 4,
+    parameter ICACHE_SET_INDEX_BITS = 6,
+    parameter ICACHE_WORD_OFFSET_BITS = 2,
+    parameter DCACHE_WAYS = 4,
+    parameter DCACHE_SET_INDEX_BITS = 6,
+    parameter DCACHE_WORD_OFFSET_BITS = 2,
+    parameter TLB_ENTRIES = 8
 ) (
     input wire clk,
     input wire rst,
@@ -1103,6 +1110,9 @@ module riscv_cpu #(
     generate
         if (ICACHE_ENABLE != 0) begin : g_icache
             icache #(
+                .NUM_WAYS(ICACHE_WAYS),
+                .SET_INDEX_BITS(ICACHE_SET_INDEX_BITS),
+                .WORD_OFFSET_BITS(ICACHE_WORD_OFFSET_BITS),
                 .CACHEABLE_REGIONS(CACHEABLE_REGIONS),
                 .CACHEABLE_BASES(CACHEABLE_BASES),
                 .CACHEABLE_SIZES(CACHEABLE_SIZES)
@@ -1151,6 +1161,9 @@ module riscv_cpu #(
     generate
         if (DCACHE_ENABLE != 0) begin : g_dcache
             dcache #(
+                .NUM_WAYS(DCACHE_WAYS),
+                .SET_INDEX_BITS(DCACHE_SET_INDEX_BITS),
+                .WORD_OFFSET_BITS(DCACHE_WORD_OFFSET_BITS),
                 .NUM_MSHR(NUM_MSHR),
                 .CACHEABLE_REGIONS(CACHEABLE_REGIONS),
                 .CACHEABLE_BASES(CACHEABLE_BASES),
@@ -1206,7 +1219,7 @@ module riscv_cpu #(
         end
     endgenerate
 
-    sv32_mmu mmu_inst (
+    sv32_mmu #(.TLB_ENTRIES(TLB_ENTRIES)) mmu_inst (
         .clk(clk),
         .rst(rst),
         .flush_tlb(module_tlb_flush_out),
