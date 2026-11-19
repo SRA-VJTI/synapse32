@@ -5,9 +5,11 @@ Environment variables:
   ISA_TOHOST_ADDR   : tohost symbol address (hex, e.g. 0x80001000)
   ISA_MAX_CYCLES    : optional max cycles (default: 200000)
   ISA_TRACE_FILE    : optional commit trace output, compared with Spike's commit log
+  CORE_CONFIG       : optional core configuration from tests/core_configs.py MATRIX
 """
 import os
 import shutil
+import sys
 from pathlib import Path
 
 import cocotb
@@ -15,6 +17,9 @@ import pytest
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
 from cocotb_test.simulator import run
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from core_configs import MATRIX  # noqa: E402
 
 
 def _find_repo_root() -> Path:
@@ -138,6 +143,7 @@ def runCocotbTests():
     if force_compile and sim_build.exists():
         shutil.rmtree(sim_build)
 
+    config = MATRIX.get(os.environ.get("CORE_CONFIG"), {})
     run(
         verilog_sources=sources,
         toplevel="top",
@@ -147,7 +153,8 @@ def runCocotbTests():
         simulator="verilator",
         timescale="1ns/1ps",
         defines=[f'INSTR_HEX_FILE="{hex_file}"'],
-        parameters={"MEM_LATENCY": int(os.environ.get("ISA_MEM_LATENCY", "0")),
+        parameters={**config,
+                    "MEM_LATENCY": int(os.environ.get("ISA_MEM_LATENCY", "0")),
                     "FETCH_LATENCY": int(os.environ.get("ISA_FETCH_LATENCY",
                                                         os.environ.get("ISA_MEM_LATENCY", "0")))},
         sim_build=str(sim_build),
