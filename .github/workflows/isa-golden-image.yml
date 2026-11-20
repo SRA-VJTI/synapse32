@@ -35,32 +35,45 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Set image tags
         id: tags
         run: |
           image_name="ghcr.io/${GITHUB_REPOSITORY,,}-isa"
+          echo "dockerfile=${image_name}:dockerfile-${{ hashFiles('.github/isa/Dockerfile', 'tests/requirements.txt') }}" >> "$GITHUB_OUTPUT"
           echo "immutable=${image_name}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
           echo "linux=${image_name}:linux" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build ISA image
+      # The tag is a hash of the image's inputs, so a published image is reused
+      # only when nothing it is built from has changed.
+      - name: Pull matching ISA image
+        id: image
+        env:
+          ISA_IMAGE: ${{ steps.tags.outputs.dockerfile }}
+        run: |
+          if docker pull "$ISA_IMAGE"; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.image.outputs.available != 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ISA image when unavailable
+        if: steps.image.outputs.available != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
           file: .github/isa/Dockerfile
-          tags: |
-            ${{ steps.tags.outputs.immutable }}
-            ${{ steps.tags.outputs.linux }}
+          tags: ${{ steps.tags.outputs.dockerfile }}
           load: true
           push: false
           cache-from: type=gha,scope=isa-image
@@ -68,7 +81,7 @@ jobs:
 
       - name: Run ISA golden comparison
         env:
-          ISA_IMAGE: ${{ steps.tags.outputs.immutable }}
+          ISA_IMAGE: ${{ steps.tags.outputs.dockerfile }}
         run: |
           docker run --rm \
             --volume "$GITHUB_WORKSPACE:/workspace" \
@@ -81,7 +94,7 @@ jobs:
 
       - name: Run riscv-arch-test golden comparison
         env:
-          ISA_IMAGE: ${{ steps.tags.outputs.immutable }}
+          ISA_IMAGE: ${{ steps.tags.outputs.dockerfile }}
         run: |
           docker run --rm \
             --volume "$GITHUB_WORKSPACE:/workspace" \
@@ -91,12 +104,44 @@ jobs:
               --arch-test /opt/riscv-arch-test \
               --report .github/artifacts/isa/arch_compare_report.json
 
+      - name: Run ISA golden comparisons under each core configuration
+        env:
+          ISA_IMAGE: ${{ steps.tags.outputs.dockerfile }}
+        run: |
+          compare() {
+            docker run --rm \
+              --volume "$GITHUB_WORKSPACE:/workspace" \
+              --workdir /workspace \
+              "$ISA_IMAGE" \
+              /opt/venv/bin/python .github/scripts/compare_with_spike.py --mem-latency 2 "$@"
+          }
+          configs=$(python3 tests/core_configs.py)
+          failed=""
+          for config in $configs; do
+            compare --config "$config" \
+              --riscv-tests /opt/riscv-tests \
+              --report ".github/artifacts/isa/compare_report_$config.json" \
+              || failed="$failed $config"
+            compare --config "$config" \
+              --arch-test /opt/riscv-arch-test \
+              --report ".github/artifacts/isa/arch_compare_report_$config.json" \
+              || failed="$failed $config(arch)"
+          done
+          if [ -n "$failed" ]; then
+            echo "::error::failed under:$failed"
+            exit 1
+          fi
+
       - name: Publish tested image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
+          ISA_IMAGE: ${{ steps.tags.outputs.dockerfile }}
           IMMUTABLE_IMAGE: ${{ steps.tags.outputs.immutable }}
           LINUX_IMAGE: ${{ steps.tags.outputs.linux }}
         run: |
+          docker tag "$ISA_IMAGE" "$IMMUTABLE_IMAGE"
+          docker tag "$ISA_IMAGE" "$LINUX_IMAGE"
+          docker push "$ISA_IMAGE"
           docker push "$IMMUTABLE_IMAGE"
           docker push "$LINUX_IMAGE"
 
@@ -108,4 +153,6 @@ jobs:
           path: |
             .github/artifacts/isa/compare_report.json
             .github/artifacts/isa/arch_compare_report.json
+            .github/artifacts/isa/compare_report_*.json
+            .github/artifacts/isa/arch_compare_report_*.json
           if-no-files-found: error

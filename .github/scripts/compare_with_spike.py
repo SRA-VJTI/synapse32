@@ -19,6 +19,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tests"))
+from core_configs import MATRIX  # noqa: E402
 
 DEFAULT_SUITES = "rv32ui,rv32um,rv32ua,rv32mi,rv32si"
 TEST_NAME_RE = re.compile(r"^(rv32(ui|um|ua|mi|si))-p-[A-Za-z0-9_-]+$")
@@ -291,6 +293,7 @@ def run_verilator(
     trace_file: Path,
     mem_latency: int,
     fetch_latency: int,
+    config: str | None,
 ) -> tuple[bool, str]:
     # The image is read by the RTL at simulator start.  Keep the Verilog
     # define and build directory constant, changing only the file contents.
@@ -306,6 +309,7 @@ def run_verilator(
     env["ISA_TRACE_FILE"] = str(trace_file)
     env["ISA_MEM_LATENCY"] = str(mem_latency)
     env["ISA_FETCH_LATENCY"] = str(fetch_latency)
+    env["CORE_CONFIG"] = config or ""
     rc = run([sys.executable, "tests/system_tests/test_riscv_isa.py"], env=env, cwd=repo_root)
     ok = rc.returncode == 0
     detail = (rc.stdout + "\n" + rc.stderr).strip()
@@ -321,6 +325,7 @@ def main() -> int:
     ap.add_argument("--max-cycles", type=int, default=200000, help="Max cycles per Verilator ISA test")
     ap.add_argument("--mem-latency", type=int, default=0, help="Cycles the RTL's memory takes to answer")
     ap.add_argument("--fetch-latency", type=int, default=None, help="Fetch side only (default: --mem-latency)")
+    ap.add_argument("--config", choices=sorted(MATRIX), default=None, help="Core configuration (default: none)")
     ap.add_argument("--report", type=Path, default=Path(".github/artifacts/isa/compare_report.json"))
     ap.add_argument(
         "--suites",
@@ -360,7 +365,7 @@ def main() -> int:
     runtime_hex = repo_root / ".github" / "artifacts" / "isa" / "runtime.hex"
     fetch_latency = args.mem_latency if args.fetch_latency is None else args.fetch_latency
     sim_build = (repo_root / ".github" / "artifacts" / "isa" /
-                 f"sim_build_riscv_isa_lat{args.mem_latency}_fetch{fetch_latency}")
+                 f"sim_build_riscv_isa_lat{args.mem_latency}_fetch{fetch_latency}_{args.config or 'default'}")
     trace_dir = repo_root / ".github" / "artifacts" / "isa" / "traces"
     trace_dir.mkdir(parents=True, exist_ok=True)
     results = []
@@ -392,6 +397,7 @@ def main() -> int:
                 trace_file=rtl_trace,
                 mem_latency=args.mem_latency,
                 fetch_latency=fetch_latency,
+                config=args.config,
             )
             model_compiled = True
             if elf.name in TRACE_NOT_COMPARABLE:
@@ -451,6 +457,7 @@ def main() -> int:
     summary = {
         "mem_latency": args.mem_latency,
         "fetch_latency": fetch_latency,
+        "config": args.config or "default",
         "total": len(results),
         "matches": len([r for r in results if r.get("match")]),
         "mismatches": len(mismatches),
