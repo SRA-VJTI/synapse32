@@ -30,18 +30,28 @@ module mem_adapter #(
     input wire [31:0] store_rdata
 );
 
+`ifdef COCOTB_SIM
+    // Testbench backpressure: while set, the memory accepts nothing and an access in flight waits, as a busy
+    // memory would.
+    reg sim_hold = 1'b0;
+    wire hold = sim_hold;
+`else
+    wire hold = 1'b0;
+`endif
+
     generate
         if (RESPONSE_LATENCY == 0) begin : g_combinational
-            assign gnt = req;
-            assign rvalid = req;
+            wire accept = req && !hold;
+            assign gnt = accept;
+            assign rvalid = accept;
             assign rdata = store_rdata;
-            assign store_req = req;
+            assign store_req = accept;
             assign store_addr = addr;
             assign store_we = we;
             assign store_be = be;
             assign store_wdata = wdata;
-            assign write_fire = req && we;
-            assign read_fire = req && !we;
+            assign write_fire = accept && we;
+            assign read_fire = accept && !we;
         end else begin : g_registered
             localparam COUNT_WIDTH = (RESPONSE_LATENCY < 3) ? 1 :
                                      (RESPONSE_LATENCY < 5) ? 2 :
@@ -60,10 +70,10 @@ module mem_adapter #(
             reg rvalid_q;
 
             // Accept only while idle, and not in the cycle a response is presented.
-            assign gnt = req && !busy && !rvalid_q;
+            assign gnt = req && !busy && !rvalid_q && !hold;
             // Last wait cycle: sample the read and commit the write; the response follows registered.
             wire accept = gnt;
-            wire sample_now = busy && (count == LAST);
+            wire sample_now = busy && (count == LAST) && !hold;
             wire sample_on_accept = accept && (RESPONSE_LATENCY == 1);
 
             always @(posedge clk or posedge rst) begin
@@ -95,7 +105,7 @@ module mem_adapter #(
                         rvalid_q <= 1'b1;
                         busy <= 1'b0;
                         count <= {COUNT_WIDTH{1'b0}};
-                    end else if (busy) begin
+                    end else if (busy && !hold) begin
                         count <= count + {{(COUNT_WIDTH-1){1'b0}}, 1'b1};
                     end
                 end

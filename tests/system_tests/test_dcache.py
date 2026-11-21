@@ -1,13 +1,12 @@
 """Data cache.
 
 Warm accesses cost one cycle; hits continue under a store miss; a full set evicts its PLRU way and writes it
-back; stores to a missing line merge in its MSHR and loads wait for the fill; misses beyond the MSHRs wait; a
-generated access mix matches a memory model, and RAM matches it after FENCE.I; FENCE.I, the page walker, AMOs
-and LR/SC see the cache's data; devices are not cached; an interrupt at any cycle changes nothing.
+back; stores to a missing line merge in its MSHR and loads wait for the fill; misses beyond the MSHRs wait; FENCE.I,
+the page walker, AMOs and LR/SC see the cache's data; devices are not cached; an interrupt at any cycle changes
+nothing. Random access mixes against a model are test_dcache_stress.
 """
 
 import os
-import random
 import shutil
 import subprocess
 from pathlib import Path
@@ -268,71 +267,6 @@ loop:
         bnez    s3, loop
 """ + END
 
-# Memory model: byte, halfword and word accesses over more lines than a set has ways, then FENCE.I.
-MODEL_BASE = 0x1001_0000
-MODEL_LINES = [MODEL_BASE + j * WAY_BYTES + s * 0x10 for j in range(6) for s in range(2)]
-MODEL_LOG = 0x1002_0000
-MODEL_OPS = 240
-MODEL_SEED = 0xDCAC
-
-
-def _model_ops():
-    rng = random.Random(MODEL_SEED)
-    ops = []
-    for _ in range(MODEL_OPS):
-        line = rng.choice(MODEL_LINES)
-        if rng.random() < 0.5:
-            size = rng.choice([1, 2, 4])
-            addr = line + rng.randrange(0, 16, size)
-            ops.append(("store", size, addr, rng.getrandbits(8 * size)))
-        else:
-            kind = rng.choice(["lb", "lbu", "lh", "lhu", "lw"])
-            size = {"lb": 1, "lbu": 1, "lh": 2, "lhu": 2, "lw": 4}[kind]
-            ops.append(("load", kind, line + rng.randrange(0, 16, size), None))
-    initial = {addr + 4 * w: rng.getrandbits(32) for addr in MODEL_LINES for w in range(4)}
-    return ops, initial
-
-
-def _model_program() -> str:
-    ops, _ = _model_ops()
-    body = [f"        li      s1, {MODEL_LOG:#x}"]
-    for op in ops:
-        if op[0] == "store":
-            _, size, addr, value = op
-            body.append(_store(addr, value, {1: "sb", 2: "sh", 4: "sw"}[size]))
-        else:
-            _, kind, addr, _ = op
-            body.append(_load(addr, kind, "t2"))
-            body.append("        sw      t2, 0(s1)\n        addi    s1, s1, 4")
-    body.append("        fence.i")
-    return START + "\n".join(body) + END
-
-
-def _model_expected():
-    ops, initial = _model_ops()
-    mem = dict(initial)
-    log = []
-
-    def byte(addr):
-        return (mem[addr & ~3] >> (8 * (addr & 3))) & 0xFF
-
-    for op in ops:
-        if op[0] == "store":
-            _, size, addr, value = op
-            for k in range(size):
-                a = addr + k
-                shift = 8 * (a & 3)
-                mem[a & ~3] = (mem[a & ~3] & ~(0xFF << shift)) | (((value >> (8 * k)) & 0xFF) << shift)
-        else:
-            _, kind, addr, _ = op
-            size = {"lb": 1, "lbu": 1, "lh": 2, "lhu": 2, "lw": 4}[kind]
-            value = sum(byte(addr + k) << (8 * k) for k in range(size))
-            if kind in ("lb", "lh") and value >> (8 * size - 1):
-                value -= 1 << (8 * size)
-            log.append(value & 0xFFFF_FFFF)
-    return initial, mem, log
-
-
 # Code written through the data cache (a store miss, then a store hit) runs after FENCE.I.
 PATCHED = 0x8000_3000
 DIRTY_LINES = [0x1000_5000 + 0x40 * i for i in range(4)]
@@ -510,7 +444,6 @@ PROGRAMS = {
     "merge": MERGE_PROGRAM,
     "full": FULL_PROGRAM,
     "race": RACE_PROGRAM,
-    "model": _model_program(),
     "fence_i": FENCE_I_PROGRAM,
     "walk": WALK_PROGRAM,
     "amo": AMO_PROGRAM,
@@ -777,27 +710,6 @@ async def test_a_store_to_the_victim_as_it_is_chosen(dut):
         "store to the line being replaced was lost")
     _require_cache(dut)
     assert coverage.stores_at_victim > 0, f"{_name()}: no store arrived while a victim was chosen"
-
-
-@cocotb.test()
-async def test_mixed_accesses_match_a_memory_model(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
-    initial, final, log = _model_expected()
-    coverage = Coverage()
-    done = await _run(dut, "model.bin", setup=list(initial.items()), coverage=coverage, limit=200000)
-    _check_finished(dut, done)
-    got = [_peek(dut, MODEL_LOG + 4 * i) for i in range(len(log))]
-    wrong = [(i, hex(g), hex(e)) for i, (g, e) in enumerate(zip(got, log)) if g != e]
-    assert not wrong, f"{_name()}: {len(wrong)} of {len(log)} loads differ from the model; first (load, got, expected): {wrong[0]}"
-    stale = [hex(a) for a in sorted(final) if _ram(dut, a) != final[a]]
-    assert not stale, f"{_name()}: after FENCE.I, RAM differs from the model at {len(stale)} words, first {stale[0]}"
-    cache = _require_cache(dut)
-    hits, misses, evictions = (int(cache.stat_hits.value), int(cache.stat_misses.value),
-                               int(cache.stat_evictions.value))
-    dut._log.info(f"{_name()}: hits {hits}, misses {misses}, evictions {evictions}, merges {coverage.merges}")
-    assert hits and misses and evictions and coverage.merges, (
-        f"{_name()}: hits {hits}, misses {misses}, evictions {evictions}, merges {coverage.merges}: a path was "
-        "not exercised")
 
 
 @cocotb.test()
