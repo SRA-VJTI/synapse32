@@ -1,6 +1,6 @@
 """Core configurations the riscv-tests and riscv-arch-test also run under, each setting some of top's parameters.
 
-`compare_with_spike.py --config NAME` builds one; `python3 tests/core_configs.py` lists them for CI."""
+`compare_with_spike.py --config NAME` builds one; the ISA workflow runs each."""
 
 MATRIX = {
     "no_caches": {"ICACHE_ENABLE": 0, "DCACHE_ENABLE": 0},
@@ -9,6 +9,3 @@ MATRIX = {
     "one_mshr": {"NUM_MSHR": 1},
     "small_buffers": {"STORE_BUFFER_DEPTH": 1, "TLB_ENTRIES": 1},
 }
-
-if __name__ == "__main__":
-    print(*MATRIX)

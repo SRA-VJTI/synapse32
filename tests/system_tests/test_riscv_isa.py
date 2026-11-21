@@ -125,7 +125,7 @@ def runCocotbTests():
     # Keep the image path stable across test invocations.  The comparison
     # driver replaces this file between tests, so the Verilator model does
     # not need to be rebuilt for every ELF.
-    hex_file = os.environ.get("ISA_SIM_HEX_FILE") or os.environ["ISA_HEX_FILE"]
+    hex_file = os.environ["ISA_HEX_FILE"]
 
     sources = []
     for root, _, files in os.walk(rtl_dir):

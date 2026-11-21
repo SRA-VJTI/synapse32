@@ -28,7 +28,7 @@ TEST_NAME_RE = re.compile(r"^(rv32(ui|um|ua|mi|si))-p-[A-Za-z0-9_-]+$")
 SPIKE_ISA = "rv32ima_zicsr"
 NOT_APPLICABLE = {
     "rv32ui-p-ma_data": "Zicclsm (misaligned loads/stores) not implemented; core traps",
-    "rv32mi-p-pmpaddr": "PMP not implemented; pmpaddr0/pmpcfg0 are plain registers",
+    "rv32mi-p-pmpaddr": "PMP not implemented; pmpaddr and pmpcfg read as zero",
 }
 DEFAULT_ARCH_SUITES = "I,M,A,Zifencei,privilege"
 # What riscv-arch-test's RVTEST_CASE conditions are evaluated against: our ISA and platform.
@@ -61,7 +61,7 @@ def find_repo_root() -> Path:
     return cur
 
 
-def discover_tests(isa_dir: Path, suites: set[str], limit: int) -> list[Path]:
+def discover_tests(isa_dir: Path, suites: set[str]) -> list[Path]:
     tests = []
     for p in sorted(isa_dir.iterdir()):
         if not p.is_file():
@@ -69,8 +69,6 @@ def discover_tests(isa_dir: Path, suites: set[str], limit: int) -> list[Path]:
         match = TEST_NAME_RE.match(p.name)
         if match and match.group(1) in suites:
             tests.append(p)
-    if limit > 0:
-        tests = tests[:limit]
     return tests
 
 
@@ -301,7 +299,6 @@ def run_verilator(
     runtime_hex.write_bytes(hex_file.read_bytes())
     env = os.environ.copy()
     env["ISA_HEX_FILE"] = str(runtime_hex)
-    env["ISA_SIM_HEX_FILE"] = str(runtime_hex)
     env["ISA_SIM_BUILD"] = str(sim_build)
     env["ISA_FORCE_COMPILE"] = "1" if compile_model else "0"
     env["ISA_TOHOST_ADDR"] = hex(tohost)
@@ -347,7 +344,7 @@ def main() -> int:
             print(f"Missing isa dir: {isa_dir}", file=sys.stderr)
             return 2
         suites = parse_suites(args.suites)
-        all_tests = discover_tests(isa_dir, suites, 0)
+        all_tests = discover_tests(isa_dir, suites)
         require_suites(all_tests, suites)
     if args.arch_test is not None:
         arch_elves, arch_skipped = build_arch_tests(

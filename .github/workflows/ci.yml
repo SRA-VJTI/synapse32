@@ -3,68 +3,97 @@ name: DevContainer CI
 on:
   push:
     branches: ["main"]
+    paths-ignore: ["docs/**", "**/*.md"]
   pull_request:
+    paths-ignore: ["docs/**", "**/*.md"]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
   packages: read
 
+env:
+  # Images are tagged by a hash of the Dockerfile, so a stale image never masks a Dockerfile change, including one in a pull request.
+  IMAGE_NAME: ghcr.io/sra-vjti/synapse32-dev
+
 jobs:
-  test:
+  # Builds the image once into the BuildKit cache when it is not published yet; a no-op otherwise.
+  image:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      # The content-derived tag prevents a stale :linux image from masking
-      # Dockerfile changes, including changes proposed in pull requests.
-      - name: Pull matching development image
-        id: image
-        env:
-          IMAGE: ghcr.io/sra-vjti/synapse32-dev:dockerfile-${{ hashFiles('.devcontainer/Dockerfile') }}
-        run: |
-          if docker pull "$IMAGE"; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Set up Docker Buildx
-        if: steps.image.outputs.available != 'true'
-        uses: docker/setup-buildx-action@v3
-
-      # A new Dockerfile may not have been published yet. Build it for this
-      # run, reusing the publisher's BuildKit cache when it is available.
-      - name: Build development image when unavailable
-        if: steps.image.outputs.available != 'true'
-        uses: docker/build-push-action@v6
+      - uses: ./.github/actions/image
         with:
+          tag: ${{ env.IMAGE_NAME }}:dockerfile-${{ hashFiles('.devcontainer/Dockerfile') }}
           context: .devcontainer
           file: .devcontainer/Dockerfile
-          load: true
-          tags: ghcr.io/sra-vjti/synapse32-dev:dockerfile-${{ hashFiles('.devcontainer/Dockerfile') }}
-          cache-from: type=gha,scope=devcontainer
-          cache-to: type=gha,mode=max,scope=devcontainer
+          cache-scope: devcontainer
+          load: "false"
 
+  # The suite in parallel parts: synthesis and each interrupt sweep variant on their own, the rest together.
+  parts:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.list.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - id: list
+        run: |
+          python3 - >> "$GITHUB_OUTPUT" <<'EOF'
+          import ast, json
+          tree = ast.parse(open("tests/system_tests/test_interrupt_sweep.py").read())
+          variants = next(node.value for node in tree.body
+                          if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", "") == "VARIANTS")
+          sweep, yosys = "system_tests/test_interrupt_sweep.py", "system_tests/test_yosys_synth.py"
+          parts = [{"name": "tests", "args": f"--ignore={sweep} --ignore={yosys}", "filter": ""},
+                   {"name": "yosys", "args": yosys, "filter": ""}]
+          for variant in variants.elts:
+              name = ast.literal_eval(variant)[0]
+              parts.append({"name": f"sweep {name}", "args": sweep, "filter": name})
+          print("matrix=" + json.dumps({"include": parts}))
+          EOF
+
+  pytest:
+    name: ${{ matrix.name }}
+    needs: [image, parts]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.parts.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: image
+        uses: ./.github/actions/image
+        with:
+          tag: ${{ env.IMAGE_NAME }}:dockerfile-${{ hashFiles('.devcontainer/Dockerfile') }}
+          context: .devcontainer
+          file: .devcontainer/Dockerfile
+          cache-scope: devcontainer
       - name: Run tests in DevContainer
         env:
-          IMAGE: ghcr.io/sra-vjti/synapse32-dev:dockerfile-${{ hashFiles('.devcontainer/Dockerfile') }}
+          IMAGE: ${{ steps.image.outputs.tag }}
+          PYTEST_ARGS: ${{ matrix.args }}
+          INTERRUPT_SWEEP_FILTER: ${{ matrix.filter }}
         run: |
-          docker run --rm --network host \
+          docker run --rm --network host -e PYTEST_ARGS -e INTERRUPT_SWEEP_FILTER \
             -v "$GITHUB_WORKSPACE:/workspace" -w /workspace "$IMAGE" bash -e -c '
-              verilator --version
               verilator --version | grep -E "^Verilator 5\."
               python3 -m venv .venv
-              .venv/bin/pip install --upgrade pip
-              .venv/bin/pip install -r tests/requirements.txt
+              .venv/bin/pip install --quiet --upgrade pip
+              .venv/bin/pip install --quiet -r tests/requirements.txt
               cd tests
-              ../.venv/bin/pytest -v
+              ../.venv/bin/pytest -v $PYTEST_ARGS
             '
