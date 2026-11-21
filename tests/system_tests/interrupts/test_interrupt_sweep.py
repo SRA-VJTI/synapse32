@@ -12,20 +12,13 @@ handler, which sets A (and D for a store/AMO fault) and retries. Interrupts land
 """
 
 import os
-import shutil
-import struct
-import subprocess
 from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
-from cocotb_test.simulator import run
-from memory_view import read_word
+from support import DATA_MEM_BASE, INSTR_MEM_BASE, assemble, load_symbols, nop_image, peek, poke, run_top
 
-INSTR_MEM_BASE = 0x8000_0000
-INSTR_MEM_SIZE = 0x0400_0000
-DATA_MEM_BASE = 0x1000_0000
 
 CONFIG = 0x1000_0100
 RESULT_LO = 0x1000_0200
@@ -496,89 +489,17 @@ SECTIONS {{
 """
 
 
-def _find_repo_root() -> Path:
-    cur = Path.cwd()
-    while not (cur / "rtl").exists():
-        if cur.parent == cur:
-            raise FileNotFoundError("Could not locate repo root (no rtl/ directory found)")
-        cur = cur.parent
-    return cur
-
-
 def _build_dir() -> Path:
     return Path(os.environ.get("INTERRUPT_SWEEP_BUILD", Path.cwd() / "build" / "interrupt_sweep"))
-
-
-def assemble(build_dir: Path) -> None:
-    build_dir.mkdir(parents=True, exist_ok=True)
-    src = build_dir / "sweep.S"
-    lds = build_dir / "sweep.ld"
-    elf = build_dir / "sweep.elf"
-    src.write_text(PROGRAM)
-    lds.write_text(LINKER_SCRIPT)
-    subprocess.run(
-        [
-            "riscv64-unknown-elf-gcc", "-march=rv32ima_zicsr_zifencei", "-mabi=ilp32",
-            "-nostdlib", "-ffreestanding", "-Wl,--no-relax", "-Wl,-m,elf32lriscv",
-            "-T", str(lds), str(src), "-o", str(elf),
-        ],
-        check=True,
-    )
-    subprocess.run(["riscv64-unknown-elf-objcopy", "-O", "binary", str(elf), str(build_dir / "image.bin")], check=True)
-    symbols = _elf32_symbols(elf.read_bytes())
-    (build_dir / "symbols.txt").write_text("".join(f"{value:08x} {name}\n" for name, value in sorted(symbols.items())))
-    (build_dir / "nop.hex").write_text("@00000000\n" + "00000013 00000013 00000013 00000013\n" * 128)
-
-
-def _elf32_symbols(elf: bytes) -> dict:
-    assert elf[:4] == b"\x7fELF" and elf[4] == 1 and elf[5] == 1, "expected a little-endian ELF32 file"
-    e_shoff, = struct.unpack_from("<I", elf, 32)
-    e_shentsize, e_shnum = struct.unpack_from("<HH", elf, 46)
-    sections = [struct.unpack_from("<IIIIIIIIII", elf, e_shoff + i * e_shentsize) for i in range(e_shnum)]
-    table = {}
-    for _, sh_type, _, _, offset, size, link, _, _, entsize in sections:
-        if sh_type != 2:  # SHT_SYMTAB
-            continue
-        strtab_offset = sections[link][4]
-        for pos in range(offset, offset + size, entsize):
-            st_name, st_value = struct.unpack_from("<II", elf, pos)
-            if st_name:
-                end = elf.index(b"\x00", strtab_offset + st_name)
-                table[elf[strtab_offset + st_name:end].decode()] = st_value
-    return table
-
-
-def _load_symbols(build_dir: Path) -> dict:
-    table = {}
-    for line in (build_dir / "symbols.txt").read_text().splitlines():
-        value, name = line.split()
-        table[name] = int(value, 16)
-    return table
-
-
-def _phys_word_index(addr: int) -> int:
-    if INSTR_MEM_BASE <= addr < INSTR_MEM_BASE + INSTR_MEM_SIZE:
-        return (addr - INSTR_MEM_BASE) // 4
-    if addr >= DATA_MEM_BASE:
-        return (INSTR_MEM_SIZE + (addr - DATA_MEM_BASE)) // 4
-    raise AssertionError(f"Unsupported physical address 0x{addr:08x}")
-
-
-def _poke(dut, addr: int, value: int) -> None:
-    dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value = value & 0xFFFF_FFFF
-
-
-def _peek(dut, addr: int) -> int:
-    return read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
 
 
 def _load_image(dut, build_dir: Path) -> None:
     data = (build_dir / "image.bin").read_bytes()
     data += b"\x00" * (-len(data) % 4)
     for offset in range(0, len(data), 4):
-        _poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(data[offset:offset + 4], "little"))
+        poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(data[offset:offset + 4], "little"))
     for va, flags in MEGAPAGES.items():
-        _poke(dut, PAGE_TABLE + 4 * (va >> 22), ((va >> 12) << 10) | flags)
+        poke(dut, PAGE_TABLE + 4 * (va >> 22), ((va >> 12) << 10) | flags)
 
 
 class Trial:
@@ -605,21 +526,21 @@ async def run_trial(dut, scenario_index, variant, entry_addr, inject_cycle, limi
     dut.external_interrupt.value = 0
     dut.uart_rx.value = 1
     timer_target = inject_cycle if (source == "timer" and inject_cycle is not None) else 0
-    _poke(dut, CONFIG, scenario_index)
-    _poke(dut, CONFIG + 4, privilege)
-    _poke(dut, CONFIG + 8, mmu)
-    _poke(dut, CONFIG + 12, timer_target)
-    _poke(dut, CONFIG + 16, mideleg)
-    _poke(dut, CONFIG + 20, vectored)
-    _poke(dut, CONFIG + 24, svade)
-    _poke(dut, CONFIG + 28, trigger_addr)
+    poke(dut, CONFIG, scenario_index)
+    poke(dut, CONFIG + 4, privilege)
+    poke(dut, CONFIG + 8, mmu)
+    poke(dut, CONFIG + 12, timer_target)
+    poke(dut, CONFIG + 16, mideleg)
+    poke(dut, CONFIG + 20, vectored)
+    poke(dut, CONFIG + 24, svade)
+    poke(dut, CONFIG + 28, trigger_addr)
     for va, flags in MEGAPAGES.items():
-        _poke(dut, PAGE_TABLE + 4 * (va >> 22), ((va >> 12) << 10) | (flags & ~PTE_A_D if svade else flags))
+        poke(dut, PAGE_TABLE + 4 * (va >> 22), ((va >> 12) << 10) | (flags & ~PTE_A_D if svade else flags))
     for index in range(RESULT_WORDS):
-        _poke(dut, RESULT_LO + 4 * index, 0)
-    _poke(dut, DONE_ADDR, 0)
-    _poke(dut, ACK_ADDR, 0)
-    _poke(dut, TRIGGER_COUNT, 0)
+        poke(dut, RESULT_LO + 4 * index, 0)
+    poke(dut, DONE_ADDR, 0)
+    poke(dut, ACK_ADDR, 0)
+    poke(dut, TRIGGER_COUNT, 0)
     await ClockCycles(dut.clk, 2)
     dut.rst.value = 0
 
@@ -663,8 +584,8 @@ async def run_trial(dut, scenario_index, variant, entry_addr, inject_cycle, limi
         if trial.done_cycle is not None:
             break
     await RisingEdge(dut.clk)
-    trial.memory = [_peek(dut, RESULT_LO + 4 * index) for index in range(RESULT_WORDS)]
-    trial.trigger_hits = _peek(dut, TRIGGER_COUNT)
+    trial.memory = [peek(dut, RESULT_LO + 4 * index) for index in range(RESULT_WORDS)]
+    trial.trigger_hits = peek(dut, TRIGGER_COUNT)
     dut.software_interrupt.value = 0
     dut.external_interrupt.value = 0
     return trial
@@ -689,7 +610,7 @@ def _expected_absolute(scenario: str, mmu: int):
 async def sweep_variant(dut, variant):
     name = variant[0]
     build_dir = _build_dir()
-    symbols = _load_symbols(build_dir)
+    symbols = load_symbols(build_dir)
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     _load_image(dut, build_dir)
 
@@ -797,35 +718,15 @@ for _variant in VARIANTS:
 
 
 def runCocotbTests():
-    repo_root = _find_repo_root()
-    rtl_dir = repo_root / "rtl"
-    sources = [str(p) for p in sorted(rtl_dir.rglob("*.v"))]
     build_dir = _build_dir()
-    assemble(build_dir)
-
-    sim_build = Path.cwd() / "sim_build" / "sim_build_interrupt_sweep"
-    if sim_build.exists():
-        shutil.rmtree(sim_build)
-
-    extra_env = {
-        "TOPLEVEL": "top",
-        "MODULE": "test_interrupt_sweep",
-        "COCOTB_TOPLEVEL": "top",
-        "COCOTB_TEST_MODULES": "test_interrupt_sweep",
-        "INTERRUPT_SWEEP_FILTER": os.environ.get("INTERRUPT_SWEEP_FILTER", ""),
-        "INTERRUPT_SWEEP_BUILD": str(build_dir.resolve()),
-    }
-    run(
-        verilog_sources=sources,
-        toplevel="top",
-        module="test_interrupt_sweep",
-        includes=[str(rtl_dir / "include")],
-        simulator="verilator",
-        timescale="1ns/1ps",
-        defines=[f'INSTR_HEX_FILE="{build_dir / "nop.hex"}"'],
-        sim_build=str(sim_build),
-        force_compile=True,
-        extra_env=extra_env,
+    assemble(build_dir, "sweep", PROGRAM, LINKER_SCRIPT)
+    run_top(
+        "test_interrupt_sweep",
+        boot_image=nop_image(),
+        extra_env={
+            "INTERRUPT_SWEEP_FILTER": os.environ.get("INTERRUPT_SWEEP_FILTER", ""),
+            "INTERRUPT_SWEEP_BUILD": str(build_dir.resolve()),
+        },
     )
 
 

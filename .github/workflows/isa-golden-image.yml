@@ -111,30 +111,3 @@ jobs:
           name: isa-report-${{ matrix.suite }}-${{ matrix.config }}-lat${{ matrix.latency }}
           path: .github/artifacts/isa/*.json
           if-no-files-found: error
-
-  # Published only once main has passed, rebuilt from the BuildKit cache the tested image was built from.
-  publish:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: compare
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - id: image
-        uses: ./.github/actions/image
-        with:
-          tag: ${{ env.IMAGE_NAME }}:dockerfile-${{ hashFiles('.github/isa/Dockerfile', 'tests/requirements.txt') }}
-          context: .
-          file: .github/isa/Dockerfile
-          cache-scope: isa-image
-      - if: steps.image.outputs.published != 'true'
-        env:
-          IMAGE: ${{ steps.image.outputs.tag }}
-        run: docker push "$IMAGE"

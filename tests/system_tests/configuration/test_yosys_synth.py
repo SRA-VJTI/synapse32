@@ -10,19 +10,11 @@ import re
 import subprocess
 import tempfile
 from pathlib import Path
+from support import find_repo_root
 
 CORE = "riscv_cpu"
 TOP = "top"
 PERIPHERALS = ["mem_adapter", "uart", "plic", "timer"]
-
-
-def _find_repo_root() -> Path:
-    cur = Path.cwd()
-    while not (cur / "rtl").exists():
-        if cur.parent == cur:
-            raise FileNotFoundError("Could not locate repo root (no rtl/ directory found)")
-        cur = cur.parent
-    return cur
 
 
 def _unified_mem_blackbox(rtl_dir: Path, out_dir: Path) -> Path:
@@ -44,7 +36,7 @@ def _yosys(rtl_dir: Path, script: str, extra: str = "") -> subprocess.CompletedP
 
 
 def runCocotbTests():
-    rtl_dir = _find_repo_root() / "rtl"
+    rtl_dir = find_repo_root() / "rtl"
     with tempfile.TemporaryDirectory() as tmp:
         stub = _unified_mem_blackbox(rtl_dir, Path(tmp))
         checks = [(CORE, f"synth -flatten -top {CORE}; check -assert", "")]

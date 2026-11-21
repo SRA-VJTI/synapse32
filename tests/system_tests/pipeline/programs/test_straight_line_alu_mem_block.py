@@ -9,25 +9,18 @@ ALU/load/store stress test.
 
 import os
 import random
-import shutil
 from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge
-from cocotb_test.simulator import run
-from memory_view import read_word
+from support import NOP, read_word, run_top, word_index
 
-
-INSTR_MEM_BASE = 0x8000_0000
-INSTR_MEM_SIZE = 0x0400_0000
-DATA_MEM_BASE = 0x1000_0000
 
 A0_BASE = 0x1000_0800
 S0_BASE = 0x1000_1800
 SP_BASE = 0x1000_2800
 
-NOP = 0x00000013
 NUM_TRIALS = 25
 
 # Linux boot hot block at 0xc0254a40..0xc0254b50 inclusive.
@@ -70,15 +63,6 @@ def _load_hot_block() -> list[int]:
 
 HOT_BLOCK = _load_hot_block()
 MAX_CYCLES_PER_TRIAL = len(HOT_BLOCK) + 160
-
-
-def _find_repo_root() -> Path:
-    cur = Path.cwd()
-    while not (cur / "rtl").exists():
-        if cur.parent == cur:
-            raise FileNotFoundError("Could not locate repo root (no rtl/ directory found)")
-        cur = cur.parent
-    return cur
 
 
 def _sign_extend(value: int, bits: int) -> int:
@@ -153,14 +137,6 @@ def _execute_hot_block(initial_regs: list[int], initial_mem: dict[int, int]):
     return regs, mem, touched
 
 
-def _phys_word_index(addr: int) -> int:
-    if INSTR_MEM_BASE <= addr < (INSTR_MEM_BASE + INSTR_MEM_SIZE):
-        return (addr - INSTR_MEM_BASE) // 4
-    if addr >= DATA_MEM_BASE:
-        return (INSTR_MEM_SIZE + (addr - DATA_MEM_BASE)) // 4
-    raise AssertionError(f"Unsupported physical address for test: 0x{addr:08x}")
-
-
 def _touched_seed_values(seed: int):
     rng = random.Random(seed)
     regs = [rng.getrandbits(32) for _ in range(32)]
@@ -187,7 +163,7 @@ async def _load_trial_state(dut, regs: list[int], mem: dict[int, int]) -> None:
         dut.unified_mem_inst.instr_ram[idx].value = word
 
     for addr, value in mem.items():
-        dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value = value
+        dut.unified_mem_inst.instr_ram[word_index(addr)].value = value
 
     for reg_idx in range(32):
         dut.cpu_inst.rf_inst0.register_file[reg_idx].value = regs[reg_idx]
@@ -231,7 +207,7 @@ async def test_linux_hotblock_matches_model(dut):
         )
 
         for addr in sorted(touched_words):
-            actual = read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
+            actual = read_word(dut, word_index(addr)) & 0xFFFF_FFFF
             expected = expected_mem.get(addr, 0) & 0xFFFF_FFFF
             assert actual == expected, (
                 f"Memory mismatch on seed {seed} at 0x{addr:08x}: "
@@ -240,31 +216,7 @@ async def test_linux_hotblock_matches_model(dut):
 
 
 def runCocotbTests():
-    repo_root = _find_repo_root()
-    rtl_dir = repo_root / "rtl"
-    incl_dir = rtl_dir / "include"
-
-    sources = []
-    for root, _, files in os.walk(rtl_dir):
-        for file in files:
-            if file.endswith((".v", ".sv")):
-                sources.append(os.path.join(root, file))
-
-    sim_build = Path.cwd() / "sim_build" / "sim_build_straight_line_alu_mem_block"
-    if sim_build.exists():
-        shutil.rmtree(sim_build)
-
-    run(
-        verilog_sources=sources,
-        toplevel="top",
-        module="test_straight_line_alu_mem_block",
-        testcase="test_linux_hotblock_matches_model",
-        includes=[str(incl_dir)],
-        simulator="verilator",
-        timescale="1ns/1ps",
-        sim_build=str(sim_build),
-        force_compile=True,
-    )
+    run_top("test_straight_line_alu_mem_block", testcase="test_linux_hotblock_matches_model")
 
 
 if __name__ == "__main__":

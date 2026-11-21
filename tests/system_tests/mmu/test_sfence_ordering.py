@@ -3,25 +3,20 @@
 The core fetches ahead, so an instruction on the next page may already be fetched under the old
 mapping when the fence executes; it must be discarded and fetched again.
 
-The program puts the store and the fence in the last words of a page, so the next page is being
-fetched while they execute. The store repoints that page at different code; the marker it writes
-says which mapping the core actually used.
+Both programs put the store and the fence in the last words of page A. The store repoints page B at
+different code; the marker page B writes says which mapping the core actually used. In the first, page B
+is still being walked when the fence executes. In the second, page B's translation is already in the TLB,
+so the words after the fence are fetched from the old page before the fence executes.
 """
 
 import os
-import shutil
-import subprocess
 from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
-from cocotb_test.simulator import run
-from memory_view import read_word
+from support import DATA_MEM_BASE, INSTR_MEM_BASE, assemble, nop_image, peek, poke, pte, run_top
 
-INSTR_MEM_BASE = 0x8000_0000
-INSTR_MEM_SIZE = 0x0400_0000
-DATA_MEM_BASE = 0x1000_0000
 
 RESULT = 0x1000_0200
 DONE_ADDR = 0x1000_0400
@@ -51,30 +46,31 @@ RWX = V | R | W | X | A | D
 # Entry at JUMP_OFFSET starts a speculative walk for page B; the jump back into page A rewrites
 # the PTE and fences while that walk is in flight.
 STORE_OFFSET = 0xFF0
+# The cached program's store and fence are page A's last two words; page B follows the fence.
+CACHED_STORE_OFFSET = 0xFF8
 FENCE_OFFSET = 0xFF4
 GOTO_B_OFFSET = 0xFF8
 JUMP_OFFSET = 0xFFC
 
 
-def _pte(pa: int, flags: int) -> int:
-    return ((pa >> 12) << 10) | flags
-
-
-def _page_b(marker: int) -> str:
-    """Page B's code: record which physical page the translation ended up pointing at."""
+def _page_b(marker: int, returns: bool = False) -> str:
+    """Page B's code: record which physical page the translation ended up pointing at. With `returns`, a first
+    call (s0 = 0) only returns, so that page B's translation is in the TLB."""
+    call = "\n        beqz    s0, 2f" if returns else ""
+    ret = "\n2:\n        jr      ra" if returns else ""
     return f"""
-        li      t2, {marker:#x}
+        li      t2, {marker:#x}{call}
         li      t3, {RESULT:#x}
         sw      t2, 0(t3)
         li      t0, {DONE_ADDR:#x}
         li      t1, {DONE_VALUE:#x}
         sw      t1, 0(t0)
 1:
-        j       1b
+        j       1b{ret}
 """
 
 
-PROGRAM = f"""
+_PRELUDE = f"""
         .section .text.init, "ax"
         .option norelax
         .global _start
@@ -120,12 +116,14 @@ m_trap:
         lw      t0, 0(sp)
         csrrw   sp, mscratch, sp
         mret
+"""
 
+PROGRAM = _PRELUDE + f"""
 # ---- Page A, linked at {PAGE_A_PA:#x} and run at {PAGE_A_VA:#x}.
         .section .pagea, "ax"
 page_a:
         li      t0, {L0_ENTRY_B:#x}
-        li      t1, {_pte(PAGE_B_NEW_PA, RX):#x}
+        li      t1, {pte(PAGE_B_NEW_PA, RX):#x}
         li      t5, {PAGE_B_VA:#x}
         li      t4, {PAGE_A_VA + JUMP_OFFSET:#x}
         jr      t4                     # to the last word: page B is fetched speculatively after it
@@ -146,7 +144,36 @@ page_b_old:{_page_b(OLD_MARKER)}
 page_b_new:{_page_b(NEW_MARKER)}
 """
 
-LINKER_SCRIPT = f"""
+PROGRAM_CACHED = _PRELUDE + f"""
+# ---- Page A, linked at {PAGE_A_PA:#x} and run at {PAGE_A_VA:#x}.
+        .section .pagea, "ax"
+page_a:
+        li      s0, 0
+        li      t5, {PAGE_B_VA:#x}
+        jalr    ra, t5                 # run page B once: its old translation is now in the TLB
+        li      s0, 1
+        li      t0, {L0_ENTRY_B:#x}
+        li      t1, {pte(PAGE_B_NEW_PA, RX):#x}
+        li      t4, {PAGE_A_VA + CACHED_STORE_OFFSET:#x}
+        jr      t4
+
+# ---- The last two words of page A.
+        .section .pagea_end, "ax"
+page_a_end:
+        sw      t1, 0(t0)              # page B now maps to different code
+        sfence.vma                     # page B's first words are already fetched under the old mapping
+
+# ---- Page B, two versions at different physical pages; the PTE decides which one runs.
+        .section .pageb_old, "ax"
+page_b_old:{_page_b(OLD_MARKER, returns=True)}
+
+        .section .pageb_new, "ax"
+page_b_new:{_page_b(NEW_MARKER, returns=True)}
+"""
+
+
+def _linker_script(store_offset: int) -> str:
+    return f"""
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
 SECTIONS {{
@@ -154,7 +181,7 @@ SECTIONS {{
     .text : {{ *(.text.init) *(.text) }}
     . = {PAGE_A_PA:#x};
     .pagea : {{ *(.pagea) }}
-    . = {PAGE_A_PA + STORE_OFFSET:#x};
+    . = {PAGE_A_PA + store_offset:#x};
     .pagea_end : {{ *(.pagea_end) }}
     . = {PAGE_B_OLD_PA:#x};
     .pageb_old : {{ *(.pageb_old) }}
@@ -164,80 +191,36 @@ SECTIONS {{
 """
 
 
-def _find_repo_root() -> Path:
-    cur = Path.cwd()
-    while not (cur / "rtl").exists():
-        if cur.parent == cur:
-            raise FileNotFoundError("Could not locate repo root (no rtl/ directory found)")
-        cur = cur.parent
-    return cur
-
-
 def _build_dir() -> Path:
     return Path(os.environ.get("SFENCE_ORDER_BUILD", Path.cwd() / "build" / "sfence_ordering"))
 
 
-def assemble(build_dir: Path) -> None:
-    build_dir.mkdir(parents=True, exist_ok=True)
-    src = build_dir / "walk_flush.S"
-    lds = build_dir / "walk_flush.ld"
-    elf = build_dir / "walk_flush.elf"
-    src.write_text(PROGRAM)
-    lds.write_text(LINKER_SCRIPT)
-    subprocess.run(
-        [
-            "riscv64-unknown-elf-gcc", "-march=rv32ima_zicsr", "-mabi=ilp32",
-            "-nostdlib", "-ffreestanding", "-Wl,--no-relax", "-Wl,-m,elf32lriscv",
-            "-T", str(lds), str(src), "-o", str(elf),
-        ],
-        check=True,
-    )
-    subprocess.run(["riscv64-unknown-elf-objcopy", "-O", "binary", str(elf), str(build_dir / "image.bin")], check=True)
-    (build_dir / "nop.hex").write_text("@00000000\n" + "00000013 00000013 00000013 00000013\n" * 128)
-
-
-def _phys_word_index(addr: int) -> int:
-    if INSTR_MEM_BASE <= addr < INSTR_MEM_BASE + INSTR_MEM_SIZE:
-        return (addr - INSTR_MEM_BASE) // 4
-    if addr >= DATA_MEM_BASE:
-        return (INSTR_MEM_SIZE + (addr - DATA_MEM_BASE)) // 4
-    raise AssertionError(f"Unsupported physical address 0x{addr:08x}")
-
-
-def _poke(dut, addr: int, value: int) -> None:
-    dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value = value & 0xFFFF_FFFF
-
-
-def _peek(dut, addr: int) -> int:
-    return read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
-
-
-@cocotb.test()
-async def test_instructions_after_a_fence_use_the_new_mapping(dut):
-    build_dir = _build_dir()
+async def _run(dut, directory: Path):
+    """Run one program; return page B's marker, the PTE reads seen, and the problems found so far."""
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
-    image = (build_dir / "image.bin").read_bytes()
-    image += b"\x00" * (-len(image) % 4)
-    for offset in range(0, len(image), 4):
-        _poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(image[offset:offset + 4], "little"))
-
+    # Memory is written only while the core is held in reset: the second test follows the first in one simulation.
     dut.rst.value = 1
     dut.software_interrupt.value = 0
     dut.external_interrupt.value = 0
     dut.uart_rx.value = 1
+    await ClockCycles(dut.clk, 1)
+    image = (directory / "image.bin").read_bytes()
+    image += b"\x00" * (-len(image) % 4)
+    for offset in range(0, len(image), 4):
+        poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(image[offset:offset + 4], "little"))
     for offset in range(0, 0x1000, 4):
-        _poke(dut, ROOT_TABLE + offset, 0)
-        _poke(dut, L0_TABLE + offset, 0)
-    _poke(dut, ROOT_TABLE + 4 * (INSTR_MEM_BASE >> 22), _pte(INSTR_MEM_BASE, RWX))
-    _poke(dut, ROOT_TABLE + 4 * (DATA_MEM_BASE >> 22), _pte(DATA_MEM_BASE, RW))
-    _poke(dut, ROOT_TABLE + 4 * (PAGE_A_VA >> 22), _pte(L0_TABLE, V))
-    _poke(dut, L0_TABLE + 4 * ((PAGE_A_VA >> 12) & 0x3FF), _pte(PAGE_A_PA, RX))
-    _poke(dut, L0_ENTRY_B, _pte(PAGE_B_OLD_PA, RX))
-    _poke(dut, RESULT, 0)
-    _poke(dut, DONE_ADDR, 0)
-    _poke(dut, TRAP_COUNT, 0)
+        poke(dut, ROOT_TABLE + offset, 0)
+        poke(dut, L0_TABLE + offset, 0)
+    poke(dut, ROOT_TABLE + 4 * (INSTR_MEM_BASE >> 22), pte(INSTR_MEM_BASE, RWX))
+    poke(dut, ROOT_TABLE + 4 * (DATA_MEM_BASE >> 22), pte(DATA_MEM_BASE, RW))
+    poke(dut, ROOT_TABLE + 4 * (PAGE_A_VA >> 22), pte(L0_TABLE, V))
+    poke(dut, L0_TABLE + 4 * ((PAGE_A_VA >> 12) & 0x3FF), pte(PAGE_A_PA, RX))
+    poke(dut, L0_ENTRY_B, pte(PAGE_B_OLD_PA, RX))
+    poke(dut, RESULT, 0)
+    poke(dut, DONE_ADDR, 0)
+    poke(dut, TRAP_COUNT, 0)
     for offset in range(0, 0x80, 4):
-        _poke(dut, TRAP_LOG + offset, 0)
+        poke(dut, TRAP_LOG + offset, 0)
     await ClockCycles(dut.clk, 2)
     dut.rst.value = 0
 
@@ -254,10 +237,22 @@ async def test_instructions_after_a_fence_use_the_new_mapping(dut):
             break
     await RisingEdge(dut.clk)
 
-    marker = _peek(dut, RESULT)
+    marker = peek(dut, RESULT)
+    traps = peek(dut, TRAP_COUNT)
+    log = [tuple(peek(dut, TRAP_LOG + 16 * i + 4 * k) for k in range(3)) for i in range(min(traps, 6))]
+    dut._log.info(f"marker 0x{marker:08x} after {walks_seen} PTE reads, {traps} traps: "
+                  + str([(c, hex(t), hex(e)) for c, t, e in log]))
     problems = []
     if not done:
         problems.append("the program did not finish")
+    if traps:
+        problems.append(f"{traps} unexpected traps: " + str([(c, hex(t), hex(e)) for c, t, e in log]))
+    return marker, walks_seen, problems
+
+
+@cocotb.test()
+async def test_instructions_after_a_fence_use_the_new_mapping(dut):
+    marker, walks_seen, problems = await _run(dut, _build_dir() / "walk")
     if marker == OLD_MARKER:
         problems.append("page B ran from the old mapping: a walk that a fence interrupted was "
                         "filled into the TLB")
@@ -267,43 +262,29 @@ async def test_instructions_after_a_fence_use_the_new_mapping(dut):
         problems.append("no page-table entry was ever read: the program did not exercise the walker")
     for line in problems:
         dut._log.error(line)
-    traps = _peek(dut, TRAP_COUNT)
-    log = [tuple(_peek(dut, TRAP_LOG + 16 * i + 4 * k) for k in range(3)) for i in range(min(traps, 6))]
-    dut._log.info(f"marker 0x{marker:08x} after {walks_seen} PTE reads, {traps} traps: "
-                  + str([(c, hex(t), hex(e)) for c, t, e in log]))
-    if traps:
-        problems.append(f"{traps} unexpected traps: " + str([(c, hex(t), hex(e)) for c, t, e in log]))
+    assert not problems, "; ".join(problems)
+
+
+@cocotb.test()
+async def test_instructions_fetched_before_a_fence_are_fetched_again(dut):
+    marker, _, problems = await _run(dut, _build_dir() / "cached")
+    if marker != NEW_MARKER:
+        problems.append(f"page B stored 0x{marker:08x}, expected the new marker 0x{NEW_MARKER:08x}: instructions "
+                        "fetched under the old mapping before the fence were executed instead of fetched again")
+    for line in problems:
+        dut._log.error(line)
     assert not problems, "; ".join(problems)
 
 
 def runCocotbTests():
-    repo_root = _find_repo_root()
-    rtl_dir = repo_root / "rtl"
-    sources = [str(p) for p in sorted(rtl_dir.rglob("*.v"))]
     build_dir = _build_dir()
-    assemble(build_dir)
+    assemble(build_dir / "walk", "sfence_walk", PROGRAM, _linker_script(STORE_OFFSET))
+    assemble(build_dir / "cached", "sfence_cached", PROGRAM_CACHED, _linker_script(CACHED_STORE_OFFSET))
 
-    sim_build = Path.cwd() / "sim_build" / "sim_build_sfence_ordering"
-    if sim_build.exists():
-        shutil.rmtree(sim_build)
-
-    run(
-        verilog_sources=sources,
-        toplevel="top",
-        module="test_sfence_ordering",
-        includes=[str(rtl_dir / "include")],
-        simulator="verilator",
-        timescale="1ns/1ps",
-        defines=[f'INSTR_HEX_FILE="{build_dir / "nop.hex"}"'],
-        sim_build=str(sim_build),
-        force_compile=True,
-        extra_env={
-            "TOPLEVEL": "top",
-            "MODULE": "test_sfence_ordering",
-            "COCOTB_TOPLEVEL": "top",
-            "COCOTB_TEST_MODULES": "test_sfence_ordering",
-            "SFENCE_ORDER_BUILD": str(build_dir.resolve()),
-        },
+    run_top(
+        "test_sfence_ordering",
+        boot_image=nop_image(),
+        extra_env={"SFENCE_ORDER_BUILD": str(build_dir.resolve())},
     )
 
 

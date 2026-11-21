@@ -11,20 +11,14 @@ each load from the UART data register pops exactly one received byte.
 
 import json
 import os
-import shutil
-import struct
 import subprocess
 from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
-from cocotb_test.simulator import run
-from memory_view import read_word
+from support import INSTR_MEM_BASE, nop_image, peek, poke, run_top
 
-INSTR_MEM_BASE = 0x8000_0000
-INSTR_MEM_SIZE = 0x0400_0000
-DATA_MEM_BASE = 0x1000_0000
 
 SCRATCH = 0x1000_0100
 ATOMIC = 0x1000_0140
@@ -161,15 +155,6 @@ SECTIONS {{
 """
 
 
-def _find_repo_root() -> Path:
-    cur = Path.cwd()
-    while not (cur / "rtl").exists():
-        if cur.parent == cur:
-            raise FileNotFoundError("Could not locate repo root (no rtl/ directory found)")
-        cur = cur.parent
-    return cur
-
-
 def _build_dir() -> Path:
     return Path(os.environ.get("MEMORY_WAIT_BUILD", Path.cwd() / "build" / "memory_wait"))
 
@@ -195,30 +180,13 @@ def assemble(build_dir: Path) -> None:
     build_dir.mkdir(parents=True, exist_ok=True)
     _compile(build_dir, "image", PROGRAM)
     _compile(build_dir, "uart", UART_PROGRAM)
-    (build_dir / "nop.hex").write_text("@00000000\n" + "00000013 00000013 00000013 00000013\n" * 128)
-
-
-def _phys_word_index(addr: int) -> int:
-    if INSTR_MEM_BASE <= addr < INSTR_MEM_BASE + INSTR_MEM_SIZE:
-        return (addr - INSTR_MEM_BASE) // 4
-    if addr >= DATA_MEM_BASE:
-        return (INSTR_MEM_SIZE + (addr - DATA_MEM_BASE)) // 4
-    raise AssertionError(f"Unsupported physical address 0x{addr:08x}")
-
-
-def _poke(dut, addr: int, value: int) -> None:
-    dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value = value & 0xFFFF_FFFF
-
-
-def _peek(dut, addr: int) -> int:
-    return read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
 
 
 def _load_image(dut, build_dir: Path, name: str = "image.bin") -> None:
     data = (build_dir / name).read_bytes()
     data += b"\x00" * (-len(data) % 4)
     for offset in range(0, len(data), 4):
-        _poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(data[offset:offset + 4], "little"))
+        poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(data[offset:offset + 4], "little"))
 
 
 class Run:
@@ -239,12 +207,12 @@ async def run_program(dut, inject_cycle=None, limit=20000):
     dut.external_interrupt.value = 0
     dut.uart_rx.value = 1
     for offset in range(0, 0x100, 4):
-        _poke(dut, SCRATCH + offset, 0)
-        _poke(dut, RESULT_LO + offset, 0)
-    _poke(dut, ATOMIC, 0)
-    _poke(dut, AMO, 0)
-    _poke(dut, DONE_ADDR, 0)
-    _poke(dut, ACK_ADDR, 0)
+        poke(dut, SCRATCH + offset, 0)
+        poke(dut, RESULT_LO + offset, 0)
+    poke(dut, ATOMIC, 0)
+    poke(dut, AMO, 0)
+    poke(dut, DONE_ADDR, 0)
+    poke(dut, ACK_ADDR, 0)
     await ClockCycles(dut.clk, 2)
     dut.rst.value = 0
 
@@ -293,10 +261,10 @@ async def run_program(dut, inject_cycle=None, limit=20000):
         if result.cycles is not None:
             break
     await RisingEdge(dut.clk)
-    result.memory = [_peek(dut, RESULT_LO + 4 * i) for i in range(RESULT_WORDS)]
-    result.memory += [_peek(dut, SCRATCH), _peek(dut, ATOMIC), _peek(dut, AMO)]
+    result.memory = [peek(dut, RESULT_LO + 4 * i) for i in range(RESULT_WORDS)]
+    result.memory += [peek(dut, SCRATCH), peek(dut, ATOMIC), peek(dut, AMO)]
     # Every prologue slot: a pair per iteration, each at the base that iteration computed.
-    result.memory += [_peek(dut, SCRATCH + offset) for offset in range(24, 16 + 8 * LOOPS + 8, 4)]
+    result.memory += [peek(dut, SCRATCH + offset) for offset in range(24, 16 + 8 * LOOPS + 8, 4)]
     result.instret = int(dut.cpu_inst.csr_file_inst.instret_counter.value)
     dut.software_interrupt.value = 0
     return result
@@ -409,7 +377,7 @@ async def test_uart_read_pops_one_byte(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     _load_image(dut, _build_dir(), "uart.bin")
     for addr in (UART_RESULT, UART_RESULT + 4, DONE_ADDR):
-        _poke(dut, addr, 0)
+        poke(dut, addr, 0)
     dut.rst.value = 1
     dut.software_interrupt.value = 0
     dut.external_interrupt.value = 0
@@ -423,48 +391,27 @@ async def test_uart_read_pops_one_byte(dut):
     dut.software_interrupt.value = 1
     for _ in range(2000):
         await RisingEdge(dut.clk)
-        if _peek(dut, DONE_ADDR) == DONE_VALUE:
+        if peek(dut, DONE_ADDR) == DONE_VALUE:
             break
     dut.software_interrupt.value = 0
-    assert _peek(dut, DONE_ADDR) == DONE_VALUE, f"latency {latency}: the program did not finish"
-    got = [chr(_peek(dut, UART_RESULT) & 0xFF), chr(_peek(dut, UART_RESULT + 4) & 0xFF)]
+    assert peek(dut, DONE_ADDR) == DONE_VALUE, f"latency {latency}: the program did not finish"
+    got = [chr(peek(dut, UART_RESULT) & 0xFF), chr(peek(dut, UART_RESULT + 4) & 0xFF)]
     assert got == ["A", "B"], f"latency {latency}: read {got}, expected ['A', 'B']"
 
 
 def runCocotbTests():
-    repo_root = _find_repo_root()
-    rtl_dir = repo_root / "rtl"
-    sources = [str(p) for p in sorted(rtl_dir.rglob("*.v"))]
     build_dir = _build_dir()
     assemble(build_dir)
 
     builds = [(f"lat{latency}", latency, latency, 4) for latency in LATENCIES]
     builds.append(("fast_fetch", 8, 0, 1))
     for name, latency, fetch_latency, depth in builds:
-        sim_build = Path.cwd() / "sim_build" / f"sim_build_memory_wait_{name}"
-        if sim_build.exists():
-            shutil.rmtree(sim_build)
-        run(
-            verilog_sources=sources,
-            toplevel="top",
-            module="test_memory_wait",
+        run_top(
+            "test_memory_wait",
             parameters={"MEM_LATENCY": latency, "FETCH_LATENCY": fetch_latency,
                         "STORE_BUFFER_DEPTH": depth},
-            includes=[str(rtl_dir / "include")],
-            simulator="verilator",
-            timescale="1ns/1ps",
-            defines=[f'INSTR_HEX_FILE="{build_dir / "nop.hex"}"'],
-            sim_build=str(sim_build),
-            force_compile=True,
-            extra_env={
-                "TOPLEVEL": "top",
-                "MODULE": "test_memory_wait",
-                "COCOTB_TOPLEVEL": "top",
-                "COCOTB_TEST_MODULES": "test_memory_wait",
-                "MEMORY_WAIT_BUILD": str(build_dir.resolve()),
-                "MEMORY_WAIT_LATENCY": str(latency),
-                "MEMORY_WAIT_FAST_FETCH": "1" if fetch_latency != latency else "0",
-            },
+            boot_image=nop_image(),
+            extra_env={"MEMORY_WAIT_BUILD": str(build_dir.resolve()), "MEMORY_WAIT_LATENCY": str(latency), "MEMORY_WAIT_FAST_FETCH": "1" if fetch_latency != latency else "0"},
         )
 
 if __name__ == "__main__":

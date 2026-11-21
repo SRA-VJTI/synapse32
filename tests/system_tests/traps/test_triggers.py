@@ -8,20 +8,13 @@ same cause and its own address in mtval/stval.
 """
 
 import os
-import shutil
-import struct
-import subprocess
 from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
-from cocotb_test.simulator import run
-from memory_view import read_word
+from support import INSTR_MEM_BASE, assemble, load_symbols, nop_image, peek, poke, run_top
 
-INSTR_MEM_BASE = 0x8000_0000
-INSTR_MEM_SIZE = 0x0400_0000
-DATA_MEM_BASE = 0x1000_0000
 
 CONFIG = 0x1000_0000
 DATA_A = 0x1000_0100
@@ -268,80 +261,8 @@ WARL_EXPECTED = {
 }
 
 
-def _find_repo_root() -> Path:
-    cur = Path.cwd()
-    while not (cur / "rtl").exists():
-        if cur.parent == cur:
-            raise FileNotFoundError("Could not locate repo root (no rtl/ directory found)")
-        cur = cur.parent
-    return cur
-
-
 def _build_dir() -> Path:
     return Path(os.environ.get("TRIGGERS_BUILD", Path.cwd() / "build" / "triggers"))
-
-
-def assemble(build_dir: Path) -> None:
-    build_dir.mkdir(parents=True, exist_ok=True)
-    src = build_dir / "triggers.S"
-    lds = build_dir / "triggers.ld"
-    elf = build_dir / "triggers.elf"
-    src.write_text(PROGRAM)
-    lds.write_text(LINKER_SCRIPT)
-    subprocess.run(
-        [
-            "riscv64-unknown-elf-gcc", "-march=rv32ima_zicsr", "-mabi=ilp32",
-            "-nostdlib", "-ffreestanding", "-Wl,--no-relax", "-Wl,-m,elf32lriscv",
-            "-T", str(lds), str(src), "-o", str(elf),
-        ],
-        check=True,
-    )
-    subprocess.run(["riscv64-unknown-elf-objcopy", "-O", "binary", str(elf), str(build_dir / "image.bin")], check=True)
-    symbols = _elf32_symbols(elf.read_bytes())
-    (build_dir / "symbols.txt").write_text("".join(f"{value:08x} {name}\n" for name, value in sorted(symbols.items())))
-    (build_dir / "nop.hex").write_text("@00000000\n" + "00000013 00000013 00000013 00000013\n" * 128)
-
-
-def _elf32_symbols(elf: bytes) -> dict:
-    assert elf[:4] == b"\x7fELF" and elf[4] == 1 and elf[5] == 1, "expected a little-endian ELF32 file"
-    e_shoff, = struct.unpack_from("<I", elf, 32)
-    e_shentsize, e_shnum = struct.unpack_from("<HH", elf, 46)
-    sections = [struct.unpack_from("<IIIIIIIIII", elf, e_shoff + i * e_shentsize) for i in range(e_shnum)]
-    table = {}
-    for _, sh_type, _, _, offset, size, link, _, _, entsize in sections:
-        if sh_type != 2:  # SHT_SYMTAB
-            continue
-        strtab_offset = sections[link][4]
-        for pos in range(offset, offset + size, entsize):
-            st_name, st_value = struct.unpack_from("<II", elf, pos)
-            if st_name:
-                end = elf.index(b"\x00", strtab_offset + st_name)
-                table[elf[strtab_offset + st_name:end].decode()] = st_value
-    return table
-
-
-def _load_symbols(build_dir: Path) -> dict:
-    table = {}
-    for line in (build_dir / "symbols.txt").read_text().splitlines():
-        value, name = line.split()
-        table[name] = int(value, 16)
-    return table
-
-
-def _phys_word_index(addr: int) -> int:
-    if INSTR_MEM_BASE <= addr < INSTR_MEM_BASE + INSTR_MEM_SIZE:
-        return (addr - INSTR_MEM_BASE) // 4
-    if addr >= DATA_MEM_BASE:
-        return (INSTR_MEM_SIZE + (addr - DATA_MEM_BASE)) // 4
-    raise AssertionError(f"Unsupported physical address 0x{addr:08x}")
-
-
-def _poke(dut, addr: int, value: int) -> None:
-    dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value = value & 0xFFFF_FFFF
-
-
-def _peek(dut, addr: int) -> int:
-    return read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
 
 
 async def run_case(dut, entry, privilege, medeleg, tdata1_0, tdata2_0, tdata1_1, tdata2_1, enable, limit=3000):
@@ -350,18 +271,18 @@ async def run_case(dut, entry, privilege, medeleg, tdata1_0, tdata2_0, tdata1_1,
     dut.external_interrupt.value = 0
     dut.uart_rx.value = 1
     for offset, value in enumerate((privilege, medeleg, tdata1_0, tdata2_0, tdata1_1, tdata2_1, enable)):
-        _poke(dut, CONFIG + 4 * offset, value)
-    _poke(dut, DATA_A, DATA_A_VALUE)
-    _poke(dut, DATA_B, DATA_B_VALUE)
-    _poke(dut, DATA_C, DATA_C_VALUE)
+        poke(dut, CONFIG + 4 * offset, value)
+    poke(dut, DATA_A, DATA_A_VALUE)
+    poke(dut, DATA_B, DATA_B_VALUE)
+    poke(dut, DATA_C, DATA_C_VALUE)
     for offset in range(0, 0x40, 4):
-        _poke(dut, RESULT + offset, 0)
+        poke(dut, RESULT + offset, 0)
     for offset in range(0, 16 * LOG_SLOTS, 4):
-        _poke(dut, LOG + offset, 0)
-    _poke(dut, LOG_COUNT, 0)
-    _poke(dut, DONE_ADDR, 0)
+        poke(dut, LOG + offset, 0)
+    poke(dut, LOG_COUNT, 0)
+    poke(dut, DONE_ADDR, 0)
     # The entry point is patched into the jump at the end of _start's setup.
-    _poke(dut, CONFIG + 28, entry)
+    poke(dut, CONFIG + 28, entry)
     await ClockCycles(dut.clk, 2)
     dut.rst.value = 0
 
@@ -374,10 +295,10 @@ async def run_case(dut, entry, privilege, medeleg, tdata1_0, tdata2_0, tdata1_1,
             done = True
             break
     await RisingEdge(dut.clk)
-    count = _peek(dut, LOG_COUNT)
+    count = peek(dut, LOG_COUNT)
     log = [
-        (chr(_peek(dut, LOG + 16 * i)), _peek(dut, LOG + 16 * i + 4),
-         _peek(dut, LOG + 16 * i + 8), _peek(dut, LOG + 16 * i + 12))
+        (chr(peek(dut, LOG + 16 * i)), peek(dut, LOG + 16 * i + 4),
+         peek(dut, LOG + 16 * i + 8), peek(dut, LOG + 16 * i + 12))
         for i in range(min(count, LOG_SLOTS))
     ]
     return done, count, log
@@ -390,12 +311,12 @@ def _fmt(log):
 @cocotb.test()
 async def test_trigger_matches(dut):
     build_dir = _build_dir()
-    symbols = _load_symbols(build_dir)
+    symbols = load_symbols(build_dir)
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     image = (build_dir / "image.bin").read_bytes()
     image += b"\x00" * (-len(image) % 4)
     for offset in range(0, len(image), 4):
-        _poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(image[offset:offset + 4], "little"))
+        poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(image[offset:offset + 4], "little"))
 
     failures = []
     for name, privilege, medeleg, td1_0, td2_0, td1_1, td2_1, enable, expected_named, results in CASES:
@@ -411,7 +332,7 @@ async def test_trigger_matches(dut):
         if count != len(expected) or log != expected:
             problems.append(f"trap log {_fmt(log)} (count {count}), expected {_fmt(expected)}")
         for offset, want in results.items():
-            got = _peek(dut, RESULT + offset)
+            got = peek(dut, RESULT + offset)
             if got != want:
                 problems.append(f"result +{offset} = 0x{got:08x}, expected 0x{want:08x}")
         # A triggered store or AMO must not reach memory; an untriggered one must.
@@ -419,12 +340,12 @@ async def test_trigger_matches(dut):
         amo_hit = any(label == "bad_amo" for *_, label in expected_named)
         want_b = DATA_B_VALUE if store_hit else STORE_VALUE
         want_c = DATA_C_VALUE if amo_hit else (DATA_C_VALUE + STORE_VALUE) & 0xFFFF_FFFF
-        if _peek(dut, DATA_B) != want_b:
-            problems.append(f"data B = 0x{_peek(dut, DATA_B):08x}, expected 0x{want_b:08x}")
-        if _peek(dut, DATA_C) != want_c:
-            problems.append(f"data C = 0x{_peek(dut, DATA_C):08x}, expected 0x{want_c:08x}")
-        if _peek(dut, DATA_A) != DATA_A_VALUE:
-            problems.append(f"data A changed: 0x{_peek(dut, DATA_A):08x}")
+        if peek(dut, DATA_B) != want_b:
+            problems.append(f"data B = 0x{peek(dut, DATA_B):08x}, expected 0x{want_b:08x}")
+        if peek(dut, DATA_C) != want_c:
+            problems.append(f"data C = 0x{peek(dut, DATA_C):08x}, expected 0x{want_c:08x}")
+        if peek(dut, DATA_A) != DATA_A_VALUE:
+            problems.append(f"data A changed: 0x{peek(dut, DATA_A):08x}")
         dut._log.info(f"{name}: {'OK' if not problems else '; '.join(problems)}")
         if problems:
             failures.append(f"{name}: {'; '.join(problems)}")
@@ -434,19 +355,19 @@ async def test_trigger_matches(dut):
 @cocotb.test()
 async def test_trigger_csrs_are_warl(dut):
     build_dir = _build_dir()
-    symbols = _load_symbols(build_dir)
+    symbols = load_symbols(build_dir)
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     image = (build_dir / "image.bin").read_bytes()
     image += b"\x00" * (-len(image) % 4)
     for offset in range(0, len(image), 4):
-        _poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(image[offset:offset + 4], "little"))
+        poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(image[offset:offset + 4], "little"))
 
     done, count, log = await run_case(dut, symbols["warl_body"], M, 0, NO_TRIGGER, 0, NO_TRIGGER, 0, 1)
     problems = []
     if not done:
         problems.append("did not finish")
     for offset, want in WARL_EXPECTED.items():
-        got = _peek(dut, RESULT + offset)
+        got = peek(dut, RESULT + offset)
         if got != want:
             problems.append(f"read-back +{offset} = 0x{got:08x}, expected 0x{want:08x}")
     # tinfo is not implemented, so reading it raises an illegal instruction (as on Spike).
@@ -457,16 +378,15 @@ async def test_trigger_csrs_are_warl(dut):
     assert not problems, "; ".join(problems)
 
 
-
 @cocotb.test()
 async def test_ebreak_reports_its_address(dut):
     build_dir = _build_dir()
-    symbols = _load_symbols(build_dir)
+    symbols = load_symbols(build_dir)
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     image = (build_dir / "image.bin").read_bytes()
     image += b"\x00" * (-len(image) % 4)
     for offset in range(0, len(image), 4):
-        _poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(image[offset:offset + 4], "little"))
+        poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(image[offset:offset + 4], "little"))
 
     failures = []
     for name, privilege, medeleg, handler in EBREAK_CASES:
@@ -478,33 +398,13 @@ async def test_ebreak_reports_its_address(dut):
     assert not failures, " | ".join(failures)
 
 def runCocotbTests():
-    repo_root = _find_repo_root()
-    rtl_dir = repo_root / "rtl"
-    sources = [str(p) for p in sorted(rtl_dir.rglob("*.v"))]
     build_dir = _build_dir()
-    assemble(build_dir)
+    assemble(build_dir, "triggers", PROGRAM, LINKER_SCRIPT)
 
-    sim_build = Path.cwd() / "sim_build" / "sim_build_triggers"
-    if sim_build.exists():
-        shutil.rmtree(sim_build)
-
-    run(
-        verilog_sources=sources,
-        toplevel="top",
-        module="test_triggers",
-        includes=[str(rtl_dir / "include")],
-        simulator="verilator",
-        timescale="1ns/1ps",
-        defines=[f'INSTR_HEX_FILE="{build_dir / "nop.hex"}"'],
-        sim_build=str(sim_build),
-        force_compile=True,
-        extra_env={
-            "TOPLEVEL": "top",
-            "MODULE": "test_triggers",
-            "COCOTB_TOPLEVEL": "top",
-            "COCOTB_TEST_MODULES": "test_triggers",
-            "TRIGGERS_BUILD": str(build_dir.resolve()),
-        },
+    run_top(
+        "test_triggers",
+        boot_image=nop_image(),
+        extra_env={"TRIGGERS_BUILD": str(build_dir.resolve())},
     )
 
 

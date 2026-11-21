@@ -1,12 +1,10 @@
 """Focused NS16550 receive-FIFO regression tests."""
 
-import shutil
-from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge, Timer
-from cocotb_test.simulator import run
+from support import run_unit
 
 
 UART_BASE = 0x2000_0000
@@ -16,15 +14,6 @@ UART_IER = UART_BASE + 0x04
 UART_FCR = UART_BASE + 0x08
 UART_IIR = UART_BASE + 0x08
 UART_LSR = UART_BASE + 0x14
-
-
-def _repo_root() -> Path:
-    root = Path.cwd()
-    while not (root / "rtl").is_dir():
-        if root.parent == root:
-            raise FileNotFoundError("rtl directory not found")
-        root = root.parent
-    return root
 
 
 async def _write(dut, addr, value):
@@ -109,23 +98,8 @@ async def test_rx_fifo_preserves_burst_order(dut):
 
 
 def runCocotbTests():
-    root = _repo_root()
-    build = Path.cwd() / "sim_build_uart_rx_fifo"
-    if build.exists():
-        shutil.rmtree(build)
-    run(
-        verilog_sources=[str(root / "rtl" / "core_modules" / "uart.v")],
-        toplevel="uart",
-        module="test_uart_rx_fifo",
-        testcase="test_rx_fifo_preserves_burst_order",
-        includes=[str(root / "rtl" / "include")],
-        simulator="verilator",
-        compile_args=["-Wno-SYMRSVDWORD"],
-        timescale="1ns/1ps",
-        sim_build=str(build),
-        force_compile=True,
-    )
-
+    run_unit("uart", "test_uart_rx_fifo", ["rtl/core_modules/uart.v"], testcase="test_rx_fifo_preserves_burst_order",
+             compile_args=["-Wno-SYMRSVDWORD"])
 
 if __name__ == "__main__":
     runCocotbTests()

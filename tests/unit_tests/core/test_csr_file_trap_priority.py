@@ -1,21 +1,10 @@
 """CSR-file regressions for trap ordering and unimplemented PMP behavior."""
 
-import shutil
-from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge, Timer
-from cocotb_test.simulator import run
-
-
-def _repo_root() -> Path:
-    root = Path.cwd()
-    while not (root / "rtl").is_dir():
-        if root.parent == root:
-            raise FileNotFoundError("rtl directory not found")
-        root = root.parent
-    return root
+from support import run_unit
 
 
 def _clear_inputs(dut):
@@ -74,21 +63,8 @@ async def test_page_fault_wins_and_pmp_is_hardwired_off(dut):
 
 
 def runCocotbTests():
-    root = _repo_root()
-    build = Path.cwd() / "sim_build_csr_file_trap_priority"
-    if build.exists():
-        shutil.rmtree(build)
-    run(
-        verilog_sources=[str(root / "rtl" / "core_modules" / "csr_file.v")],
-        toplevel="csr_file",
-        module="test_csr_file_trap_priority",
-        testcase="test_page_fault_wins_and_pmp_is_hardwired_off",
-        simulator="verilator",
-        timescale="1ns/1ps",
-        sim_build=str(build),
-        force_compile=True,
-    )
-
+    run_unit("csr_file", "test_csr_file_trap_priority", ["rtl/core_modules/csr_file.v"],
+             testcase="test_page_fault_wins_and_pmp_is_hardwired_off")
 
 if __name__ == "__main__":
     runCocotbTests()

@@ -1,19 +1,14 @@
 """Each mip bit follows its own source whatever mideleg says (privileged spec 3.1.9), as OpenSBI expects."""
 
 import os
-import shutil
 import subprocess
 from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, FallingEdge, ReadOnly, RisingEdge
-from cocotb_test.simulator import run
-from memory_view import read_word
+from support import INSTR_MEM_BASE, nop_image, peek, poke, run_top
 
-INSTR_MEM_BASE = 0x8000_0000
-INSTR_MEM_SIZE = 0x0400_0000
-DATA_MEM_BASE = 0x1000_0000
 MTIMECMP_LO = 0x0200_4000
 PLIC_PRIORITY_2 = 0x0C00_0008
 PLIC_ENABLE_S = 0x0C00_2080
@@ -188,15 +183,6 @@ SECTIONS {{
 """
 
 
-def _find_repo_root() -> Path:
-    cur = Path.cwd()
-    while not (cur / "rtl").exists():
-        if cur.parent == cur:
-            raise FileNotFoundError("Could not locate repo root (no rtl/ directory found)")
-        cur = cur.parent
-    return cur
-
-
 def _build_dir() -> Path:
     return Path(os.environ.get("ROUTING_BUILD", Path.cwd() / "build" / "interrupt_routing"))
 
@@ -218,24 +204,6 @@ def assemble(build_dir: Path) -> None:
     )
     subprocess.run(["riscv64-unknown-elf-objcopy", "-O", "binary", str(elf), str(build_dir / "routing.bin")],
                    check=True)
-    (build_dir / "nop.hex").write_text("@00000000\n" + "00000013 00000013 00000013 00000013\n" * 128)
-
-
-def _phys_word_index(addr: int) -> int:
-    if INSTR_MEM_BASE <= addr < INSTR_MEM_BASE + INSTR_MEM_SIZE:
-        return (addr - INSTR_MEM_BASE) // 4
-    if addr >= DATA_MEM_BASE:
-        return (INSTR_MEM_SIZE + (addr - DATA_MEM_BASE)) // 4
-    raise AssertionError(f"Unsupported physical address 0x{addr:08x}")
-
-
-def _poke(dut, addr: int, value: int) -> None:
-    dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value = value & 0xFFFF_FFFF
-
-
-def _peek(dut, addr: int) -> int:
-    """What the program sees at addr."""
-    return read_word(dut, _phys_word_index(addr))
 
 
 def _name() -> str:
@@ -253,11 +221,11 @@ async def test_each_mip_bit_follows_its_own_source(dut):
     data = (_build_dir() / "routing.bin").read_bytes()
     data += b"\x00" * (-len(data) % 4)
     for offset in range(0, len(data), 4):
-        _poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(data[offset:offset + 4], "little"))
+        poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(data[offset:offset + 4], "little"))
     for offset in range(0, 4 * RESULT_WORDS, 4):
-        _poke(dut, RESULT + offset, UNTOUCHED)
+        poke(dut, RESULT + offset, UNTOUCHED)
     for addr in (DONE_ADDR, TRAP_CAUSE, TRAP_EPC, IRQ_COUNT):
-        _poke(dut, addr, 0)
+        poke(dut, addr, 0)
     await ClockCycles(dut.clk, 2)
     dut.rst.value = 0
 
@@ -276,52 +244,32 @@ async def test_each_mip_bit_follows_its_own_source(dut):
             addr = int(dut.cpu_inst.module_write_addr.value)
             raise_pin = raise_pin or addr == READY_ADDR
             lower_pin = lower_pin or addr == ACK_ADDR
-        if _peek(dut, DONE_ADDR) == DONE_VALUE:
+        if peek(dut, DONE_ADDR) == DONE_VALUE:
             done = True
             break
     await RisingEdge(dut.clk)
     dut.external_interrupt.value = 0
 
-    wrong = [f"{what}: 0x{_peek(dut, RESULT + slot):08x}, expected 0x{value:08x}"
-             for slot, (what, value) in EXPECTED.items() if _peek(dut, RESULT + slot) != value]
+    wrong = [f"{what}: 0x{peek(dut, RESULT + slot):08x}, expected 0x{value:08x}"
+             for slot, (what, value) in EXPECTED.items() if peek(dut, RESULT + slot) != value]
     assert done, f"{_name()}: the program did not finish; so far: " + ("; ".join(wrong) or "all checks match")
-    cause = _peek(dut, TRAP_CAUSE)
-    assert cause == 0, f"{_name()}: unexpected trap, mcause 0x{cause:08x} at 0x{_peek(dut, TRAP_EPC):08x}"
+    cause = peek(dut, TRAP_CAUSE)
+    assert cause == 0, f"{_name()}: unexpected trap, mcause 0x{cause:08x} at 0x{peek(dut, TRAP_EPC):08x}"
     assert not wrong, f"{_name()}: " + "; ".join(wrong)
-    count = _peek(dut, IRQ_COUNT)
+    count = peek(dut, IRQ_COUNT)
     assert count == 1, f"{_name()}: {count} timer interrupts taken, expected one"
 
 
 def runCocotbTests():
-    repo_root = _find_repo_root()
-    rtl_dir = repo_root / "rtl"
-    sources = [str(p) for p in sorted(rtl_dir.rglob("*.v"))]
     build_dir = _build_dir()
     assemble(build_dir)
 
     for latency in LATENCIES:
-        sim_build = Path.cwd() / "sim_build" / f"sim_build_interrupt_routing_lat{latency}"
-        if sim_build.exists():
-            shutil.rmtree(sim_build)
-        run(
-            verilog_sources=sources,
-            toplevel="top",
-            module="test_interrupt_routing",
+        run_top(
+            "test_interrupt_routing",
             parameters={"MEM_LATENCY": latency, "FETCH_LATENCY": latency},
-            includes=[str(rtl_dir / "include")],
-            simulator="verilator",
-            timescale="1ns/1ps",
-            defines=[f'INSTR_HEX_FILE="{build_dir / "nop.hex"}"'],
-            sim_build=str(sim_build),
-            force_compile=True,
-            extra_env={
-                "TOPLEVEL": "top",
-                "MODULE": "test_interrupt_routing",
-                "COCOTB_TOPLEVEL": "top",
-                "COCOTB_TEST_MODULES": "test_interrupt_routing",
-                "ROUTING_BUILD": str(build_dir.resolve()),
-                "ROUTING_LATENCY": str(latency),
-            },
+            boot_image=nop_image(),
+            extra_env={"ROUTING_BUILD": str(build_dir.resolve()), "ROUTING_LATENCY": str(latency)},
         )
 
 

@@ -14,19 +14,14 @@ remains the only proof of the guard itself.
 
 import json
 import os
-import shutil
 import subprocess
 from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
-from cocotb_test.simulator import run
-from memory_view import read_word
+from support import DATA_MEM_BASE, INSTR_MEM_BASE, nop_image, peek, poke, pte, run_top
 
-INSTR_MEM_BASE = 0x8000_0000
-INSTR_MEM_SIZE = 0x0400_0000
-DATA_MEM_BASE = 0x1000_0000
 
 RESULT = 0x1000_0200
 DONE_ADDR = 0x1000_0400
@@ -62,10 +57,6 @@ TAIL_OFFSET = 0xFF4
 # Higher latencies move where the fence lands inside the walk.
 LATENCIES = [0, 1, 2, 4]
 WALK_IDLE = 0
-
-
-def _pte(pa: int, flags: int) -> int:
-    return ((pa >> 12) << 10) | flags
 
 
 def _page_b(marker: int) -> str:
@@ -172,15 +163,6 @@ SECTIONS {{
 """
 
 
-def _find_repo_root() -> Path:
-    cur = Path.cwd()
-    while not (cur / "rtl").exists():
-        if cur.parent == cur:
-            raise FileNotFoundError("Could not locate repo root (no rtl/ directory found)")
-        cur = cur.parent
-    return cur
-
-
 def _build_dir() -> Path:
     return Path(os.environ.get("WALK_FLUSH_BUILD", Path.cwd() / "build" / "walk_flush"))
 
@@ -204,48 +186,31 @@ def assemble(build_dir: Path) -> None:
         ["riscv64-unknown-elf-objcopy", "-O", "binary", str(elf), str(build_dir / "image.bin")],
         check=True,
     )
-    (build_dir / "nop.hex").write_text("@00000000\n" + "00000013 00000013 00000013 00000013\n" * 128)
-
-
-def _phys_word_index(addr: int) -> int:
-    if INSTR_MEM_BASE <= addr < INSTR_MEM_BASE + INSTR_MEM_SIZE:
-        return (addr - INSTR_MEM_BASE) // 4
-    if addr >= DATA_MEM_BASE:
-        return (INSTR_MEM_SIZE + (addr - DATA_MEM_BASE)) // 4
-    raise AssertionError(f"Unsupported physical address 0x{addr:08x}")
-
-
-def _poke(dut, addr: int, value: int) -> None:
-    dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value = value & 0xFFFF_FFFF
-
-
-def _peek(dut, addr: int) -> int:
-    return read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
 
 
 def _load(dut, build_dir: Path) -> None:
     image = (build_dir / "image.bin").read_bytes()
     image += b"\x00" * (-len(image) % 4)
     for offset in range(0, len(image), 4):
-        _poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(image[offset:offset + 4], "little"))
+        poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(image[offset:offset + 4], "little"))
     for offset in range(0, 0x1000, 4):
-        _poke(dut, ROOT_TABLE + offset, 0)
-        _poke(dut, L0_TABLE_OLD + offset, 0)
-        _poke(dut, L0_TABLE_NEW + offset, 0)
-    _poke(dut, ROOT_TABLE + 4 * (INSTR_MEM_BASE >> 22), _pte(INSTR_MEM_BASE, RWX))
-    _poke(dut, ROOT_TABLE + 4 * (DATA_MEM_BASE >> 22), _pte(DATA_MEM_BASE, RW))
-    _poke(dut, ROOT_ENTRY_CODE, _pte(L0_TABLE_OLD, V))
+        poke(dut, ROOT_TABLE + offset, 0)
+        poke(dut, L0_TABLE_OLD + offset, 0)
+        poke(dut, L0_TABLE_NEW + offset, 0)
+    poke(dut, ROOT_TABLE + 4 * (INSTR_MEM_BASE >> 22), pte(INSTR_MEM_BASE, RWX))
+    poke(dut, ROOT_TABLE + 4 * (DATA_MEM_BASE >> 22), pte(DATA_MEM_BASE, RW))
+    poke(dut, ROOT_ENTRY_CODE, pte(L0_TABLE_OLD, V))
     # The two level-0 tables map page A identically and page B differently.
     for table, page_b_pa in ((L0_TABLE_OLD, PAGE_B_OLD_PA), (L0_TABLE_NEW, PAGE_B_NEW_PA)):
-        _poke(dut, table + 4 * ((PAGE_A_VA >> 12) & 0x3FF), _pte(PAGE_A_PA, RX))
-        _poke(dut, table + 4 * ((PAGE_B_VA >> 12) & 0x3FF), _pte(page_b_pa, RX))
-    _poke(dut, SCRATCH_STORE, 0)
-    _poke(dut, NEW_PTE_SLOT, _pte(L0_TABLE_NEW, V))
-    _poke(dut, RESULT, 0)
-    _poke(dut, DONE_ADDR, 0)
-    _poke(dut, TRAP_COUNT, 0)
+        poke(dut, table + 4 * ((PAGE_A_VA >> 12) & 0x3FF), pte(PAGE_A_PA, RX))
+        poke(dut, table + 4 * ((PAGE_B_VA >> 12) & 0x3FF), pte(page_b_pa, RX))
+    poke(dut, SCRATCH_STORE, 0)
+    poke(dut, NEW_PTE_SLOT, pte(L0_TABLE_NEW, V))
+    poke(dut, RESULT, 0)
+    poke(dut, DONE_ADDR, 0)
+    poke(dut, TRAP_COUNT, 0)
     for offset in range(0, 0x80, 4):
-        _poke(dut, TRAP_LOG + offset, 0)
+        poke(dut, TRAP_LOG + offset, 0)
 
 
 @cocotb.test()
@@ -292,9 +257,9 @@ async def test_a_fence_during_a_walk_does_not_leave_a_stale_translation(dut):
             break
     await RisingEdge(dut.clk)
 
-    marker = _peek(dut, RESULT)
-    traps = _peek(dut, TRAP_COUNT)
-    log = [tuple(_peek(dut, TRAP_LOG + 16 * i + 4 * k) for k in range(3)) for i in range(min(traps, 6))]
+    marker = peek(dut, RESULT)
+    traps = peek(dut, TRAP_COUNT)
+    log = [tuple(peek(dut, TRAP_LOG + 16 * i + 4 * k) for k in range(3)) for i in range(min(traps, 6))]
     dut._log.info(
         f"latency {latency}: marker 0x{marker:08x}, {pte_reads} PTE reads, {flushes} fences, "
         f"{flush_during_walk} of them during a walk ({flush_after_first_read} after that walk had "
@@ -349,37 +314,17 @@ async def test_the_sweep_actually_fenced_during_a_walk(dut):
 
 
 def runCocotbTests():
-    repo_root = _find_repo_root()
-    rtl_dir = repo_root / "rtl"
-    sources = [str(p) for p in sorted(rtl_dir.rglob("*.v"))]
     build_dir = _build_dir()
     assemble(build_dir)
     for stale in build_dir.glob("coverage_lat*.json"):
         stale.unlink()
 
     for latency in LATENCIES:
-        sim_build = Path.cwd() / "sim_build" / f"sim_build_walk_flush_lat{latency}"
-        if sim_build.exists():
-            shutil.rmtree(sim_build)
-        run(
-            verilog_sources=sources,
-            toplevel="top",
-            module="test_walk_flush",
+        run_top(
+            "test_walk_flush",
             parameters={"MEM_LATENCY": latency},
-            includes=[str(rtl_dir / "include")],
-            simulator="verilator",
-            timescale="1ns/1ps",
-            defines=[f'INSTR_HEX_FILE="{build_dir / "nop.hex"}"'],
-            sim_build=str(sim_build),
-            force_compile=True,
-            extra_env={
-                "TOPLEVEL": "top",
-                "MODULE": "test_walk_flush",
-                "COCOTB_TOPLEVEL": "top",
-                "COCOTB_TEST_MODULES": "test_walk_flush",
-                "WALK_FLUSH_BUILD": str(build_dir.resolve()),
-                "WALK_FLUSH_LATENCY": str(latency),
-            },
+            boot_image=nop_image(),
+            extra_env={"WALK_FLUSH_BUILD": str(build_dir.resolve()), "WALK_FLUSH_LATENCY": str(latency)},
         )
 
 

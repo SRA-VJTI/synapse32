@@ -1,25 +1,10 @@
 """Verify unified_mem writes bytes into the correct word across word boundaries."""
 
-import os
-import shutil
-from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
-from cocotb_test.simulator import run
-
-
-INSTR_MEM_BASE = 0x8000_0000
-
-
-def _find_repo_root() -> Path:
-    cur = Path.cwd()
-    while not (cur / "rtl").exists():
-        if cur.parent == cur:
-            raise FileNotFoundError("Could not locate repo root (no rtl/ directory found)")
-        cur = cur.parent
-    return cur
+from support import INSTR_MEM_BASE, run_unit
 
 
 @cocotb.test()
@@ -74,29 +59,8 @@ async def test_cross_word_store_updates_next_word(dut):
 
 
 def runCocotbTests():
-    repo_root = _find_repo_root()
-    rtl_dir = repo_root / "rtl"
-    incl_dir = repo_root / "rtl" / "include"
-
-    sources = [str(rtl_dir / "unified_mem.v")]
-
-    sim_build = Path.cwd() / "sim_build" / "sim_build_unified_mem_cross_word_store"
-    if sim_build.exists():
-        shutil.rmtree(sim_build)
-
-    run(
-        verilog_sources=sources,
-        toplevel="unified_mem",
-        module="test_unified_mem_cross_word_store",
-        testcase="test_cross_word_store_updates_next_word",
-        includes=[str(incl_dir)],
-        simulator="verilator",
-        compile_args=["-Wno-WIDTHTRUNC"],
-        timescale="1ns/1ps",
-        sim_build=str(sim_build),
-        force_compile=True,
-    )
-
+    run_unit("unified_mem", "test_unified_mem_cross_word_store", ["rtl/unified_mem.v"],
+             testcase="test_cross_word_store_updates_next_word", compile_args=["-Wno-WIDTHTRUNC"])
 
 if __name__ == "__main__":
     runCocotbTests()

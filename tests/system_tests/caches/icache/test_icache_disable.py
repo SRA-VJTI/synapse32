@@ -2,8 +2,8 @@
 
 import cocotb
 from cocotb.triggers import ReadOnly, RisingEdge
+from support import run_program, run_tests
 
-from cpu_program import run_program, run_tests
 
 LATENCY = 2
 LOOPS = 20

@@ -6,23 +6,14 @@ These loops were extracted from the repeatedly executed Linux region around
 exercise taken back-edges plus byte loads and stores (`lbu`/`sb`).
 """
 
-import os
 import random
-import shutil
-from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge
-from cocotb_test.simulator import run
-from memory_view import read_word
+from support import DATA_MEM_BASE, NOP, read_word, run_top, word_index
 
 
-INSTR_MEM_BASE = 0x8000_0000
-INSTR_MEM_SIZE = 0x0400_0000
-DATA_MEM_BASE = 0x1000_0000
-
-NOP = 0x00000013
 NUM_TRIALS = 25
 
 # Linux loop at 0xc02555e0..0xc025564c.
@@ -41,15 +32,6 @@ STORE_BYTES_LOOP = [
     0x00860613, 0x01C78123, 0x006781A3, 0x011782A3, 0x01078323, 0x00A783A3,
     0x00858593, 0xFBE61AE3,
 ]
-
-
-def _find_repo_root() -> Path:
-    cur = Path.cwd()
-    while not (cur / "rtl").exists():
-        if cur.parent == cur:
-            raise FileNotFoundError("Could not locate repo root (no rtl/ directory found)")
-        cur = cur.parent
-    return cur
 
 
 def _sign_extend(value: int, bits: int) -> int:
@@ -87,14 +69,6 @@ def _branch_imm(instr: int) -> int:
         | ((instr >> 8) & 0xF) << 1
     )
     return _sign_extend(imm, 13)
-
-
-def _phys_word_index(addr: int) -> int:
-    if INSTR_MEM_BASE <= addr < (INSTR_MEM_BASE + INSTR_MEM_SIZE):
-        return (addr - INSTR_MEM_BASE) // 4
-    if addr >= DATA_MEM_BASE:
-        return (INSTR_MEM_SIZE + (addr - DATA_MEM_BASE)) // 4
-    raise AssertionError(f"Unsupported physical address for test: 0x{addr:08x}")
 
 
 def _seed_words(memory: dict[int, int], start: int, end: int, rng: random.Random) -> set[int]:
@@ -228,7 +202,7 @@ async def _load_trial_state(dut, program: list[int], regs: list[int], mem: dict[
         dut.unified_mem_inst.instr_ram[idx].value = word
 
     for addr, value in mem.items():
-        dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value = value
+        dut.unified_mem_inst.instr_ram[word_index(addr)].value = value
 
     for reg_idx, value in enumerate(regs):
         dut.cpu_inst.rf_inst0.register_file[reg_idx].value = value
@@ -278,7 +252,7 @@ async def test_linux_byte_loops_match_model(dut):
             )
 
             for addr in sorted(watched_words):
-                actual = read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
+                actual = read_word(dut, word_index(addr)) & 0xFFFF_FFFF
                 expected = expected_mem.get(addr, 0) & 0xFFFF_FFFF
                 assert actual == expected, (
                     f"{scenario_name} memory mismatch on seed {seed} at 0x{addr:08x}: "
@@ -287,31 +261,7 @@ async def test_linux_byte_loops_match_model(dut):
 
 
 def runCocotbTests():
-    repo_root = _find_repo_root()
-    rtl_dir = repo_root / "rtl"
-    incl_dir = rtl_dir / "include"
-
-    sources = []
-    for root, _, files in os.walk(rtl_dir):
-        for file in files:
-            if file.endswith((".v", ".sv")):
-                sources.append(os.path.join(root, file))
-
-    sim_build = Path.cwd() / "sim_build" / "sim_build_byte_load_store_loops"
-    if sim_build.exists():
-        shutil.rmtree(sim_build)
-
-    run(
-        verilog_sources=sources,
-        toplevel="top",
-        module="test_byte_load_store_loops",
-        testcase="test_linux_byte_loops_match_model",
-        includes=[str(incl_dir)],
-        simulator="verilator",
-        timescale="1ns/1ps",
-        sim_build=str(sim_build),
-        force_compile=True,
-    )
+    run_top("test_byte_load_store_loops", testcase="test_linux_byte_loops_match_model")
 
 
 if __name__ == "__main__":

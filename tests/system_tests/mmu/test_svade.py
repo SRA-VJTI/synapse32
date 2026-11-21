@@ -7,20 +7,13 @@ succeed with the value preloaded into the page.
 """
 
 import os
-import shutil
-import struct
-import subprocess
 from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
-from cocotb_test.simulator import run
-from memory_view import read_word
+from support import DATA_MEM_BASE, INSTR_MEM_BASE, assemble, load_symbols, nop_image, peek, poke, pte, run_top
 
-INSTR_MEM_BASE = 0x8000_0000
-INSTR_MEM_SIZE = 0x0400_0000
-DATA_MEM_BASE = 0x1000_0000
 
 CONFIG = 0x1000_0000
 LOG = 0x1000_0300
@@ -64,10 +57,6 @@ RESULTS = 0x1000_3000 + 16
 
 def _va(index: int, offset: int = 0) -> int:
     return BODY_VA + (index << 12) + offset
-
-
-def _pte(pa: int, flags: int) -> int:
-    return ((pa >> 12) << 10) | flags
 
 
 PROGRAM = f"""
@@ -242,85 +231,13 @@ SECTIONS {{
 """
 
 
-def _find_repo_root() -> Path:
-    cur = Path.cwd()
-    while not (cur / "rtl").exists():
-        if cur.parent == cur:
-            raise FileNotFoundError("Could not locate repo root (no rtl/ directory found)")
-        cur = cur.parent
-    return cur
-
-
 def _build_dir() -> Path:
     return Path(os.environ.get("SVADE_BUILD", Path.cwd() / "build" / "svade"))
 
 
-def assemble(build_dir: Path) -> None:
-    build_dir.mkdir(parents=True, exist_ok=True)
-    src = build_dir / "svade.S"
-    lds = build_dir / "svade.ld"
-    elf = build_dir / "svade.elf"
-    src.write_text(PROGRAM)
-    lds.write_text(LINKER_SCRIPT)
-    subprocess.run(
-        [
-            "riscv64-unknown-elf-gcc", "-march=rv32ima_zicsr", "-mabi=ilp32",
-            "-nostdlib", "-ffreestanding", "-Wl,--no-relax", "-Wl,-m,elf32lriscv",
-            "-T", str(lds), str(src), "-o", str(elf),
-        ],
-        check=True,
-    )
-    subprocess.run(["riscv64-unknown-elf-objcopy", "-O", "binary", str(elf), str(build_dir / "image.bin")], check=True)
-    symbols = _elf32_symbols(elf.read_bytes())
-    (build_dir / "symbols.txt").write_text("".join(f"{value:08x} {name}\n" for name, value in sorted(symbols.items())))
-    (build_dir / "nop.hex").write_text("@00000000\n" + "00000013 00000013 00000013 00000013\n" * 128)
-
-
-def _elf32_symbols(elf: bytes) -> dict:
-    assert elf[:4] == b"\x7fELF" and elf[4] == 1 and elf[5] == 1, "expected a little-endian ELF32 file"
-    e_shoff, = struct.unpack_from("<I", elf, 32)
-    e_shentsize, e_shnum = struct.unpack_from("<HH", elf, 46)
-    sections = [struct.unpack_from("<IIIIIIIIII", elf, e_shoff + i * e_shentsize) for i in range(e_shnum)]
-    table = {}
-    for _, sh_type, _, _, offset, size, link, _, _, entsize in sections:
-        if sh_type != 2:  # SHT_SYMTAB
-            continue
-        strtab_offset = sections[link][4]
-        for pos in range(offset, offset + size, entsize):
-            st_name, st_value = struct.unpack_from("<II", elf, pos)
-            if st_name:
-                end = elf.index(b"\x00", strtab_offset + st_name)
-                table[elf[strtab_offset + st_name:end].decode()] = st_value
-    return table
-
-
-def _load_symbols(build_dir: Path) -> dict:
-    table = {}
-    for line in (build_dir / "symbols.txt").read_text().splitlines():
-        value, name = line.split()
-        table[name] = int(value, 16)
-    return table
-
-
-def _phys_word_index(addr: int) -> int:
-    if INSTR_MEM_BASE <= addr < INSTR_MEM_BASE + INSTR_MEM_SIZE:
-        return (addr - INSTR_MEM_BASE) // 4
-    if addr >= DATA_MEM_BASE:
-        return (INSTR_MEM_SIZE + (addr - DATA_MEM_BASE)) // 4
-    raise AssertionError(f"Unsupported physical address 0x{addr:08x}")
-
-
-def _poke(dut, addr: int, value: int) -> None:
-    dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value = value & 0xFFFF_FFFF
-
-
-def _peek(dut, addr: int) -> int:
-    return read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
-
-
 def _load(dut, image: bytes) -> None:
     for offset in range(0, len(image), 4):
-        _poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(image[offset:offset + 4], "little"))
+        poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(image[offset:offset + 4], "little"))
 
 
 async def run_case(dut, config, limit=20000):
@@ -328,21 +245,21 @@ async def run_case(dut, config, limit=20000):
     dut.software_interrupt.value = 0
     dut.external_interrupt.value = 0
     dut.uart_rx.value = 1
-    _poke(dut, CONFIG, config)
+    poke(dut, CONFIG, config)
     for va, (pa, flags) in MEGAPAGES.items():
-        _poke(dut, PAGE_TABLE + 4 * (va >> 22), _pte(pa, flags))
-    _poke(dut, PAGE_TABLE + 4 * (BODY_VA >> 22), _pte(L0_TABLE, V))
+        poke(dut, PAGE_TABLE + 4 * (va >> 22), pte(pa, flags))
+    poke(dut, PAGE_TABLE + 4 * (BODY_VA >> 22), pte(L0_TABLE, V))
     for index, (pa, flags, value) in PAGES.items():
-        _poke(dut, L0_TABLE + 4 * index, _pte(pa, flags))
+        poke(dut, L0_TABLE + 4 * index, pte(pa, flags))
         if value is not None:
             for offset in range(0, 64, 4):
-                _poke(dut, pa + offset, 0)
-            _poke(dut, pa, value)
-    _poke(dut, DATA_MEM_BASE + SUPER_OFFSET, SUPER_VALUE)
+                poke(dut, pa + offset, 0)
+            poke(dut, pa, value)
+    poke(dut, DATA_MEM_BASE + SUPER_OFFSET, SUPER_VALUE)
     for offset in range(0, 16 * LOG_SLOTS, 4):
-        _poke(dut, LOG + offset, 0)
-    _poke(dut, LOG_COUNT, 0)
-    _poke(dut, DONE_ADDR, 0)
+        poke(dut, LOG + offset, 0)
+    poke(dut, LOG_COUNT, 0)
+    poke(dut, DONE_ADDR, 0)
     await ClockCycles(dut.clk, 2)
     dut.rst.value = 0
 
@@ -355,8 +272,8 @@ async def run_case(dut, config, limit=20000):
             done = True
             break
     await RisingEdge(dut.clk)
-    count = _peek(dut, LOG_COUNT)
-    log = [tuple(_peek(dut, LOG + 16 * i + 4 * k) for k in range(4)) for i in range(min(count, LOG_SLOTS))]
+    count = peek(dut, LOG_COUNT)
+    log = [tuple(peek(dut, LOG + 16 * i + 4 * k) for k in range(4)) for i in range(min(count, LOG_SLOTS))]
     return done, count, log
 
 
@@ -366,7 +283,7 @@ def _fmt(log):
 
 async def _start(dut):
     build_dir = _build_dir()
-    symbols = _load_symbols(build_dir)
+    symbols = load_symbols(build_dir)
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     image = (build_dir / "image.bin").read_bytes()
     image += b"\x00" * (-len(image) % 4)
@@ -381,18 +298,18 @@ async def test_svade_s_mode_fault_and_retry(dut):
     def body_va(label):
         return BODY_VA + (symbols[label] - BODY_PA)
 
-    def pte(index):
-        return _pte(PAGES[index][0], PAGES[index][1])
+    def page_pte(index):
+        return pte(PAGES[index][0], PAGES[index][1])
 
     expected = [
-        (12, BODY_VA, BODY_VA, pte(0)),
-        (13, _va(1), body_va("s_load_a"), pte(1)),
-        (15, _va(1, 4), body_va("s_store_d"), pte(1) | A),
-        (15, _va(2), body_va("s_store_a_set_d_clear"), pte(2)),
-        (15, _va(5), body_va("s_amo"), pte(5)),
-        (15, _va(6), body_va("s_sc"), pte(6)),
-        (13, _va(4), body_va("s_mxr_load"), pte(4)),
-        (13, SUPER_VA + SUPER_OFFSET, body_va("s_super_load"), _pte(DATA_MEM_BASE, V | R | W)),
+        (12, BODY_VA, BODY_VA, page_pte(0)),
+        (13, _va(1), body_va("s_load_a"), page_pte(1)),
+        (15, _va(1, 4), body_va("s_store_d"), page_pte(1) | A),
+        (15, _va(2), body_va("s_store_a_set_d_clear"), page_pte(2)),
+        (15, _va(5), body_va("s_amo"), page_pte(5)),
+        (15, _va(6), body_va("s_sc"), page_pte(6)),
+        (13, _va(4), body_va("s_mxr_load"), page_pte(4)),
+        (13, SUPER_VA + SUPER_OFFSET, body_va("s_super_load"), pte(DATA_MEM_BASE, V | R | W)),
     ]
     done, count, log = await run_case(dut, 0)
     problems = []
@@ -401,29 +318,29 @@ async def test_svade_s_mode_fault_and_retry(dut):
     if count != len(expected) or log != expected:
         problems.append(f"trap log {_fmt(log)} (count {count}), expected {_fmt(expected)}")
 
-    sc_result = _peek(dut, RESULTS + 12)
-    sc_word = _peek(dut, PAGES[6][0])
+    sc_result = peek(dut, RESULTS + 12)
+    sc_word = peek(dut, PAGES[6][0])
     checks = {
-        "load after A fault": (_peek(dut, RESULTS), PAGES[1][2]),
-        "store after D fault": (_peek(dut, PAGES[1][0] + 4), STORE_VALUE),
-        "store with A set, D clear": (_peek(dut, PAGES[2][0]), STORE_VALUE),
-        "load from A/D-set page": (_peek(dut, RESULTS + 4), PAGES[3][2]),
-        "store to A/D-set page": (_peek(dut, PAGES[3][0] + 4), STORE_VALUE),
-        "AMO rd after retry": (_peek(dut, RESULTS + 8), PAGES[5][2]),
-        "AMO memory after retry": (_peek(dut, PAGES[5][0]), PAGES[5][2] + STORE_VALUE),
-        "MXR load after A fault": (_peek(dut, RESULTS + 16), PAGES[4][2]),
-        "megapage load after A fault": (_peek(dut, RESULTS + 20), SUPER_VALUE),
+        "load after A fault": (peek(dut, RESULTS), PAGES[1][2]),
+        "store after D fault": (peek(dut, PAGES[1][0] + 4), STORE_VALUE),
+        "store with A set, D clear": (peek(dut, PAGES[2][0]), STORE_VALUE),
+        "load from A/D-set page": (peek(dut, RESULTS + 4), PAGES[3][2]),
+        "store to A/D-set page": (peek(dut, PAGES[3][0] + 4), STORE_VALUE),
+        "AMO rd after retry": (peek(dut, RESULTS + 8), PAGES[5][2]),
+        "AMO memory after retry": (peek(dut, PAGES[5][0]), PAGES[5][2] + STORE_VALUE),
+        "MXR load after A fault": (peek(dut, RESULTS + 16), PAGES[4][2]),
+        "megapage load after A fault": (peek(dut, RESULTS + 20), SUPER_VALUE),
         # SC may fail after a trap between LR and SC; it must be consistent either way.
         "SC result consistent with memory": (sc_word, STORE_VALUE if sc_result == 0 else PAGES[6][2]),
     }
     problems += [f"{name}: 0x{got:08x}, expected 0x{want:08x}" for name, (got, want) in checks.items() if got != want]
-    final_ptes = {1: pte(1) | A | D, 2: pte(2) | D, 4: pte(4) | A, 5: pte(5) | A | D, 6: pte(6) | D}
+    final_ptes = {1: page_pte(1) | A | D, 2: page_pte(2) | D, 4: page_pte(4) | A, 5: page_pte(5) | A | D, 6: page_pte(6) | D}
     problems += [
-        f"page {i} PTE 0x{_peek(dut, L0_TABLE + 4 * i):08x}, expected 0x{want:08x} (only software sets A/D)"
-        for i, want in final_ptes.items() if _peek(dut, L0_TABLE + 4 * i) != want
+        f"page {i} PTE 0x{peek(dut, L0_TABLE + 4 * i):08x}, expected 0x{want:08x} (only software sets A/D)"
+        for i, want in final_ptes.items() if peek(dut, L0_TABLE + 4 * i) != want
     ]
-    if _peek(dut, L0_TABLE + 12) != pte(3):
-        problems.append(f"A/D-set page PTE changed to 0x{_peek(dut, L0_TABLE + 12):08x}")
+    if peek(dut, L0_TABLE + 12) != page_pte(3):
+        problems.append(f"A/D-set page PTE changed to 0x{peek(dut, L0_TABLE + 12):08x}")
     for line in problems:
         dut._log.error(line)
     assert not problems, "; ".join(problems)
@@ -433,8 +350,8 @@ async def test_svade_s_mode_fault_and_retry(dut):
 async def test_svade_mprv(dut):
     symbols = await _start(dut)
     expected = [
-        (13, _va(1), symbols["bad_m_0"], _pte(*PAGES[1][:2])),
-        (15, _va(2), symbols["bad_m_1"], _pte(*PAGES[2][:2])),
+        (13, _va(1), symbols["bad_m_0"], pte(*PAGES[1][:2])),
+        (15, _va(2), symbols["bad_m_1"], pte(*PAGES[2][:2])),
     ]
     done, count, log = await run_case(dut, 1)
     problems = []
@@ -442,44 +359,24 @@ async def test_svade_mprv(dut):
         problems.append("did not finish")
     if count != len(expected) or log != expected:
         problems.append(f"trap log {_fmt(log)} (count {count}), expected {_fmt(expected)}")
-    if _peek(dut, PAGES[2][0]) != PAGES[2][2]:
-        problems.append(f"faulting MPRV store wrote 0x{_peek(dut, PAGES[2][0]):08x}")
-    if _peek(dut, RESULTS + 4) != PAGES[3][2]:
-        problems.append(f"MPRV load from A/D-set page gave 0x{_peek(dut, RESULTS + 4):08x}")
+    if peek(dut, PAGES[2][0]) != PAGES[2][2]:
+        problems.append(f"faulting MPRV store wrote 0x{peek(dut, PAGES[2][0]):08x}")
+    if peek(dut, RESULTS + 4) != PAGES[3][2]:
+        problems.append(f"MPRV load from A/D-set page gave 0x{peek(dut, RESULTS + 4):08x}")
     for index in (1, 2):
-        if _peek(dut, L0_TABLE + 4 * index) != _pte(*PAGES[index][:2]):
-            problems.append(f"page {index} PTE changed by hardware: 0x{_peek(dut, L0_TABLE + 4 * index):08x}")
+        if peek(dut, L0_TABLE + 4 * index) != pte(*PAGES[index][:2]):
+            problems.append(f"page {index} PTE changed by hardware: 0x{peek(dut, L0_TABLE + 4 * index):08x}")
     assert not problems, "; ".join(problems)
 
 
 def runCocotbTests():
-    repo_root = _find_repo_root()
-    rtl_dir = repo_root / "rtl"
-    sources = [str(p) for p in sorted(rtl_dir.rglob("*.v"))]
     build_dir = _build_dir()
-    assemble(build_dir)
+    assemble(build_dir, "svade", PROGRAM, LINKER_SCRIPT)
 
-    sim_build = Path.cwd() / "sim_build" / "sim_build_svade"
-    if sim_build.exists():
-        shutil.rmtree(sim_build)
-
-    run(
-        verilog_sources=sources,
-        toplevel="top",
-        module="test_svade",
-        includes=[str(rtl_dir / "include")],
-        simulator="verilator",
-        timescale="1ns/1ps",
-        defines=[f'INSTR_HEX_FILE="{build_dir / "nop.hex"}"'],
-        sim_build=str(sim_build),
-        force_compile=True,
-        extra_env={
-            "TOPLEVEL": "top",
-            "MODULE": "test_svade",
-            "COCOTB_TOPLEVEL": "top",
-            "COCOTB_TEST_MODULES": "test_svade",
-            "SVADE_BUILD": str(build_dir.resolve()),
-        },
+    run_top(
+        "test_svade",
+        boot_image=nop_image(),
+        extra_env={"SVADE_BUILD": str(build_dir.resolve())},
     )
 
 

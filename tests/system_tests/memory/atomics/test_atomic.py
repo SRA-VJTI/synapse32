@@ -5,28 +5,17 @@ Coverage:
 - LR/SC failure path
 - AMOSWAP/AMOADD/AMOAND/AMOOR/AMOXOR/AMOMAX/AMOMIN/AMOMAXU/AMOMINU
 """
-import os
-import shutil
 import subprocess
 from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge
-from cocotb_test.simulator import run
+from support import build_directory, find_repo_root, run_top
 
 
 BASE = 0x10000000
 DONE_ADDR = BASE + 0xFF
-
-
-def _find_repo_root() -> Path:
-    cur = Path.cwd()
-    while not (cur / "rtl").exists():
-        if cur.parent == cur:
-            raise FileNotFoundError("Could not locate repo root (no rtl/ directory found)")
-        cur = cur.parent
-    return cur
 
 
 def compile_atomic_asm(build_dir: Path, sim_dir: Path) -> Path:
@@ -313,37 +302,11 @@ async def test_atomic_smoke(dut):
 
 
 def runCocotbTests():
-    repo_root = _find_repo_root()
-    rtl_dir = repo_root / "rtl"
-    sim_dir = repo_root / "sim"
-    incl_dir = rtl_dir / "include"
-
-    sources = []
-    for root, _, files in os.walk(rtl_dir):
-        for file in files:
-            if file.endswith((".v", ".sv")):
-                sources.append(os.path.join(root, file))
-
-    build_dir = Path.cwd() / "build"
+    sim_dir = find_repo_root() / "sim"
+    build_dir = build_directory("atomic")
     hex_file = compile_atomic_asm(build_dir, sim_dir)
-    print(f"Compiled hex: {hex_file}")
 
-    sim_build = Path.cwd() / "sim_build" / "sim_build_atomic"
-    if sim_build.exists():
-        shutil.rmtree(sim_build)
-
-    run(
-        verilog_sources=sources,
-        toplevel="top",
-        module="test_atomic",
-        testcase="test_atomic_smoke",
-        includes=[str(incl_dir)],
-        simulator="verilator",
-        timescale="1ns/1ps",
-        defines=[f'INSTR_HEX_FILE="{hex_file}"'],
-        sim_build=str(sim_build),
-        force_compile=True,
-    )
+    run_top("test_atomic", boot_image=hex_file, testcase="test_atomic_smoke")
 
 
 if __name__ == "__main__":

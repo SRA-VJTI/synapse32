@@ -1,20 +1,9 @@
 """Focused Sv32 physical-address-width validation tests."""
 
-import shutil
-from pathlib import Path
 
 import cocotb
 from cocotb.triggers import Timer
-from cocotb_test.simulator import run
-
-
-def _repo_root() -> Path:
-    root = Path.cwd()
-    while not (root / "rtl").is_dir():
-        if root.parent == root:
-            raise FileNotFoundError("rtl directory not found")
-        root = root.parent
-    return root
+from support import run_unit
 
 
 @cocotb.test()
@@ -41,21 +30,8 @@ async def test_rejects_ppn_above_32_bit_physical_space(dut):
 
 
 def runCocotbTests():
-    root = _repo_root()
-    build = Path.cwd() / "sim_build_sv32_page_walker"
-    if build.exists():
-        shutil.rmtree(build)
-    run(
-        verilog_sources=[str(root / "rtl" / "mmu" / "sv32_page_walker.v")],
-        toplevel="sv32_page_walker",
-        module="test_sv32_page_walker",
-        testcase="test_rejects_ppn_above_32_bit_physical_space",
-        simulator="verilator",
-        timescale="1ns/1ps",
-        sim_build=str(build),
-        force_compile=True,
-    )
-
+    run_unit("sv32_page_walker", "test_sv32_page_walker", ["rtl/mmu/sv32_page_walker.v"],
+             testcase="test_rejects_ppn_above_32_bit_physical_space")
 
 if __name__ == "__main__":
     runCocotbTests()

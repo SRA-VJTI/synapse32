@@ -26,8 +26,8 @@ def compile_factorial():
     rtl_dir = os.path.join(root_dir, "rtl")
     sim_dir = os.path.join(root_dir, "sim")
     curr_dir = Path.cwd()
-    build_dir = curr_dir / "build"
-    build_dir.mkdir(exist_ok=True)
+    build_dir = curr_dir / "build" / "factorial"
+    build_dir.mkdir(parents=True, exist_ok=True)
     sim_dir = Path(sim_dir).resolve()
     factorial_c = sim_dir / "factorial.c"
     start_s = sim_dir / "start.S"

@@ -1,6 +1,5 @@
 import cocotb
-
-from cpu_program import run_program, run_tests
+from support import run_program, run_tests
 
 
 @cocotb.test()

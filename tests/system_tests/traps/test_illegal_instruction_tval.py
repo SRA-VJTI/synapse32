@@ -7,20 +7,13 @@ not trap.
 """
 
 import os
-import shutil
-import struct
-import subprocess
 from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
-from cocotb_test.simulator import run
-from memory_view import read_word
+from support import INSTR_MEM_BASE, assemble, load_symbols, nop_image, peek, poke, run_top
 
-INSTR_MEM_BASE = 0x8000_0000
-INSTR_MEM_SIZE = 0x0400_0000
-DATA_MEM_BASE = 0x1000_0000
 
 CONFIG = 0x1000_0100
 LOG = 0x1000_0300
@@ -186,80 +179,8 @@ CASES = [
 ]
 
 
-def _find_repo_root() -> Path:
-    cur = Path.cwd()
-    while not (cur / "rtl").exists():
-        if cur.parent == cur:
-            raise FileNotFoundError("Could not locate repo root (no rtl/ directory found)")
-        cur = cur.parent
-    return cur
-
-
 def _build_dir() -> Path:
     return Path(os.environ.get("ILLEGAL_TVAL_BUILD", Path.cwd() / "build" / "illegal_instruction_tval"))
-
-
-def assemble(build_dir: Path) -> None:
-    build_dir.mkdir(parents=True, exist_ok=True)
-    src = build_dir / "illegal.S"
-    lds = build_dir / "illegal.ld"
-    elf = build_dir / "illegal.elf"
-    src.write_text(PROGRAM)
-    lds.write_text(LINKER_SCRIPT)
-    subprocess.run(
-        [
-            "riscv64-unknown-elf-gcc", "-march=rv32ima_zicsr", "-mabi=ilp32",
-            "-nostdlib", "-ffreestanding", "-Wl,--no-relax", "-Wl,-m,elf32lriscv",
-            "-T", str(lds), str(src), "-o", str(elf),
-        ],
-        check=True,
-    )
-    subprocess.run(["riscv64-unknown-elf-objcopy", "-O", "binary", str(elf), str(build_dir / "image.bin")], check=True)
-    symbols = _elf32_symbols(elf.read_bytes())
-    (build_dir / "symbols.txt").write_text("".join(f"{value:08x} {name}\n" for name, value in sorted(symbols.items())))
-    (build_dir / "nop.hex").write_text("@00000000\n" + "00000013 00000013 00000013 00000013\n" * 128)
-
-
-def _elf32_symbols(elf: bytes) -> dict:
-    assert elf[:4] == b"\x7fELF" and elf[4] == 1 and elf[5] == 1, "expected a little-endian ELF32 file"
-    e_shoff, = struct.unpack_from("<I", elf, 32)
-    e_shentsize, e_shnum = struct.unpack_from("<HH", elf, 46)
-    sections = [struct.unpack_from("<IIIIIIIIII", elf, e_shoff + i * e_shentsize) for i in range(e_shnum)]
-    table = {}
-    for _, sh_type, _, _, offset, size, link, _, _, entsize in sections:
-        if sh_type != 2:  # SHT_SYMTAB
-            continue
-        strtab_offset = sections[link][4]
-        for pos in range(offset, offset + size, entsize):
-            st_name, st_value = struct.unpack_from("<II", elf, pos)
-            if st_name:
-                end = elf.index(b"\x00", strtab_offset + st_name)
-                table[elf[strtab_offset + st_name:end].decode()] = st_value
-    return table
-
-
-def _load_symbols(build_dir: Path) -> dict:
-    table = {}
-    for line in (build_dir / "symbols.txt").read_text().splitlines():
-        value, name = line.split()
-        table[name] = int(value, 16)
-    return table
-
-
-def _phys_word_index(addr: int) -> int:
-    if INSTR_MEM_BASE <= addr < INSTR_MEM_BASE + INSTR_MEM_SIZE:
-        return (addr - INSTR_MEM_BASE) // 4
-    if addr >= DATA_MEM_BASE:
-        return (INSTR_MEM_SIZE + (addr - DATA_MEM_BASE)) // 4
-    raise AssertionError(f"Unsupported physical address 0x{addr:08x}")
-
-
-def _poke(dut, addr: int, value: int) -> None:
-    dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value = value & 0xFFFF_FFFF
-
-
-def _peek(dut, addr: int) -> int:
-    return read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
 
 
 async def run_case(dut, privilege, medeleg, mstatus_bits, body_index, limit=3000):
@@ -268,11 +189,11 @@ async def run_case(dut, privilege, medeleg, mstatus_bits, body_index, limit=3000
     dut.external_interrupt.value = 0
     dut.uart_rx.value = 1
     for offset, value in enumerate((privilege, medeleg, mstatus_bits, body_index)):
-        _poke(dut, CONFIG + 4 * offset, value)
+        poke(dut, CONFIG + 4 * offset, value)
     for offset in range(0, 16 * LOG_SLOTS, 4):
-        _poke(dut, LOG + offset, 0)
-    _poke(dut, LOG_COUNT, 0)
-    _poke(dut, DONE_ADDR, 0)
+        poke(dut, LOG + offset, 0)
+    poke(dut, LOG_COUNT, 0)
+    poke(dut, DONE_ADDR, 0)
     await ClockCycles(dut.clk, 2)
     dut.rst.value = 0
 
@@ -285,9 +206,9 @@ async def run_case(dut, privilege, medeleg, mstatus_bits, body_index, limit=3000
             done = True
             break
     await RisingEdge(dut.clk)
-    count = _peek(dut, LOG_COUNT)
+    count = peek(dut, LOG_COUNT)
     log = [
-        (chr(_peek(dut, LOG + 16 * i)), _peek(dut, LOG + 16 * i + 4), _peek(dut, LOG + 16 * i + 8), _peek(dut, LOG + 16 * i + 12))
+        (chr(peek(dut, LOG + 16 * i)), peek(dut, LOG + 16 * i + 4), peek(dut, LOG + 16 * i + 8), peek(dut, LOG + 16 * i + 12))
         for i in range(min(count, LOG_SLOTS))
     ]
     return done, count, log
@@ -296,12 +217,12 @@ async def run_case(dut, privilege, medeleg, mstatus_bits, body_index, limit=3000
 @cocotb.test()
 async def test_illegal_instruction_tval(dut):
     build_dir = _build_dir()
-    symbols = _load_symbols(build_dir)
+    symbols = load_symbols(build_dir)
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     image = (build_dir / "image.bin").read_bytes()
     image += b"\x00" * (-len(image) % 4)
     for offset in range(0, len(image), 4):
-        _poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(image[offset:offset + 4], "little"))
+        poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(image[offset:offset + 4], "little"))
 
     def instruction_at(addr):
         offset = addr - INSTR_MEM_BASE
@@ -332,33 +253,13 @@ async def test_illegal_instruction_tval(dut):
 
 
 def runCocotbTests():
-    repo_root = _find_repo_root()
-    rtl_dir = repo_root / "rtl"
-    sources = [str(p) for p in sorted(rtl_dir.rglob("*.v"))]
     build_dir = _build_dir()
-    assemble(build_dir)
+    assemble(build_dir, "illegal", PROGRAM, LINKER_SCRIPT)
 
-    sim_build = Path.cwd() / "sim_build" / "sim_build_illegal_instruction_tval"
-    if sim_build.exists():
-        shutil.rmtree(sim_build)
-
-    run(
-        verilog_sources=sources,
-        toplevel="top",
-        module="test_illegal_instruction_tval",
-        includes=[str(rtl_dir / "include")],
-        simulator="verilator",
-        timescale="1ns/1ps",
-        defines=[f'INSTR_HEX_FILE="{build_dir / "nop.hex"}"'],
-        sim_build=str(sim_build),
-        force_compile=True,
-        extra_env={
-            "TOPLEVEL": "top",
-            "MODULE": "test_illegal_instruction_tval",
-            "COCOTB_TOPLEVEL": "top",
-            "COCOTB_TEST_MODULES": "test_illegal_instruction_tval",
-            "ILLEGAL_TVAL_BUILD": str(build_dir.resolve()),
-        },
+    run_top(
+        "test_illegal_instruction_tval",
+        boot_image=nop_image(),
+        extra_env={"ILLEGAL_TVAL_BUILD": str(build_dir.resolve())},
     )
 
 

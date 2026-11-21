@@ -32,8 +32,8 @@ def compile_fibonacci():
     
     # Create build directory if it doesn't exist in current working directory
     curr_dir = Path.cwd()
-    build_dir = curr_dir / "build"
-    build_dir.mkdir(exist_ok=True)
+    build_dir = curr_dir / "build" / "fibonacci"
+    build_dir.mkdir(parents=True, exist_ok=True)
     
     # Source files
     sim_dir = Path(sim_dir)

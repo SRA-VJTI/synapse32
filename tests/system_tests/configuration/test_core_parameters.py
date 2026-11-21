@@ -7,6 +7,7 @@ cache enables lint clean both ways, so a build that sets them on the command lin
 
 import subprocess
 from pathlib import Path
+from support import find_repo_root
 
 CORE = "riscv_cpu"
 
@@ -42,15 +43,6 @@ INVALID = [
 ]
 
 
-def _find_repo_root() -> Path:
-    cur = Path.cwd()
-    while not (cur / "rtl").exists():
-        if cur.parent == cur:
-            raise FileNotFoundError("Could not locate repo root (no rtl/ directory found)")
-        cur = cur.parent
-    return cur
-
-
 def _lint(rtl_dir: Path, parameters: dict, fatal: bool = False) -> subprocess.CompletedProcess:
     sources = [str(p) for p in sorted(rtl_dir.rglob("*.v")) if p.name != "unified_mem.v"]
     warnings = [] if fatal else ["-Wno-fatal"]
@@ -63,7 +55,7 @@ def _lint(rtl_dir: Path, parameters: dict, fatal: bool = False) -> subprocess.Co
 
 
 def runCocotbTests():
-    rtl_dir = _find_repo_root() / "rtl"
+    rtl_dir = find_repo_root() / "rtl"
     failures = []
     for parameters in VALID:
         result = _lint(rtl_dir, parameters)

@@ -5,16 +5,11 @@ RAM and the peripheral window to themselves) while its fetches are not. 0x2000_1
 but is none of the core's devices, standing in for one a system adds there.
 """
 
-import os
-import shutil
-from pathlib import Path
 
 import cocotb
 from cocotb.triggers import ReadOnly, RisingEdge
-from cocotb_test.simulator import run
+from support import dcache, run_program, run_top
 
-from cpu_program import run_program
-from memory_view import dcache
 
 RAM = 0x1000_0000
 DEVICE = 0x2000_1000
@@ -121,34 +116,8 @@ async def test_translated_store_outside_ram_is_not_forwarded(dut):
 
 
 def runCocotbTests():
-    root = Path.cwd()
-    while not (root / "rtl").exists():
-        if root.parent == root:
-            raise FileNotFoundError("rtl directory not found in the current or parent directories.")
-        root = root.parent
-    rtl_dir = root / "rtl"
-    module = "test_device_forwarding"
-    sim_build = Path.cwd() / "sim_build" / f"sim_build_{module}"
-    if sim_build.exists():
-        shutil.rmtree(sim_build)
-    run(
-        verilog_sources=[str(p) for p in sorted(rtl_dir.rglob("*.v"))],
-        toplevel="top",
-        module=module,
-        includes=[str(rtl_dir / "include")],
-        simulator="verilator",
-        timescale="1ns/1ps",
-        sim_build=str(sim_build),
-        waves=os.getenv("WAVES", "0") == "1",
-        # Memory latency keeps the UART write on the data port long enough for the next store to wait in the buffer.
-        parameters={"MEM_LATENCY": 2},
-        extra_env={
-            "TOPLEVEL": "top",
-            "MODULE": module,
-            "COCOTB_TOPLEVEL": "top",
-            "COCOTB_TEST_MODULES": module,
-        },
-    )
+    # Memory latency keeps the UART write on the data port long enough for the next store to wait in the buffer.
+    run_top("test_device_forwarding", parameters={"MEM_LATENCY": 2})
 
 
 if __name__ == "__main__":

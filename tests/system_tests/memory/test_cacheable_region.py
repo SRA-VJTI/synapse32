@@ -6,9 +6,8 @@ standing in for a device the SoC maps there.
 
 import cocotb
 from cocotb.triggers import ReadOnly, RisingEdge
+from support import dcache, run_program, run_tests
 
-from cpu_program import run_program, run_tests
-from memory_view import dcache
 
 INSTR_RAM_SIZE = 0x0400_0000
 DATA_RAM_BASE = 0x1000_0000

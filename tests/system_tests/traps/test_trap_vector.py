@@ -7,20 +7,13 @@ entry ran with which cause.
 """
 
 import os
-import shutil
-import struct
-import subprocess
 from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
-from cocotb_test.simulator import run
-from memory_view import read_word
+from support import DATA_MEM_BASE, INSTR_MEM_BASE, assemble, load_symbols, nop_image, peek, poke, run_top
 
-INSTR_MEM_BASE = 0x8000_0000
-INSTR_MEM_SIZE = 0x0400_0000
-DATA_MEM_BASE = 0x1000_0000
 
 CONFIG = 0x1000_0100
 RESULT = 0x1000_0200
@@ -344,89 +337,17 @@ CASES = [
 WARL_EXPECTED = {8: 0x8000_1000, 12: 0x8000_2001, 16: 0x8000_3004, 20: 0x8000_4001}
 
 
-def _find_repo_root() -> Path:
-    cur = Path.cwd()
-    while not (cur / "rtl").exists():
-        if cur.parent == cur:
-            raise FileNotFoundError("Could not locate repo root (no rtl/ directory found)")
-        cur = cur.parent
-    return cur
-
-
 def _build_dir() -> Path:
     return Path(os.environ.get("TRAP_VECTOR_BUILD", Path.cwd() / "build" / "trap_vector"))
-
-
-def assemble(build_dir: Path) -> None:
-    build_dir.mkdir(parents=True, exist_ok=True)
-    src = build_dir / "trap_vector.S"
-    lds = build_dir / "trap_vector.ld"
-    elf = build_dir / "trap_vector.elf"
-    src.write_text(PROGRAM)
-    lds.write_text(LINKER_SCRIPT)
-    subprocess.run(
-        [
-            "riscv64-unknown-elf-gcc", "-march=rv32ima_zicsr", "-mabi=ilp32",
-            "-nostdlib", "-ffreestanding", "-Wl,--no-relax", "-Wl,-m,elf32lriscv",
-            "-T", str(lds), str(src), "-o", str(elf),
-        ],
-        check=True,
-    )
-    subprocess.run(["riscv64-unknown-elf-objcopy", "-O", "binary", str(elf), str(build_dir / "image.bin")], check=True)
-    symbols = _elf32_symbols(elf.read_bytes())
-    (build_dir / "symbols.txt").write_text("".join(f"{value:08x} {name}\n" for name, value in sorted(symbols.items())))
-    (build_dir / "nop.hex").write_text("@00000000\n" + "00000013 00000013 00000013 00000013\n" * 128)
-
-
-def _elf32_symbols(elf: bytes) -> dict:
-    assert elf[:4] == b"\x7fELF" and elf[4] == 1 and elf[5] == 1, "expected a little-endian ELF32 file"
-    e_shoff, = struct.unpack_from("<I", elf, 32)
-    e_shentsize, e_shnum = struct.unpack_from("<HH", elf, 46)
-    sections = [struct.unpack_from("<IIIIIIIIII", elf, e_shoff + i * e_shentsize) for i in range(e_shnum)]
-    table = {}
-    for _, sh_type, _, _, offset, size, link, _, _, entsize in sections:
-        if sh_type != 2:  # SHT_SYMTAB
-            continue
-        strtab_offset = sections[link][4]
-        for pos in range(offset, offset + size, entsize):
-            st_name, st_value = struct.unpack_from("<II", elf, pos)
-            if st_name:
-                end = elf.index(b"\x00", strtab_offset + st_name)
-                table[elf[strtab_offset + st_name:end].decode()] = st_value
-    return table
-
-
-def _load_symbols(build_dir: Path) -> dict:
-    table = {}
-    for line in (build_dir / "symbols.txt").read_text().splitlines():
-        value, name = line.split()
-        table[name] = int(value, 16)
-    return table
-
-
-def _phys_word_index(addr: int) -> int:
-    if INSTR_MEM_BASE <= addr < INSTR_MEM_BASE + INSTR_MEM_SIZE:
-        return (addr - INSTR_MEM_BASE) // 4
-    if addr >= DATA_MEM_BASE:
-        return (INSTR_MEM_SIZE + (addr - DATA_MEM_BASE)) // 4
-    raise AssertionError(f"Unsupported physical address 0x{addr:08x}")
-
-
-def _poke(dut, addr: int, value: int) -> None:
-    dut.unified_mem_inst.instr_ram[_phys_word_index(addr)].value = value & 0xFFFF_FFFF
-
-
-def _peek(dut, addr: int) -> int:
-    return read_word(dut, _phys_word_index(addr)) & 0xFFFF_FFFF
 
 
 def _load_image(dut, build_dir: Path) -> None:
     data = (build_dir / "image.bin").read_bytes()
     data += b"\x00" * (-len(data) % 4)
     for offset in range(0, len(data), 4):
-        _poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(data[offset:offset + 4], "little"))
+        poke(dut, INSTR_MEM_BASE + offset, int.from_bytes(data[offset:offset + 4], "little"))
     for va, flags in MEGAPAGES.items():
-        _poke(dut, PAGE_TABLE + 4 * (va >> 22), ((va >> 12) << 10) | flags)
+        poke(dut, PAGE_TABLE + 4 * (va >> 22), ((va >> 12) << 10) | flags)
 
 
 def _tvec(symbols: dict, kind: str, mode: str) -> int:
@@ -444,17 +365,17 @@ async def run_case(dut, mtvec, stvec, privilege, mideleg, medeleg, action, mmu, 
     dut.software_interrupt.value = 0
     dut.external_interrupt.value = 0
     dut.uart_rx.value = 1
-    _poke(dut, CONFIG, mtvec)
-    _poke(dut, CONFIG + 4, stvec)
-    _poke(dut, CONFIG + 8, privilege)
-    _poke(dut, CONFIG + 12, mideleg)
-    _poke(dut, CONFIG + 16, medeleg)
-    _poke(dut, CONFIG + 20, action)
-    _poke(dut, CONFIG + 24, mmu)
+    poke(dut, CONFIG, mtvec)
+    poke(dut, CONFIG + 4, stvec)
+    poke(dut, CONFIG + 8, privilege)
+    poke(dut, CONFIG + 12, mideleg)
+    poke(dut, CONFIG + 16, medeleg)
+    poke(dut, CONFIG + 20, action)
+    poke(dut, CONFIG + 24, mmu)
     for offset in range(0, 0x100, 4):
-        _poke(dut, RESULT + offset, 0)
-        _poke(dut, LOG + offset, 0)
-    _poke(dut, DONE_ADDR, 0)
+        poke(dut, RESULT + offset, 0)
+        poke(dut, LOG + offset, 0)
+    poke(dut, DONE_ADDR, 0)
     await ClockCycles(dut.clk, 2)
     dut.rst.value = 0
 
@@ -483,12 +404,12 @@ async def run_case(dut, mtvec, stvec, privilege, mideleg, medeleg, action, mmu, 
     await RisingEdge(dut.clk)
     dut.software_interrupt.value = 0
     dut.external_interrupt.value = 0
-    count = _peek(dut, LOG_COUNT)
+    count = peek(dut, LOG_COUNT)
     log = []
     for index in range(min(count, LOG_SLOTS)):
-        word = _peek(dut, LOG + 8 * index)
-        log.append((chr(word >> 8), word & 0xFF, _peek(dut, LOG + 8 * index + 4)))
-    result = {offset: _peek(dut, RESULT + offset) for offset in (0, 8, 12, 16, 20)}
+        word = peek(dut, LOG + 8 * index)
+        log.append((chr(word >> 8), word & 0xFF, peek(dut, LOG + 8 * index + 4)))
+    result = {offset: peek(dut, RESULT + offset) for offset in (0, 8, 12, 16, 20)}
     return done, count, log, result
 
 
@@ -498,7 +419,7 @@ def _show(log):
 
 async def _start(dut):
     build_dir = _build_dir()
-    symbols = _load_symbols(build_dir)
+    symbols = load_symbols(build_dir)
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     _load_image(dut, build_dir)
     return symbols
@@ -542,33 +463,13 @@ async def test_tvec_mode_is_warl(dut):
 
 
 def runCocotbTests():
-    repo_root = _find_repo_root()
-    rtl_dir = repo_root / "rtl"
-    sources = [str(p) for p in sorted(rtl_dir.rglob("*.v"))]
     build_dir = _build_dir()
-    assemble(build_dir)
+    assemble(build_dir, "trap_vector", PROGRAM, LINKER_SCRIPT)
 
-    sim_build = Path.cwd() / "sim_build" / "sim_build_trap_vector"
-    if sim_build.exists():
-        shutil.rmtree(sim_build)
-
-    run(
-        verilog_sources=sources,
-        toplevel="top",
-        module="test_trap_vector",
-        includes=[str(rtl_dir / "include")],
-        simulator="verilator",
-        timescale="1ns/1ps",
-        defines=[f'INSTR_HEX_FILE="{build_dir / "nop.hex"}"'],
-        sim_build=str(sim_build),
-        force_compile=True,
-        extra_env={
-            "TOPLEVEL": "top",
-            "MODULE": "test_trap_vector",
-            "COCOTB_TOPLEVEL": "top",
-            "COCOTB_TEST_MODULES": "test_trap_vector",
-            "TRAP_VECTOR_BUILD": str(build_dir.resolve()),
-        },
+    run_top(
+        "test_trap_vector",
+        boot_image=nop_image(),
+        extra_env={"TRAP_VECTOR_BUILD": str(build_dir.resolve())},
     )
 
 

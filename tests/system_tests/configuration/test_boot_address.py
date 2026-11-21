@@ -1,8 +1,8 @@
 """A core built with another BOOT_ADDR starts there after reset."""
 
 import cocotb
+from support import INSTR_MEM_BASE, NOP, PARK, run_program, run_tests
 
-from cpu_program import INSTR_MEM_BASE, NOP, PARK, run_program, run_tests
 
 BOOT_ADDR = INSTR_MEM_BASE + 0x100
 

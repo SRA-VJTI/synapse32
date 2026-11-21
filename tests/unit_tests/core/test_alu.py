@@ -4,7 +4,6 @@ import random
 import os
 import sys
 import re
-from pathlib import Path
 from contextlib import contextmanager
 
 MASK32 = 0xFFFFFFFF
@@ -46,19 +45,10 @@ _INSTR_ID_RE = re.compile(r"localparam\s+\[6:0\]\s+(\w+)\s*=\s*7'h([0-9A-Fa-f]+)
 _INSTR_IDS = None
 
 
-def _find_repo_root() -> Path:
-    cur = Path.cwd()
-    while not (cur / "rtl").exists():
-        if cur.parent == cur:
-            raise FileNotFoundError("rtl directory not found in the current or parent directories.")
-        cur = cur.parent
-    return cur
-
-
 def _instr_id(name: str) -> int:
     global _INSTR_IDS
     if _INSTR_IDS is None:
-        defines = _find_repo_root() / "rtl" / "include" / "instr_defines.vh"
+        defines = find_repo_root() / "rtl" / "include" / "instr_defines.vh"
         text = defines.read_text(encoding="ascii")
         _INSTR_IDS = {k: int(v, 16) for k, v in _INSTR_ID_RE.findall(text)}
     return _INSTR_IDS[name]
@@ -315,9 +305,9 @@ async def test_random_inputs(dut):
             
         await verify_alu_operation(dut, rs1, rs2, imm, instr, pc_input, expected, f"Random test instr=0x{instr:x}")
 
-import pytest
 from cocotb_test.simulator import run
 import os
+from support import find_repo_root
 
 def runCocotbTests():
     """Run all tests"""

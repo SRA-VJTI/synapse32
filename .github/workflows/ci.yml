@@ -53,7 +53,7 @@ jobs:
           variants = next(node.value for node in tree.body
                           if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", "") == "VARIANTS")
           sweep, yosys = "system_tests/interrupts/test_interrupt_sweep.py", "system_tests/configuration/test_yosys_synth.py"
-          parts = [{"name": "tests", "args": f"--ignore={sweep} --ignore={yosys}", "filter": ""},
+          parts = [{"name": "tests", "args": f"-n auto --ignore={sweep} --ignore={yosys}", "filter": ""},
                    {"name": "yosys", "args": yosys, "filter": ""}]
           for variant in variants.elts:
               name = ast.literal_eval(variant)[0]

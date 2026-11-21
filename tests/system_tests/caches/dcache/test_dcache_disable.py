@@ -2,14 +2,11 @@
 
 import cocotb
 from cocotb.triggers import ReadOnly, RisingEdge
+from support import DATA_MEM_BASE, INSTR_MEM_SIZE, read_word, run_program, run_tests
 
-from cpu_program import run_program, run_tests
-from memory_view import read_word
 
 LATENCY = 2
 LOOPS = 16
-DATA_MEM_BASE = 0x1000_0000
-INSTR_MEM_SIZE = 0x0400_0000
 
 
 def _lui(rd, value):

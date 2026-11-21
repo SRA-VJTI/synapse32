@@ -1,11 +1,9 @@
 """An interrupt taken while EX holds a bubble must not lose the instruction in IF/ID."""
-import shutil
-from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles, ReadOnly, NextTimeStep
-from cocotb_test.simulator import run
+from support import build_directory, run_top
 
 DATA_BASE = 0x10000000
 
@@ -134,33 +132,9 @@ async def sweep(dut):
 
 
 def runCocotbTests():
-    root = Path(__file__).resolve().parents[3]
-    rtl = root / "rtl"
-    sources = [str(p) for p in rtl.rglob("*.v")]
-    build = Path.cwd() / "build"
-    build.mkdir(exist_ok=True)
-    hex_file = build / "interrupt_bubble_pc.hex"
+    hex_file = build_directory("interrupt_bubble_pc") / "interrupt_bubble_pc.hex"
     write_hex(hex_file)
-    sim_build = Path.cwd() / "sim_build_interrupt_bubble_pc"
-    if sim_build.exists():
-        shutil.rmtree(sim_build)
-    run(
-        verilog_sources=sources,
-        toplevel="top",
-        module="test_interrupt_bubble_pc",
-        includes=[str(rtl / "include")],
-        simulator="verilator",
-        timescale="1ns/1ps",
-        defines=[f'INSTR_HEX_FILE="{hex_file}"'],
-        sim_build=str(sim_build),
-        force_compile=True,
-        extra_env={
-            "TOPLEVEL": "top",
-            "MODULE": "test_interrupt_bubble_pc",
-            "COCOTB_TOPLEVEL": "top",
-            "COCOTB_TEST_MODULES": "test_interrupt_bubble_pc",
-        },
-    )
+    run_top("test_interrupt_bubble_pc", boot_image=hex_file)
 
 
 if __name__ == "__main__":

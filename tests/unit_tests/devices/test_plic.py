@@ -1,10 +1,8 @@
-import os
-from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge, Timer
-from cocotb_test.simulator import run
+from support import run_unit
 
 
 PLIC_BASE = 0x0C000000
@@ -158,36 +156,7 @@ async def test_claim_takes_the_higher_priority_source_then_the_other(dut):
 
 
 def runCocotbTests():
-    root_dir = os.getcwd()
-    while not os.path.exists(os.path.join(root_dir, "rtl")):
-        if os.path.dirname(root_dir) == root_dir:
-            raise FileNotFoundError("rtl directory not found")
-        root_dir = os.path.dirname(root_dir)
-
-    rtl_dir = Path(root_dir) / "rtl"
-    incl_dir = rtl_dir / "include"
-    sim_build_dir = Path.cwd() / "sim_build_plic"
-    if sim_build_dir.exists():
-        import shutil
-        shutil.rmtree(sim_build_dir)
-
-    run(
-        verilog_sources=[str(rtl_dir / "core_modules" / "plic.v")],
-        toplevel="plic",
-        module="test_plic",
-        includes=[str(incl_dir)],
-        simulator="verilator",
-        timescale="1ns/1ps",
-        sim_build=str(sim_build_dir),
-        force_compile=True,
-        extra_env={
-            "TOPLEVEL": "plic",
-            "MODULE": "test_plic",
-            "COCOTB_TOPLEVEL": "plic",
-            "COCOTB_TEST_MODULES": "test_plic",
-        },
-    )
-
+    run_unit("plic", "test_plic", ["rtl/core_modules/plic.v"])
 
 if __name__ == "__main__":
     runCocotbTests()

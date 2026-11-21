@@ -1,5 +1,7 @@
 """Run a prebuilt ISA test image on the core and determine pass/fail via tohost.
 
+Run by .github/scripts/compare_with_spike.py once per test program; not a pytest test.
+
 Environment variables:
   ISA_HEX_FILE      : absolute path to verilog-hex image
   ISA_TOHOST_ADDR   : tohost symbol address (hex, e.g. 0x80001000)
@@ -13,22 +15,13 @@ import sys
 from pathlib import Path
 
 import cocotb
-import pytest
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
 from cocotb_test.simulator import run
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from core_configs import MATRIX  # noqa: E402
-
-
-def _find_repo_root() -> Path:
-    cur = Path.cwd()
-    while not (cur / "rtl").exists():
-        if cur.parent == cur:
-            raise FileNotFoundError("Could not locate repo root (no rtl/ directory found)")
-        cur = cur.parent
-    return cur
+from support import find_repo_root
 
 
 @cocotb.test()
@@ -117,9 +110,9 @@ def runCocotbTests():
     required_env = ("ISA_HEX_FILE", "ISA_TOHOST_ADDR")
     missing = [name for name in required_env if name not in os.environ]
     if missing:
-        pytest.skip(f"Skipping ISA harness in full pytest run (missing env: {', '.join(missing)})")
+        sys.exit(f"riscv_isa_harness.py needs {', '.join(missing)}; run it through compare_with_spike.py")
 
-    repo_root = _find_repo_root()
+    repo_root = find_repo_root()
     rtl_dir = repo_root / "rtl"
     incl_dir = rtl_dir / "include"
     # Keep the image path stable across test invocations.  The comparison
@@ -147,7 +140,7 @@ def runCocotbTests():
     run(
         verilog_sources=sources,
         toplevel="top",
-        module="test_riscv_isa",
+        module="riscv_isa_harness",
         testcase="test_riscv_isa_image",
         includes=[str(incl_dir)],
         simulator="verilator",

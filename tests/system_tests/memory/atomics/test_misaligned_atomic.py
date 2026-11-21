@@ -4,15 +4,13 @@ LR.W, SC.W, and AMO.W must trap with causes 4, 6, and 6 respectively and
 must not modify their destination registers or memory before entering the
 handler.
 """
-import os
-import shutil
 import subprocess
 from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge
-from cocotb_test.simulator import run
+from support import build_directory, find_repo_root, run_top
 
 
 BASE = 0x10000000
@@ -23,15 +21,6 @@ MTVAL_ADDR = BASE + 0x4C
 EXPECTED_PC_ADDR = BASE + 0x50
 DONE_ADDR = BASE + 0xFF
 DEST_SENTINEL = 0x55
-
-
-def _find_repo_root() -> Path:
-    cur = Path.cwd()
-    while not (cur / "rtl").exists():
-        if cur.parent == cur:
-            raise FileNotFoundError("Could not locate repo root")
-        cur = cur.parent
-    return cur
 
 
 def compile_misaligned_asm(build_dir: Path, sim_dir: Path, operation: str) -> Path:
@@ -163,34 +152,14 @@ async def test_misaligned_amo(dut):
 
 
 def runCocotbTests():
-    repo_root = _find_repo_root()
-    rtl_dir = repo_root / "rtl"
-    sim_dir = repo_root / "sim"
-    includes = [str(rtl_dir / "include")]
-    sources = [
-        str(Path(root) / file)
-        for root, _, files in os.walk(rtl_dir)
-        for file in files
-        if file.endswith((".v", ".sv"))
-    ]
-
-    build_dir = Path.cwd() / "build"
+    sim_dir = find_repo_root() / "sim"
+    build_dir = build_directory("misaligned_atomic")
     for operation in ("lr", "sc", "amo"):
         hex_file = compile_misaligned_asm(build_dir, sim_dir, operation)
-        sim_build = Path.cwd() / "sim_build" / f"sim_build_misaligned_{operation}"
-        if sim_build.exists():
-            shutil.rmtree(sim_build)
-        run(
-            verilog_sources=sources,
-            toplevel="top",
-            module="test_misaligned_atomic",
+        run_top(
+            "test_misaligned_atomic",
             testcase=f"test_misaligned_{operation}",
-            includes=includes,
-            simulator="verilator",
-            timescale="1ns/1ps",
-            defines=[f'INSTR_HEX_FILE="{hex_file}"'],
-            sim_build=str(sim_build),
-            force_compile=True,
+            boot_image=hex_file,
         )
 
 
