@@ -8,7 +8,7 @@ and checks which page table the core actually executed from afterward.
 It is not a discriminator for walk_aborted itself: the same program passes with the guard deleted,
 because the stale-pointer case it guards cannot be reached from a program on this pipeline (the
 walker's second read always lands before any instruction that could hold the bus finishes fetching).
-What it does cover is fence ordering against a running walk. tests/manual/test_mmu_walk_flush_unit.py
+What it does cover is fence ordering against a running walk. tests/unit_tests/mmu/test_mmu_walk_flush_unit.py
 remains the only proof of the guard itself.
 """
 

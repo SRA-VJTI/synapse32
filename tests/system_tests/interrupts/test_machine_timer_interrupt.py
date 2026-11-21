@@ -172,14 +172,14 @@ def runCocotbTests():
         waveform_dir.mkdir(exist_ok=True)
         plus_args = [f"+dumpfile={waveform_dir / 'timer_irq.vcd'}"]
 
-    sim_build = Path.cwd() / "sim_build" / "sim_build_timer_irq"
+    sim_build = Path.cwd() / "sim_build" / "sim_build_machine_timer_interrupt"
     if sim_build.exists():
         shutil.rmtree(sim_build)
 
     run(
         verilog_sources=sources,
         toplevel="top",
-        module="test_timer_irq",
+        module="test_machine_timer_interrupt",
         testcase="test_timer_irq",
         includes=[str(incl_dir)],
         simulator="verilator",

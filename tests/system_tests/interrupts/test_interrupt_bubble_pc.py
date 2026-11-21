@@ -134,7 +134,7 @@ async def sweep(dut):
 
 
 def runCocotbTests():
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[3]
     rtl = root / "rtl"
     sources = [str(p) for p in rtl.rglob("*.v")]
     build = Path.cwd() / "build"

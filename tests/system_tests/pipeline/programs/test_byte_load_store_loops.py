@@ -297,14 +297,14 @@ def runCocotbTests():
             if file.endswith((".v", ".sv")):
                 sources.append(os.path.join(root, file))
 
-    sim_build = Path.cwd() / "sim_build" / "sim_build_linux_byte_loops"
+    sim_build = Path.cwd() / "sim_build" / "sim_build_byte_load_store_loops"
     if sim_build.exists():
         shutil.rmtree(sim_build)
 
     run(
         verilog_sources=sources,
         toplevel="top",
-        module="test_linux_byte_loops",
+        module="test_byte_load_store_loops",
         testcase="test_linux_byte_loops_match_model",
         includes=[str(incl_dir)],
         simulator="verilator",

@@ -122,14 +122,14 @@ def runCocotbTests():
             if file.endswith((".v", ".sv")):
                 sources.append(os.path.join(root, file))
 
-    sim_build = Path.cwd() / "sim_build" / "sim_build_jal_flush"
+    sim_build = Path.cwd() / "sim_build" / "sim_build_jal_squashes_wrong_path_loads"
     if sim_build.exists():
         shutil.rmtree(sim_build)
 
     run(
         verilog_sources=sources,
         toplevel="top",
-        module="test_jal_flush",
+        module="test_jal_squashes_wrong_path_loads",
         testcase="test_direct_jal_flushes_fallthrough_loads",
         includes=[str(incl_dir)],
         simulator="verilator",

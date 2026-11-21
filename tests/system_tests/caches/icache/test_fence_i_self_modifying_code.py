@@ -165,7 +165,7 @@ def runCocotbTests():
     run(
         verilog_sources=sources,
         toplevel="top",
-        module="test_fence_i_behavior",
+        module="test_fence_i_self_modifying_code",
         testcase="test_fence_i_self_modifying_code",
         includes=[str(incl_dir)],
         simulator="verilator",

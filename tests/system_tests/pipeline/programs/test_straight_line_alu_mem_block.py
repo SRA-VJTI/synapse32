@@ -55,7 +55,7 @@ def _load_hot_block() -> list[int]:
     if image_path and start_str and end_str:
         image_file = Path(image_path)
         if not image_file.is_absolute():
-            image_file = (Path(__file__).resolve().parents[2] / image_file).resolve()
+            image_file = (Path(__file__).resolve().parents[4] / image_file).resolve()
         base = 0xC0000000
         start = int(start_str, 16) - base
         end = int(end_str, 16) - base
@@ -250,14 +250,14 @@ def runCocotbTests():
             if file.endswith((".v", ".sv")):
                 sources.append(os.path.join(root, file))
 
-    sim_build = Path.cwd() / "sim_build" / "sim_build_linux_hotblock"
+    sim_build = Path.cwd() / "sim_build" / "sim_build_straight_line_alu_mem_block"
     if sim_build.exists():
         shutil.rmtree(sim_build)
 
     run(
         verilog_sources=sources,
         toplevel="top",
-        module="test_linux_hotblock",
+        module="test_straight_line_alu_mem_block",
         testcase="test_linux_hotblock_matches_model",
         includes=[str(incl_dir)],
         simulator="verilator",

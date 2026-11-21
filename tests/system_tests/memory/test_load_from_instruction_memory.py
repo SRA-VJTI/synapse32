@@ -136,14 +136,14 @@ def runCocotbTests():
             if file.endswith((".v", ".sv")):
                 sources.append(os.path.join(root, file))
 
-    sim_build = Path.cwd() / "sim_build" / "sim_build_instrmem_data_load"
+    sim_build = Path.cwd() / "sim_build" / "sim_build_load_from_instruction_memory"
     if sim_build.exists():
         shutil.rmtree(sim_build)
 
     run(
         verilog_sources=sources,
         toplevel="top",
-        module="test_instrmem_data_load",
+        module="test_load_from_instruction_memory",
         testcase="test_load_data_from_instruction_memory_region",
         includes=[str(incl_dir)],
         simulator="verilator",

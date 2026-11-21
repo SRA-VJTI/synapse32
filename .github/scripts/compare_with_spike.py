@@ -307,7 +307,7 @@ def run_verilator(
     env["ISA_MEM_LATENCY"] = str(mem_latency)
     env["ISA_FETCH_LATENCY"] = str(fetch_latency)
     env["CORE_CONFIG"] = config or ""
-    rc = run([sys.executable, "tests/system_tests/test_riscv_isa.py"], env=env, cwd=repo_root)
+    rc = run([sys.executable, "tests/system_tests/isa/test_riscv_isa.py"], env=env, cwd=repo_root)
     ok = rc.returncode == 0
     detail = (rc.stdout + "\n" + rc.stderr).strip()
     return ok, detail
