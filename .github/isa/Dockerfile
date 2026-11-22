@@ -13,7 +13,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 LABEL org.opencontainers.image.title="synapse32 ISA golden test environment" \
       org.opencontainers.image.description="Pinned Spike and prebuilt riscv-tests corpus for Synapse32" \
-      org.opencontainers.image.source="https://github.com/5iri/synapse32"
+      org.opencontainers.image.source="https://github.com/sra-vjti/synapse32"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         autoconf \

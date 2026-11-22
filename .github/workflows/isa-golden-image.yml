@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - ".github/isa/**"
+      - ".github/actions/**"
       - ".github/workflows/isa-golden-image.yml"
       - "tests/requirements.txt"
       - "rtl/**"
@@ -13,6 +14,7 @@ on:
   pull_request:
     paths:
       - ".github/isa/**"
+      - ".github/actions/**"
       - ".github/workflows/isa-golden-image.yml"
       - "tests/requirements.txt"
       - "rtl/**"
@@ -20,139 +22,119 @@ on:
       - ".github/scripts/**"
   workflow_dispatch:
 
+concurrency:
+  group: isa-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
-  packages: write
+  packages: read
 
 env:
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/synapse32-isa
+  # Images are tagged by a hash of their inputs: a published image is reused only when nothing it is built from has changed.
+  IMAGE_NAME: ghcr.io/sra-vjti/synapse32-isa
 
 jobs:
-  build-test-publish:
+  # Builds the image once into the BuildKit cache when it is not published yet; a no-op otherwise.
+  image:
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set image tags
-        id: tags
-        run: |
-          image_name="ghcr.io/${GITHUB_REPOSITORY,,}-isa"
-          echo "dockerfile=${image_name}:dockerfile-${{ hashFiles('.github/isa/Dockerfile', 'tests/requirements.txt') }}" >> "$GITHUB_OUTPUT"
-          echo "immutable=${image_name}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
-          echo "linux=${image_name}:linux" >> "$GITHUB_OUTPUT"
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      # The tag is a hash of the image's inputs, so a published image is reused
-      # only when nothing it is built from has changed.
-      - name: Pull matching ISA image
-        id: image
-        env:
-          ISA_IMAGE: ${{ steps.tags.outputs.dockerfile }}
-        run: |
-          if docker pull "$ISA_IMAGE"; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Set up Docker Buildx
-        if: steps.image.outputs.available != 'true'
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build ISA image when unavailable
-        if: steps.image.outputs.available != 'true'
-        uses: docker/build-push-action@v6
+      - uses: ./.github/actions/image
         with:
+          tag: ${{ env.IMAGE_NAME }}:dockerfile-${{ hashFiles('.github/isa/Dockerfile', 'tests/requirements.txt') }}
           context: .
           file: .github/isa/Dockerfile
-          tags: ${{ steps.tags.outputs.dockerfile }}
-          load: true
-          push: false
-          cache-from: type=gha,scope=isa-image
-          cache-to: type=gha,mode=max,scope=isa-image
+          cache-scope: isa-image
+          load: "false"
 
-      - name: Run ISA golden comparison
-        env:
-          ISA_IMAGE: ${{ steps.tags.outputs.dockerfile }}
+  # The default core at memory latency 0 and 2, and each configuration of tests/core_configs.py at latency 2,
+  # each under riscv-tests and riscv-arch-test.
+  runs:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.list.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - id: list
         run: |
-          docker run --rm \
-            --volume "$GITHUB_WORKSPACE:/workspace" \
-            --workdir /workspace \
-            "$ISA_IMAGE" \
+          python3 - >> "$GITHUB_OUTPUT" <<'EOF'
+          import json, runpy
+          configs = [("default", 0), ("default", 2)] + [(name, 2) for name in runpy.run_path("tests/core_configs.py")["MATRIX"]]
+          runs = [{"config": config, "latency": latency, "suite": suite}
+                  for config, latency in configs for suite in ("riscv-tests", "arch-test")]
+          print("matrix=" + json.dumps({"include": runs}))
+          EOF
+
+  compare:
+    name: ${{ matrix.suite }} ${{ matrix.config }} latency ${{ matrix.latency }}
+    needs: [image, runs]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.runs.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: image
+        uses: ./.github/actions/image
+        with:
+          tag: ${{ env.IMAGE_NAME }}:dockerfile-${{ hashFiles('.github/isa/Dockerfile', 'tests/requirements.txt') }}
+          context: .
+          file: .github/isa/Dockerfile
+          cache-scope: isa-image
+      - name: Compare with Spike
+        env:
+          IMAGE: ${{ steps.image.outputs.tag }}
+          LATENCY: ${{ matrix.latency }}
+          CONFIG: ${{ matrix.config != 'default' && format('--config {0}', matrix.config) || '' }}
+          SUITE: ${{ matrix.suite == 'riscv-tests' && '--riscv-tests /opt/riscv-tests --suites rv32ui,rv32um,rv32ua,rv32mi,rv32si' || '--arch-test /opt/riscv-arch-test' }}
+          REPORT: .github/artifacts/isa/${{ matrix.suite }}_${{ matrix.config }}_lat${{ matrix.latency }}.json
+        run: |
+          docker run --rm --volume "$GITHUB_WORKSPACE:/workspace" --workdir /workspace "$IMAGE" \
             /opt/venv/bin/python .github/scripts/compare_with_spike.py \
-              --riscv-tests /opt/riscv-tests \
-              --suites rv32ui,rv32um,rv32ua,rv32mi,rv32si \
-              --report .github/artifacts/isa/compare_report.json
-
-      - name: Run riscv-arch-test golden comparison
-        env:
-          ISA_IMAGE: ${{ steps.tags.outputs.dockerfile }}
-        run: |
-          docker run --rm \
-            --volume "$GITHUB_WORKSPACE:/workspace" \
-            --workdir /workspace \
-            "$ISA_IMAGE" \
-            /opt/venv/bin/python .github/scripts/compare_with_spike.py \
-              --arch-test /opt/riscv-arch-test \
-              --report .github/artifacts/isa/arch_compare_report.json
-
-      - name: Run ISA golden comparisons under each core configuration
-        env:
-          ISA_IMAGE: ${{ steps.tags.outputs.dockerfile }}
-        run: |
-          compare() {
-            docker run --rm \
-              --volume "$GITHUB_WORKSPACE:/workspace" \
-              --workdir /workspace \
-              "$ISA_IMAGE" \
-              /opt/venv/bin/python .github/scripts/compare_with_spike.py --mem-latency 2 "$@"
-          }
-          configs=$(python3 tests/core_configs.py)
-          failed=""
-          for config in $configs; do
-            compare --config "$config" \
-              --riscv-tests /opt/riscv-tests \
-              --report ".github/artifacts/isa/compare_report_$config.json" \
-              || failed="$failed $config"
-            compare --config "$config" \
-              --arch-test /opt/riscv-arch-test \
-              --report ".github/artifacts/isa/arch_compare_report_$config.json" \
-              || failed="$failed $config(arch)"
-          done
-          if [ -n "$failed" ]; then
-            echo "::error::failed under:$failed"
-            exit 1
-          fi
-
-      - name: Publish tested image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          ISA_IMAGE: ${{ steps.tags.outputs.dockerfile }}
-          IMMUTABLE_IMAGE: ${{ steps.tags.outputs.immutable }}
-          LINUX_IMAGE: ${{ steps.tags.outputs.linux }}
-        run: |
-          docker tag "$ISA_IMAGE" "$IMMUTABLE_IMAGE"
-          docker tag "$ISA_IMAGE" "$LINUX_IMAGE"
-          docker push "$ISA_IMAGE"
-          docker push "$IMMUTABLE_IMAGE"
-          docker push "$LINUX_IMAGE"
-
+              --mem-latency "$LATENCY" $CONFIG $SUITE --report "$REPORT"
       - name: Upload compare report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: isa-golden-report
-          path: |
-            .github/artifacts/isa/compare_report.json
-            .github/artifacts/isa/arch_compare_report.json
-            .github/artifacts/isa/compare_report_*.json
-            .github/artifacts/isa/arch_compare_report_*.json
+          name: isa-report-${{ matrix.suite }}-${{ matrix.config }}-lat${{ matrix.latency }}
+          path: .github/artifacts/isa/*.json
           if-no-files-found: error
+
+  # Published only once main has passed, rebuilt from the BuildKit cache the tested image was built from.
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: compare
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: image
+        uses: ./.github/actions/image
+        with:
+          tag: ${{ env.IMAGE_NAME }}:dockerfile-${{ hashFiles('.github/isa/Dockerfile', 'tests/requirements.txt') }}
+          context: .
+          file: .github/isa/Dockerfile
+          cache-scope: isa-image
+      - if: steps.image.outputs.published != 'true'
+        env:
+          IMAGE: ${{ steps.image.outputs.tag }}
+        run: docker push "$IMAGE"
